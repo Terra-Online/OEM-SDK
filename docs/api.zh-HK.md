@@ -106,7 +106,7 @@ const widget = await createOEMWidget('#map', {
 });
 ```
 
-所選 channel 必須解析到相容的 schema v1 manifest。Manifest 中的資產路徑相對 `baseUrl`，靜態請求不會攜帶憑證。
+省略 `resources` 時，SDK 會透過 `https://data.opendfieldmap.org/channels/stable.json` 自動載入最新 release。明確設定 `manifestPath` 可以固定至其他相容的 schema v1 manifest。Manifest 中的資產路徑相對 `baseUrl`，瓦片請求會帶單一檔案 `v` 快取鍵，靜態請求不會攜帶憑證。
 
 ## URL 轉接器
 

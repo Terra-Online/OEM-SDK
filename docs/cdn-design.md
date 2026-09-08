@@ -9,7 +9,8 @@ The SDK loads static content from one configurable origin. The default is `https
 ```text
 /channels/stable.json
   → /releases/{releaseId}/manifest.json
-      → versioned marker, map, tile, and font objects
+      → immutable marker and map objects
+      → stable tile objects with per-tile cache versions
 ```
 
 The channel is a small updateable pointer. The schema v1 release manifest selects a complete resource set. All paths inside the manifest are relative to the configured origin.
@@ -19,31 +20,41 @@ The channel is a small updateable pointer. The schema v1 release manifest select
 ```text
 /channels/stable.json
 /releases/{releaseId}/manifest.json
-/marker/{gameVersion}/points/{subregionId}.json
-/marker/{gameVersion}/locales/{locale}/places.json
-/marker/{gameVersion}/types.json
-/marker/{gameVersion}/point-index.json
-/marker/{gameVersion}/assets/{assetPath}.webp
-/map/{gameVersion}/labels/{regionId}.json
-/map/{gameVersion}/boundaries/{regionId}.json
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}_{floorId}.webp
+/marker/{gameVersion}/{releaseId}/points/{subregionId}.json
+/marker/{gameVersion}/{releaseId}/locales/{locale}/places.json
+/marker/{gameVersion}/{releaseId}/type.json
+/marker/{gameVersion}/{releaseId}/point-index.json
+/marker/{gameVersion}/{releaseId}/assets/{assetPath}.webp
+/map/{gameVersion}/{releaseId}/labels/{regionId}.json
+/map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
+/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
+/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
+/fonts/harmony/{sha256}/HMSans.woff2
 /fonts/novecento/{sha256}/{filename}.woff2
 ```
 
-`gameVersion` uses the path-safe form of the game version, such as `1_5_3`. Main-floor tile names have no floor suffix; additional floors use a lowercase filename suffix such as `_l1`.
+`gameVersion` uses the path-safe form of the game version, such as `1_5_3`.
+`releaseId` makes the manifest, marker data, labels, and boundaries immutable.
+`type.json` preserves regular marker types and exposes all source NPC and archive entries as the aggregate `npc` and `files` types respectively.
+Tile object paths remain stable within a game version. The SDK adds a short
+content-derived `v` value for each tile, so unchanged tiles retain their CDN
+cache key across releases and only changed tiles return to origin. Omitting
+`v` addresses the latest object at that stable path. Main-floor tile names have
+no floor suffix; additional floors use a lowercase suffix such as `_l1`.
 
 Consumers should provide only `baseUrl` and `manifestPath`. They should not construct individual content paths.
+The manifest's `HMSans_EN` face is the default Western/UI font. Licensed Novecento
+Wide faces may additionally include the Cyrillic and Vietnamese family variants.
 
 ## Hosting Contract
 
 - Serve channel files with short-lived revalidation.
-- Serve release manifests and versioned objects as immutable content.
+- Serve release manifests, versioned objects, and tiles requested with `v` as immutable content.
 - Preserve the published `Content-Type` and object bytes.
 - Allow cross-origin `GET`, `HEAD`, and `OPTIONS` requests when used by third-party sites.
 - Do not replace missing tiles with opaque images; uncovered coordinates must remain transparent.
 
-Published game-version directories are immutable. Rollback changes the channel pointer to an earlier compatible release.
+Published release directories are immutable. Tile objects are updated in place before the stable channel changes; per-tile `v` values prevent stale CDN reuse.
 
 ## Custom Origins
 

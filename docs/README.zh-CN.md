@@ -113,7 +113,7 @@ export function MapPanel() {
   └─ @opendfieldmap/react    可选的 React 生命周期封装
 
 静态资源源
-  └─ channel → release manifest → 版本化地图资源
+  └─ channel → release manifest → 不可变数据 + 内容版本化瓦片
 ```
 
 - `@opendfieldmap/sdk` 是主要接入包。
@@ -136,7 +136,7 @@ const widget = await createOEMWidget('#map', {
 });
 ```
 
-channel 会选择 schema v1 release manifest，再由 manifest 解析所有版本化点位、地名、边界、瓦片和可选字体资源。使用方无需自行拼接单个资源地址。
+未配置资源版本时，SDK 会通过 `/channels/stable.json` 自动选择最新的 schema v1 release。manifest 会解析不可变的点位、地名、边界和可选字体资源，以及带单瓦片 `v` 缓存键的稳定瓦片路径。使用方无需自行拼接单个资源地址。
 
 ## 开发
 

@@ -42,10 +42,10 @@ Before publication, verify that each tarball contains only its declared runtime 
 Package versions use SemVer. They are independent from:
 
 - manifest `schemaVersion`, currently `1`;
-- `gameVersion`, used by versioned static paths;
-- `releaseId`, which identifies one complete static resource set.
+- `gameVersion`, which groups static paths by game version;
+- `releaseId`, which identifies one manifest and its immutable data objects within that game version.
 
-A package release may support multiple immutable game-data releases through the same schema.
+A package release may support multiple game-data releases through the same schema. Tiles use stable object paths with per-tile content versions so unchanged cache keys survive a data release.
 
 ## Publish Order
 

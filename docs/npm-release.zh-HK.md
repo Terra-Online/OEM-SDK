@@ -42,10 +42,10 @@ pnpm pack:release
 npm 套件使用 SemVer，並與以下版本獨立：
 
 - manifest `schemaVersion`，目前為 `1`；
-- `gameVersion`，用於版本化靜態路徑；
-- `releaseId`，識別一套完整靜態資源。
+- `gameVersion`，用於按遊戲版本組織靜態路徑；
+- `releaseId`，識別該遊戲版本內一份 manifest 及其不可變資料物件。
 
-同一 npm 套件版本可以透過相同 schema 支援多個不可變遊戲資料版本。
+同一 npm 套件版本可以透過相同 schema 支援多個遊戲資料 release。瓦片使用穩定物件路徑和單一瓦片內容版本，令未變更的快取鍵可跨資料 release 重用。
 
 ## 發佈順序
 

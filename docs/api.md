@@ -106,7 +106,7 @@ const widget = await createOEMWidget('#map', {
 });
 ```
 
-The selected channel must resolve to a compatible schema v1 manifest. Manifest asset paths are relative to `baseUrl`, and static requests do not include credentials.
+When `resources` is omitted, the SDK follows `https://data.opendfieldmap.org/channels/stable.json` and automatically loads the latest release. Set `manifestPath` explicitly to pin another compatible schema v1 manifest. Manifest asset paths are relative to `baseUrl`, tile requests receive per-file `v` cache keys, and static requests do not include credentials.
 
 ## URL Adapter
 
