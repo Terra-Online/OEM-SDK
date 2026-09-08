@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { createOEMPointUrl, encodeOEMPointToken, fromOEMLeafletPosition, normalizeOEMLocale, OEM_SCHEMA_VERSION, resolveOEMAsset, toOEMLeafletPosition, validateOEMManifest } from '@opendfieldmap/core';
+import { createOEMPointUrl, defaultOEMResources, encodeOEMPointToken, fromOEMLeafletPosition, normalizeOEMLocale, OEM_SCHEMA_VERSION, resolveOEMAsset, toOEMLeafletPosition, validateOEMManifest } from '@opendfieldmap/core';
 import type { OEMManifest, OEMRegion } from '@opendfieldmap/core';
 
 const region: OEMRegion = {
   id: 'test', name: 'Test', locales: { 'en-US': 'Test' }, dimensions: [8000, 8000], boundsOffset: { x: 0, y: 0 },
   tileSize: 200, minZoom: 0, maxNativeZoom: 3, maxZoom: 4.5,
   initialView: { regionId: 'test', x: 4000, y: 4000, zoom: 2 },
-  floors: [{ id: 'M', tileTemplate: '/tiles/test/test/{z}/{x}/{y}.webp' }], subregions: [], points: [], coverage: {},
+  floors: [{ id: 'M', tileTemplate: '/tiles/1_5_3/test/{z}/{x}/{y}.webp', tileVersions: {} }], subregions: [], points: [], coverage: {},
 };
 const manifest: OEMManifest = {
   schemaVersion: 1, gameVersion: '1_5_3', releaseId: 'test-release', generatedAt: '2026-09-07T00:00:00Z',
   defaultRegionId: 'test', regions: [region],
-  types: { path: '/marker/1_5_3/types.json', sha256: 'hash', bytes: 2 },
+  types: { path: '/marker/1_5_3/test-release/type.json', sha256: 'hash', bytes: 2 },
   locales: {}, controls: { 'en-US': { layerSelect: 'Layer selection', zoomIn: 'Zoom in', zoomOut: 'Zoom out', brandName: 'Open Endfield Map', termsOfService: 'Terms of Service' } }, fallbackLocale: 'en-US',
   source: { repository: 'test', commit: 'test', usage: 'test' },
 };
@@ -29,7 +29,11 @@ describe('core protocol', () => {
   });
 
   it('keeps static paths inside the configured origin', () => {
-    expect(resolveOEMAsset('https://data.example/', '/marker/1_5_3/types.json')).toBe('https://data.example/marker/1_5_3/types.json');
+    expect(defaultOEMResources).toEqual({
+      baseUrl: 'https://data.opendfieldmap.org',
+      manifestPath: '/channels/stable.json',
+    });
+    expect(resolveOEMAsset('https://data.example/', '/marker/1_5_3/test-release/type.json')).toBe('https://data.example/marker/1_5_3/test-release/type.json');
     expect(() => resolveOEMAsset('https://data.example', 'https://attacker.example/file')).toThrow();
     expect(() => resolveOEMAsset('https://data.example', '../private.json')).toThrow();
   });

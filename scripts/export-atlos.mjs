@@ -12,6 +12,7 @@ const sourceArg = args.find((argument) => !argument.startsWith('--'));
 const source = path.resolve(sourceArg ?? path.join(root, '../Atlos/talos'));
 const resolvedGameVersion = await resolveGameVersion(args);
 const gameVersion = resolvedGameVersion.path;
+const releasePlaceholder = '__release__';
 const publicOutput = path.join(root, 'public');
 const output = path.join(root, '.export-tmp');
 await fs.rm(output, { recursive: true, force: true });
@@ -32,7 +33,7 @@ const write = async (relative, content) => {
 const versionedObject = async (namespace, name, content) => {
   const bytes = typeof content === 'string' || Buffer.isBuffer(content) ? content : JSON.stringify(content);
   const hash = sha256(bytes);
-  const objectPath = `/${namespace}/${gameVersion}/${name}`;
+  const objectPath = `/${namespace}/${gameVersion}/${releasePlaceholder}/${name}`;
   await write(objectPath.slice(1), bytes);
   return { path: objectPath, sha256: hash, bytes: Buffer.byteLength(bytes) };
 };
@@ -44,7 +45,6 @@ const walk = async (directory) => {
   }));
   return files.flat();
 };
-const versionPattern = /^\d+_\d+_\d+$/;
 const copyTree = async (relative) => {
   try {
     await fs.cp(path.join(publicOutput, relative), path.join(output, relative), { recursive: true });
@@ -52,25 +52,6 @@ const copyTree = async (relative) => {
     if (error.code !== 'ENOENT') throw error;
   }
 };
-let releases = [];
-const preservedGameVersions = new Set();
-try { releases = await fs.readdir(path.join(publicOutput, 'releases'), { withFileTypes: true }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-for (const entry of releases) {
-  if (!entry.isDirectory()) continue;
-  try {
-    const previous = JSON.parse(await fs.readFile(path.join(publicOutput, 'releases', entry.name, 'manifest.json'), 'utf8'));
-    if (previous.schemaVersion === SCHEMA_VERSION && previous.releaseId === entry.name &&
-      versionPattern.test(previous.gameVersion) && previous.gameVersion !== gameVersion) {
-      preservedGameVersions.add(previous.gameVersion);
-      await copyTree(`releases/${entry.name}`);
-    }
-  } catch (error) {
-    if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
-  }
-}
-for (const version of preservedGameVersions) {
-  await Promise.all(['tiles', 'marker', 'map'].map((namespace) => copyTree(`${namespace}/${version}`)));
-}
 await copyTree('fonts');
 const regionSource = await read('src/data/map/region.json');
 const rawTypes = await read('src/data/marker/type.json');
@@ -79,7 +60,7 @@ const overrideSource = 'src/data/marker/overrides.js';
 sourceFiles[overrideSource] = sha256(await fs.readFile(path.join(source, overrideSource)));
 const { applyMarkerOverrides } = await import(pathToFileURL(path.join(source, overrideSource)).href);
 const regionCodes = { Valley_4: 'VL', Wuling: 'WL', Dijiang: 'DJ', Weekraid_1: 'ES' };
-const regionNames = { Valley_4: '四号谷地', Wuling: '武陵', Dijiang: '帝江号', Weekraid_1: '侵蚀异变' };
+const regionNames = { Valley_4: '四号谷地', Wuling: '武陵', Dijiang: '帝江号', Weekraid_1: 'Etchspace Salvage' };
 const labels = await read('src/data/map/label/labels.json');
 const subregions = [...await read('src/data/map/subregionData/VL.json'), ...await read('src/data/map/subregionData/WL.json')];
 const subregionsById = new Map(subregions.map((subregion) => [subregion.id, subregion]));
@@ -90,49 +71,85 @@ const ignoredTileRegions = [...new Set(discoveredTileFiles.filter((filename) => 
   .map((filename) => path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]))];
 const tileIndex = [];
 const coverage = {};
+const tileVersions = {};
 for (const filename of tileFiles) {
   const relative = path.relative(path.join(source, 'public/clips'), filename);
   if (!/^[^/]+\/\d+\/-?\d+_-?\d+(?:_[a-z]\d+)?\.webp$/.test(relative)) continue;
   const content = await fs.readFile(filename);
-  tileIndex.push({ relative, hash: sha256(content) });
+  const tileHash = sha256(content);
+  tileIndex.push({ relative, hash: tileHash });
   const [regionId, zoom, tileName] = relative.split('/');
   const match = tileName.match(/^(-?\d+)_(-?\d+)(?:_([a-z]\d+))?\.webp$/);
   const [, tileX, tileY, suffix] = match;
   const floorId = suffix?.toUpperCase() ?? 'M';
   const rows = ((coverage[regionId] ??= {})[zoom] ??= {})[floorId] ??= {};
   (rows[tileY] ??= []).push(Number(tileX));
+  const versionRows = ((tileVersions[regionId] ??= {})[zoom] ??= {})[floorId] ??= {};
+  (versionRows[tileY] ??= {})[tileX] = tileHash.slice(0, 7);
   const floorSuffix = floorId === 'M' ? '' : `_${floorId.toLowerCase()}`;
   const target = `tiles/${gameVersion}/${regionId}/${zoom}/${tileX}/${tileY}${floorSuffix}.webp`;
   await write(target, content);
 }
 const tileContentHash = sha256(JSON.stringify(tileIndex));
-for (const zooms of Object.values(coverage)) for (const floors of Object.values(zooms)) for (const rows of Object.values(floors)) {
-  for (const [row, values] of Object.entries(rows)) {
-    const sorted = [...new Set(values)].sort((left, right) => left - right);
-    const ranges = [];
-    for (const value of sorted) {
-      if (ranges.length && ranges.at(-1) + 1 === value) ranges[ranges.length - 1] = value;
-      else ranges.push(value, value);
+for (const [regionId, zooms] of Object.entries(coverage)) {
+  for (const [zoom, floors] of Object.entries(zooms)) {
+    for (const [floorId, rows] of Object.entries(floors)) {
+      for (const [row, values] of Object.entries(rows)) {
+        const sorted = [...new Set(values)].sort((left, right) => left - right);
+        const ranges = [];
+        for (const value of sorted) {
+          if (ranges.length && ranges.at(-1) + 1 === value) ranges[ranges.length - 1] = value;
+          else ranges.push(value, value);
+        }
+        rows[row] = ranges;
+        const versions = tileVersions[regionId][zoom][floorId][row];
+        tileVersions[regionId][zoom][floorId][row] = sorted.map((tileX) => versions[tileX]);
+      }
     }
-    rows[row] = ranges;
   }
 }
+const floorTileVersions = (regionId, floorId) => Object.fromEntries(Object.entries(tileVersions[regionId] ?? {})
+  .filter(([, floors]) => floors[floorId])
+  .map(([zoom, floors]) => [zoom, floors[floorId]]));
 const fonts = [];
+const fontLicenses = [];
 let fontLicense;
+const exportFont = async ({ relative, family, weight, weightRange, namespace = 'harmony' }) => {
+  const content = await fs.readFile(path.join(source, relative));
+  const digest = sha256(content);
+  sourceFiles[relative] = digest;
+  const filename = path.basename(relative);
+  const fontPath = `/fonts/${namespace}/${digest}/${filename}`;
+  await write(fontPath.slice(1), content);
+  fonts.push({ path: fontPath, sha256: digest, bytes: content.byteLength, family, weight, weightRange, style: 'normal' });
+};
+// HarmonyOS Sans is the Atlos Latin/UI face and may be redistributed with the
+// software when its license notice is retained. It is a variable font, so keep
+// the complete weight axis available to consumers.
+await exportFont({ relative: 'src/assets/fonts/Harmony/HMSans.woff2', family: 'HMSans_EN', weight: 400, weightRange: [100, 900] });
+const harmonyLicenseRelative = 'src/assets/fonts/LICENSE/Harmony OS Sans/Harmony OS Sans - License.txt';
+const harmonyLicenseContent = await fs.readFile(path.join(source, harmonyLicenseRelative));
+const harmonyLicenseHash = sha256(harmonyLicenseContent);
+sourceFiles[harmonyLicenseRelative] = harmonyLicenseHash;
+const harmonyLicensePath = `/fonts/harmony/${harmonyLicenseHash}/LICENSE.txt`;
+await write(harmonyLicensePath.slice(1), harmonyLicenseContent);
+fontLicenses.push({ path: harmonyLicensePath, sha256: harmonyLicenseHash, bytes: harmonyLicenseContent.byteLength });
+
 if (includeLicensedNovecento) {
-  const fontFiles = [
+  // These are the Wide faces used by Atlos. The Cyrillic and Vietnamese files
+  // intentionally retain Atlos' separate family names so browser fallback can
+  // select the glyph-complete face for each script.
+  const novecentoFiles = [
     { filename: 'Novecento-WideBold.woff2', family: 'Novecento Bold', weight: 700 },
     { filename: 'Novecento-WideDemiBold.woff2', family: 'Novecento DemiBold', weight: 600 },
     { filename: 'Novecento-WideMedium.woff2', family: 'Novecento Medium', weight: 500 },
+    { filename: 'NWDemiBold+Grek+Cyrl.woff2', family: 'Novecento Cyrillic DemiBold', weight: 600 },
+    { filename: 'NWMed+Grek+Cyrl.woff2', family: 'Novecento Cyrillic Medium', weight: 500 },
+    { filename: 'NWBold+Viet.woff2', family: 'Novecento Vietnamese DemiBold', weight: 600 },
+    { filename: 'NWMed+Viet.woff2', family: 'Novecento Vietnamese Medium', weight: 500 },
   ];
-  for (const font of fontFiles) {
-    const relative = `src/assets/fonts/Novecento/${font.filename}`;
-    const content = await fs.readFile(path.join(source, relative));
-    const digest = sha256(content);
-    sourceFiles[relative] = digest;
-    const fontPath = `/fonts/novecento/${digest}/${font.filename}`;
-    await write(fontPath.slice(1), content);
-    fonts.push({ path: fontPath, sha256: digest, bytes: content.byteLength, family: font.family, weight: font.weight, style: 'normal' });
+  for (const font of novecentoFiles) {
+    await exportFont({ relative: `src/assets/fonts/Novecento/${font.filename}`, family: font.family, weight: font.weight, namespace: 'novecento' });
   }
   const licenseRelative = 'src/assets/fonts/LICENSE/Novecento Sans/Synthview Type Design - Webfont License 1.0.0.txt';
   const licenseContent = await fs.readFile(path.join(source, licenseRelative));
@@ -141,10 +158,12 @@ if (includeLicensedNovecento) {
   const licensePath = `/fonts/novecento/${licenseHash}/LICENSE.txt`;
   await write(licensePath.slice(1), licenseContent);
   fontLicense = { path: licensePath, sha256: licenseHash, bytes: licenseContent.byteLength };
+  fontLicenses.push(fontLicense);
 }
 const types = {};
 const missingIcons = [];
 const aliasedIcons = [];
+const sourceTypeAliases = new Map();
 const iconAliases = {
   'item/mission': 'item/mission_npc',
   'item/cuprium_ore': 'marker/cuprium_spot',
@@ -167,14 +186,32 @@ const icon = async (key, sub = false) => {
   }
 };
 for (const [key, type] of Object.entries(rawTypes)) {
+  if (type.category.main === 'npc' || type.category.main === 'files') {
+    sourceTypeAliases.set(key, type.category.main);
+    continue;
+  }
+  sourceTypeAliases.set(key, key);
   types[key] = { key, category: type.category, noFrame: type.noFrame, icon: await icon(type.icon ?? key),
     subIcon: type.subIcon ? await icon(type.subIcon, true) : undefined };
 }
-const fallbackIcon = await icon('mission_npc');
-if (!fallbackIcon) throw new Error('Atlos fallback icon is unavailable: mission_npc.webp');
-for (const type of Object.values(types)) type.icon ??= fallbackIcon;
-const unknownTypes = new Set();
-types.__unknown = { key: '__unknown', category: { main: 'unknown', sub: 'unknown' }, icon: fallbackIcon };
+types.npc = { key: 'npc', category: { main: 'npc', sub: 'npc' }, icon: await icon('mission_npc') };
+types.files = { key: 'files', category: { main: 'files', sub: 'archives' }, icon: await icon('prts_read_note') };
+if (missingIcons.length) throw new Error(`Unresolved Atlos icons: ${missingIcons.join(', ')}`);
+const directTypeAliases = new Map([
+  ['racing_npc', 'npc'],
+  ['aic_steward', 'npc'],
+  ['rare_gathering_site', 'gather'],
+  ['rare_mining_site', 'gather'],
+]);
+const excludedPoints = [];
+const normalizePointType = (point) => {
+  const sourceType = point.type;
+  if (sourceTypeAliases.has(sourceType)) return sourceTypeAliases.get(sourceType);
+  if (directTypeAliases.has(sourceType)) return directTypeAliases.get(sourceType);
+  if (/^int_trchest_wrdg001_/i.test(sourceType)) return 'crate_i';
+  if (/^int_vending_machine_area/i.test(sourceType)) return 'white_auto_vender';
+  throw new Error(`Unmapped marker type ${JSON.stringify(sourceType)} for point ${point.id}`);
+};
 const pointIds = new Set();
 const stats = {};
 const pointIndex = {};
@@ -191,6 +228,7 @@ for (const [id, config] of Object.entries(regionSource)) {
     floors: ['M', ...config.layers ?? []].map((floorId) => ({
       id: floorId,
       tileTemplate: `/tiles/${gameVersion}/${id}/{z}/{x}/{y}${floorId === 'M' ? '' : `_${floorId.toLowerCase()}`}.webp`,
+      tileVersions: floorTileVersions(id, floorId),
     })),
     subregions: config.subregions.map((subregionId) => {
       const subregion = subregionsById.get(subregionId);
@@ -206,25 +244,26 @@ for (const [id, config] of Object.entries(regionSource)) {
         y: value.y ?? value.pos?.[2] ?? 0, tier: value.tier ?? 0, subregId: value.subregId ?? subregionId, type: value.type ?? '' };
     });
     const corrected = applyMarkerOverrides(normalized, overrides, { subregionId });
-    const points = corrected.map((point) => {
+    const points = corrected.flatMap((point) => {
       if (!point.id || pointIds.has(point.id)) throw new Error(`Duplicate/invalid point ID: ${point.id}`);
       if (!/^\d+$/.test(point.id) || BigInt(point.id) >= pointIdLimit) throw new Error(`Point ID cannot use an OEM short link: ${point.id}`);
       if (![point.x, point.y, point.z, point.tier].every(Number.isFinite)) throw new Error(`Invalid coordinates: ${point.id}`);
-      const type = point.type || '__unknown';
-      if (!point.type) unknownTypes.add('__empty');
-      if (!types[type]) {
-        unknownTypes.add(type);
-        types[type] = { key: type, category: { main: 'unknown', sub: 'unknown' }, icon: fallbackIcon };
+      if (point.id === '2800000983' || point.type === 'cv_wall') {
+        excludedPoints.push({ id: point.id, type: point.type || null,
+          reason: point.type === 'cv_wall' ? 'unsupported-collision-volume' : 'missing-type' });
+        return [];
       }
+      const type = normalizePointType(point);
+      if (!types[type]) throw new Error(`Normalized marker type is unavailable: ${point.type} -> ${type}`);
       pointIds.add(point.id);
       const floorId = point.tier === 0 ? 'M' : `${point.tier < 0 ? 'B' : 'L'}${Math.abs(point.tier)}`;
-      return { id: point.id, regionId: id, subregionId: point.subregId, type, tier: point.tier,
-        raw: { x: point.x, y: point.y, z: point.z }, position: { regionId: id, x: point.x * scale, y: -point.z * scale, floorId } };
+      return [{ id: point.id, regionId: id, subregionId: point.subregId, type, tier: point.tier,
+        raw: { x: point.x, y: point.y, z: point.z }, position: { regionId: id, x: point.x * scale, y: -point.z * scale, floorId } }];
     });
     const ref = await versionedObject('marker', `points/${subregionId}.json`, points);
     region.points.push(ref);
     for (const point of points) pointIndex[point.id] = ref.path;
-    stats[subregionId] = { source: raw.length, afterOverrides: points.length, exported: points.length };
+    stats[subregionId] = { source: raw.length, afterOverrides: corrected.length, exported: points.length };
   }
   const code = regionCodes[id];
   const regionLabels = Object.values(labels.regions[code]?.labels ?? {}).map((label) => ({
@@ -272,7 +311,7 @@ for (const filename of (await fs.readdir(path.join(source, 'src/locale/data/regi
   const zoomInLabel = uiMessages.settings?.shortcuts?.zoomIn;
   const zoomOutLabel = uiMessages.settings?.shortcuts?.zoomOut;
   const brandName = uiMessages.meta?.title;
-  const termsOfService = locale === 'zh-CN' ? '服务条款' : locale === 'zh-HK' ? '服務條款' : uiMessages.tos?.title;
+  const termsOfService = locale === 'en-US' ? 'Terms of Services' : locale === 'zh-CN' ? '服务条款' : locale === 'zh-HK' ? '服務條款' : uiMessages.tos?.title;
   if (![layerLabel, zoomInLabel, zoomOutLabel, brandName, termsOfService].every((value) => typeof value === 'string' && value.length > 0)) {
     throw new Error(`Missing Atlos control messages for locale: ${locale}`);
   }
@@ -304,11 +343,35 @@ for (const region of regions) {
   }
 }
 const pointIndexRef = await versionedObject('marker', 'point-index.json', pointIndex);
-const typeRef = await versionedObject('marker', 'types.json', types);
-const releaseId = `atlos-${sha256(JSON.stringify({ schemaVersion: SCHEMA_VERSION, gameVersion, regions, types: typeRef, pointIndex: pointIndexRef, locales, controls, fonts, fontLicense, tileContentHash })).slice(0, 16)}`;
+const typeRef = await versionedObject('marker', 'type.json', types);
+const releaseId = `atlos-${sha256(JSON.stringify({ schemaVersion: SCHEMA_VERSION, gameVersion, regions, types: typeRef, pointIndex: pointIndexRef, locales, controls, fonts, fontLicense, fontLicenses, tileContentHash })).slice(0, 7)}`;
+const placeholderPathSegment = `/${gameVersion}/${releasePlaceholder}/`;
+const releasePathSegment = `/${gameVersion}/${releaseId}/`;
+const finalizeReleasePaths = (value) => {
+  if (typeof value === 'string') return value.replace(placeholderPathSegment, releasePathSegment);
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) value[index] = finalizeReleasePaths(value[index]);
+  } else if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value)) value[key] = finalizeReleasePaths(entry);
+  }
+  return value;
+};
+for (const value of [regions, types, pointIndex, typeRef, pointIndexRef, locales]) finalizeReleasePaths(value);
+for (const [name, value, ref] of [['type.json', types, typeRef], ['point-index.json', pointIndex, pointIndexRef]]) {
+  const bytes = JSON.stringify(value);
+  await write(`marker/${gameVersion}/${releasePlaceholder}/${name}`, bytes);
+  ref.sha256 = sha256(bytes);
+  ref.bytes = Buffer.byteLength(bytes);
+}
+for (const namespace of ['marker', 'map']) {
+  await fs.rename(
+    path.join(output, namespace, gameVersion, releasePlaceholder),
+    path.join(output, namespace, gameVersion, releaseId),
+  );
+}
 const manifest = {
   schemaVersion: SCHEMA_VERSION, gameVersion, releaseId, generatedAt: new Date().toISOString(), defaultRegionId: 'Valley_4',
-  regions, types: typeRef, pointIndex: pointIndexRef, fonts, fontLicense, locales, controls, fallbackLocale: 'en-US',
+  regions, types: typeRef, pointIndex: pointIndexRef, fonts, fontLicense, fontLicenses, locales, controls, fallbackLocale: 'en-US',
   source: { repository: 'Atlos', commit: execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     usage: 'Local development snapshot only. SDK AGPL-3.0; asset redistribution permission must be confirmed separately.' },
 };
@@ -322,9 +385,10 @@ await fs.rename(output, publicOutput);
 await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
 await fs.writeFile(path.join(root, 'artifacts/export-report.json'), JSON.stringify({ releaseId, gameVersion,
   launcherVersion: resolvedGameVersion.launcher, versionSource: resolvedGameVersion.source, tileContentHash, tileCount: tileIndex.length,
-  pointCount: pointIds.size, stats, missingIcons, aliasedIcons, unknownTypes: [...unknownTypes], ignoredTileRegions,
+  pointCount: pointIds.size, typeCount: Object.keys(types).length, stats, missingIcons, aliasedIcons, excludedPoints, ignoredTileRegions,
   ignoredTileCount: discoveredTileFiles.length - tileFiles.length, novecentoFontsIncluded: includeLicensedNovecento,
   sourceFiles, sourceReadOnly: true, cloudflareChanges: false }, null, 2));
 console.log(JSON.stringify({ releaseId, gameVersion, launcherVersion: resolvedGameVersion.launcher,
   versionSource: resolvedGameVersion.source, tiles: tileIndex.length, points: pointIds.size, missingIcons: missingIcons.length, aliasedIcons,
-  unknownTypes: [...unknownTypes], ignoredTileRegions, novecentoFontsIncluded: includeLicensedNovecento, output: publicOutput }, null, 2));
+  typeCount: Object.keys(types).length, excludedPoints, ignoredTileRegions,
+  novecentoFontsIncluded: includeLicensedNovecento, output: publicOutput }, null, 2));

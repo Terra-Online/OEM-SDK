@@ -33,8 +33,12 @@ export type OEMPixelBounds = [[number, number], [number, number]];
 /** A versioned static asset reference with integrity metadata. */
 export interface OEMAsset { path: string; sha256: string; bytes: number }
 
-/** A published floor and its versioned tile URL template. */
-export interface OEMFloor { id: string; tileTemplate: string }
+/** A published floor and its tile URL template. Versions align with covered x coordinates in each row. */
+export interface OEMFloor {
+  id: string;
+  tileTemplate: string;
+  tileVersions?: Record<string, Record<string, string[]>>;
+}
 /** A selectable subregion and its localized display names. */
 export interface OEMSubregion {
   id: string;
@@ -46,6 +50,8 @@ export interface OEMSubregion {
 export interface OEMFontAsset extends OEMAsset {
   family: string;
   weight: number;
+  /** Variable-font range, when the source font exposes a wght axis. */
+  weightRange?: [number, number];
   style: 'normal';
 }
 /** Complete static configuration for one top-level map region. */
@@ -91,6 +97,7 @@ export interface OEMManifest {
   pointIndex?: OEMAsset;
   fonts?: OEMFontAsset[];
   fontLicense?: OEMAsset;
+  fontLicenses?: OEMAsset[];
   locales: Record<string, OEMAsset>;
   controls: Record<string, OEMControlMessages>;
   fallbackLocale: string;

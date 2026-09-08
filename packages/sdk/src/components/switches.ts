@@ -6,8 +6,6 @@ import { createButton, getMessages, setLabel } from './types';
 import type { Control, ControlContext } from './types';
 
 const FLOOR_ORDER = ['L4', 'L3', 'L2', 'L1', 'M', 'B1', 'B2', 'B3', 'B4'];
-const REGION_LABEL = 'RGN';
-const LAYER_LABEL = 'LYR';
 
 /** Creates the nested, keyboard-operable action shape used by Atlos switch items. */
 const createSwitchAction = (className: string): HTMLDivElement => {
@@ -45,8 +43,8 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
   const element = document.createElement('div');
   element.className = 'switch regionSwitch';
   const label = document.createElement('div');
-  label.className = 'switchLabel';
-  label.textContent = REGION_LABEL;
+  label.className = 'switchLabel regionLabel';
+  label.setAttribute('aria-hidden', 'true');
   const indicator = document.createElement('div');
   indicator.className = 'switchIndicator';
   element.append(label, indicator);
@@ -155,8 +153,8 @@ export const createLayerControl = (context: ControlContext): Control & { element
   const element = document.createElement('div');
   element.className = 'switch layerSwitch';
   const label = document.createElement('div');
-  label.className = 'switchLabel';
-  label.textContent = LAYER_LABEL;
+  label.className = 'switchLabel layerLabel';
+  label.setAttribute('aria-hidden', 'true');
   const mainButton = createSwitchAction('switchItem');
   bindPersistentPanel(mainButton, context);
   const icon = document.createElement('span');

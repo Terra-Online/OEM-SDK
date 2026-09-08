@@ -20,6 +20,7 @@
   isolation: isolate;
   container-type: size;
   letter-spacing: 0;
+  font-family: 'HMSans_EN', 'Geist', system-ui, sans-serif;
 }
 
 .oemWidget *,
@@ -82,7 +83,7 @@
   flex-direction: column;
   gap: 0.5rem;
   pointer-events: auto;
-  font-family: 'Novecento Medium', sans-serif;
+  font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   font-variant-numeric: lining-nums;
   font-feature-settings: 'lnum' 1, 'onum' 0, 'case' 1;
 }
@@ -124,14 +125,22 @@
   align-items: center;
   justify-content: center;
   border-radius: 2px;
-  color: var(--switchSelected);
   background: var(--switchItem);
   filter: drop-shadow(0 0 2px rgba($black-0, 0.6));
-  font-family: 'Novecento Medium', sans-serif;
-  font-size: 0.88rem;
+  font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   line-height: 1;
+}
+
+.switchLabel::after,
+.switchLabel.layerLabel::after {
+  content: 'RGN';
+  z-index: 1;
+  color: var(--switchSelected);
+  font-size: 0.88rem;
   text-shadow: 0 0 2px rgba($black-0, 0.6);
 }
+
+.switchLabel.layerLabel::after { content: 'LYR'; }
 
 .switchLabel::before {
   content: '';
@@ -261,7 +270,7 @@
 
 .floorItem,
 .subregionItem {
-  font-family: 'Novecento Bold', sans-serif;
+  font-family: 'Novecento Bold', 'Novecento Cyrillic DemiBold', 'Novecento Vietnamese DemiBold', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   font-size: 1.1rem;
   font-weight: 700;
 }
@@ -313,7 +322,7 @@
   color: $white-1;
   background: $grey-1;
   box-shadow: 0 0 2px 1px rgba($black-0, 0.4);
-  font-family: 'Novecento Medium', sans-serif;
+  font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   font-size: 18px;
   line-height: 0;
   cursor: pointer;
@@ -376,7 +385,7 @@
 @container (width < 480px) {
   .switchArea { top: 25%; left: 0.65rem; }
   .switch { --itemSize: 2.25rem; --itemGap: 0.4rem; }
-  .switchLabel { font-size: 0.78rem; }
+  .switchLabel::after { font-size: 0.78rem; }
   .switchLabel::before { border-width: 8px 8px 0; transform: translateY(7.5px); }
   .switchIndicator { left: 2.5px; border-top-width: 5px; border-bottom-width: 5px; border-left-width: 6px; }
   .floorItem { font-size: 1rem; }

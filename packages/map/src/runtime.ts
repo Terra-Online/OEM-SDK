@@ -12,6 +12,7 @@ import {
 import type {
   OEMAsset,
   OEMBoundary,
+  OEMFloor,
   OEMLabel,
   OEMLocaleMessages,
   OEMManifest,
@@ -26,10 +27,14 @@ import type { OEM as OEMContract, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOpt
 import { SmoothTileLayer } from './atlos/smoothTileLayer';
 import { enableSmoothWheelZoom } from './atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from './atlos/mapOverdrag';
+import { appendOEMTileVersion, lookupOEMTile } from './tileVersion';
+import GithubIcon from './assets/ghicon.svg';
 
 const mounted = new WeakSet<HTMLElement>();
 const CLUSTER_SUBCATEGORIES = new Set(['boss', 'collection', 'mob', 'natural', 'valuable', 'exploration']);
 const FEATURE_NAMES = ['points', 'labels', 'boundaries'] as const;
+const BRAND_URL = 'https://oem.re/';
+const GITHUB_URL = 'https://github.com/Terra-Online/OEM-SDK';
 const TERMS_URL = 'https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright';
 
 const cloneFilter = (filter: OEMPointFilter): OEMPointFilter => ({
@@ -66,21 +71,19 @@ class OEMMarker extends L.Marker {
 
 /** Tile layer that skips coordinates absent from the published coverage index. */
 class CoveredTileLayer extends SmoothTileLayer {
-  constructor(url: string, options: L.TileLayerOptions, private coverage: OEMRegion['coverage'], private floorId: string) {
+  constructor(url: string, options: L.TileLayerOptions, private coverage: OEMRegion['coverage'], private floor: OEMFloor) {
     super(url, options);
   }
-  private hasTile(coords: L.Coords): boolean {
-    const ranges = this.coverage[String(coords.z)]?.[this.floorId]?.[String(coords.y)] ?? [];
-    for (let index = 0; index < ranges.length; index += 2) {
-      if (coords.x >= ranges[index] && coords.x <= ranges[index + 1]) return true;
-    }
-    return false;
+  getTileUrl(coords: L.Coords): string {
+    const tile = lookupOEMTile(this.coverage, this.floor, coords.z, coords.x, coords.y);
+    return appendOEMTileVersion(super.getTileUrl(coords), tile.version);
   }
   _isValidTile(coords: L.Coords): boolean {
     const prototype = L.GridLayer.prototype as unknown as {
       _isValidTile(this: L.GridLayer, value: L.Coords): boolean;
     };
-    return prototype._isValidTile.call(this, coords) && this.hasTile(coords);
+    return prototype._isValidTile.call(this, coords) &&
+      lookupOEMTile(this.coverage, this.floor, coords.z, coords.x, coords.y).covered;
   }
 }
 
@@ -109,7 +112,7 @@ export class OEM implements OEMContract {
   private markerClustering: boolean;
   private locale: string;
   private resolvedLocale: string;
-  private attributionBrand: HTMLSpanElement;
+  private attributionBrand: HTMLAnchorElement;
   private attributionLink: HTMLAnchorElement;
   private observer?: ResizeObserver;
   private updatingView = false;
@@ -150,8 +153,19 @@ export class OEM implements OEMContract {
     this.boundariesLayer.addTo(this.map);
     const credit = document.createElement('div');
     credit.className = 'attribution';
-    this.attributionBrand = document.createElement('span');
+    const github = document.createElement('a');
+    github.className = 'attributionGithub';
+    github.href = GITHUB_URL;
+    github.target = '_blank';
+    github.rel = 'noopener noreferrer';
+    github.setAttribute('aria-label', 'GitHub');
+    github.innerHTML = GithubIcon;
+    const githubSvg = github.querySelector('svg');
+    githubSvg?.setAttribute('aria-hidden', 'true');
+    githubSvg?.setAttribute('focusable', 'false');
+    this.attributionBrand = document.createElement('a');
     this.attributionBrand.className = 'attributionBrand';
+    this.attributionBrand.href = BRAND_URL;
     const separator = document.createElement('span');
     separator.className = 'attributionSeparator';
     separator.textContent = '·';
@@ -161,7 +175,7 @@ export class OEM implements OEMContract {
     this.attributionLink.href = TERMS_URL;
     this.attributionLink.target = '_blank';
     this.attributionLink.rel = 'noopener noreferrer';
-    credit.append(this.attributionBrand, separator, this.attributionLink);
+    credit.append(github, this.attributionBrand, separator, this.attributionLink);
     this.updateAttribution();
     this.root.append(credit);
     this.applyRegion(options.view);
@@ -248,7 +262,7 @@ export class OEM implements OEMContract {
     const layer = new CoveredTileLayer(resolveOEMAsset(this.options.resources.baseUrl, floor.tileTemplate), {
       tileSize: this.region.tileSize, noWrap: true, bounds: this.regionBounds(),
       maxNativeZoom: this.region.maxNativeZoom, maxZoom: Math.ceil(this.region.maxZoom),
-    }, this.region.coverage, floorId);
+    }, this.region.coverage, floor);
     layer.on('load', () => { if (!this.destroyed && this.region.id === regionId) this.emit('load', { regionId, floorId }); });
     layer.on('tileerror', () => this.emit('error', new Error(`Tile load failed: ${regionId}/${floorId}`)));
     return layer;

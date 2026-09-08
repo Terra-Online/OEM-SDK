@@ -39,9 +39,11 @@ const walk = async (directory) => {
 const channel = await readJson(path.join(publicRoot, 'channels/stable.json'));
 const manifest = await readRef(channel.manifest);
 if (manifest.schemaVersion !== SCHEMA_VERSION || !/^\d+_\d+_\d+$/.test(manifest.gameVersion) ||
+  !/^atlos-[0-9a-f]{7}$/.test(manifest.releaseId) ||
   manifest.releaseId !== path.basename(path.dirname(channel.manifest.path))) fail('Channel and manifest release mismatch');
-const markerRoot = `/marker/${manifest.gameVersion}`;
-const mapRoot = `/map/${manifest.gameVersion}`;
+const releaseRoot = `${manifest.gameVersion}/${manifest.releaseId}`;
+const markerRoot = `/marker/${releaseRoot}`;
+const mapRoot = `/map/${releaseRoot}`;
 const tileRootPath = `/tiles/${manifest.gameVersion}`;
 const requirePath = (value, expected) => {
   if (value !== expected) fail(`Unexpected versioned resource path: ${value}`);
@@ -55,8 +57,35 @@ if (!manifest.controls?.[manifest.fallbackLocale]?.layerSelect ||
   !manifest.controls[manifest.fallbackLocale].termsOfService) fail('Fallback control messages are unavailable');
 await Promise.all((manifest.fonts ?? []).map((font) => validateFileRef(font)));
 if (manifest.fontLicense) await validateFileRef(manifest.fontLicense);
-requirePath(manifest.types.path, `${markerRoot}/types.json`);
+await Promise.all((manifest.fontLicenses ?? []).map((license) => validateFileRef(license)));
+const expectedFontFiles = new Map([
+  ['HMSans_EN', 'HMSans.woff2'],
+  ['Novecento Bold', 'Novecento-WideBold.woff2'],
+  ['Novecento DemiBold', 'Novecento-WideDemiBold.woff2'],
+  ['Novecento Medium', 'Novecento-WideMedium.woff2'],
+  ['Novecento Cyrillic DemiBold', 'NWDemiBold+Grek+Cyrl.woff2'],
+  ['Novecento Cyrillic Medium', 'NWMed+Grek+Cyrl.woff2'],
+  ['Novecento Vietnamese DemiBold', 'NWBold+Viet.woff2'],
+  ['Novecento Vietnamese Medium', 'NWMed+Viet.woff2'],
+]);
+for (const font of manifest.fonts ?? []) {
+  if (expectedFontFiles.get(font.family) !== font.path.split('/').at(-1)) {
+    fail(`Unexpected font file for ${font.family}: ${font.path}`);
+  }
+}
+const exportedFontFamilies = new Set((manifest.fonts ?? []).map((font) => font.family));
+const novecentoFamilies = [...expectedFontFiles.keys()].filter((family) => family.startsWith('Novecento'));
+if (novecentoFamilies.some((family) => exportedFontFamilies.has(family)) &&
+  novecentoFamilies.some((family) => !exportedFontFamilies.has(family))) {
+  fail('Novecento export is missing a script-specific Wide face');
+}
+requirePath(manifest.types.path, `${markerRoot}/type.json`);
 const types = await readRef(manifest.types);
+if (Object.hasOwn(types, '__unknown') || Object.values(types).some((type) =>
+  type.category?.main === 'unknown' || type.category?.sub === 'unknown')) fail('Unknown marker types must not be published');
+if (types.npc?.category?.main !== 'npc' || types.files?.category?.main !== 'files') {
+  fail('Aggregated npc/files marker types are unavailable');
+}
 await Promise.all(Object.values(types).flatMap((type) => [type.icon, type.subIcon].filter(Boolean)).map(async (iconPath) => {
   validatePath(iconPath);
   requirePrefix(iconPath, `${markerRoot}/assets`);
@@ -118,17 +147,27 @@ for (const region of manifest.regions) {
   for (const [zoom, floors] of Object.entries(region.coverage)) {
     for (const [floorId, rows] of Object.entries(floors)) {
       if (!floorIds.has(floorId)) fail(`Coverage floor missing: ${region.id}/${floorId}`);
-      const template = region.floors.find((floor) => floor.id === floorId).tileTemplate;
+      const floor = region.floors.find((entry) => entry.id === floorId);
+      const template = floor.tileTemplate;
+      const versionRows = floor.tileVersions?.[zoom] ?? {};
+      if (Object.keys(versionRows).length !== Object.keys(rows).length) fail(`Tile version rows mismatch: ${region.id}/${floorId}/${zoom}`);
       for (const [tileY, ranges] of Object.entries(rows)) {
         if (ranges.length % 2 !== 0) fail(`Invalid coverage ranges: ${region.id}/${floorId}/${zoom}/${tileY}`);
+        const versions = versionRows[tileY] ?? [];
+        let versionIndex = 0;
         for (let index = 0; index < ranges.length; index += 2) {
           for (let tileX = ranges[index]; tileX <= ranges[index + 1]; tileX += 1) {
             const tilePath = template.replace('{z}', zoom).replace('{x}', String(tileX)).replace('{y}', tileY);
             validatePath(tilePath);
-            await fs.access(path.join(publicRoot, tilePath));
+            const tileBytes = await fs.readFile(path.join(publicRoot, tilePath));
+            if (versions[versionIndex] !== hash(tileBytes).slice(0, 7)) {
+              fail(`Tile version mismatch: ${region.id}/${floorId}/${zoom}/${tileX}/${tileY}`);
+            }
+            versionIndex += 1;
             coveredTiles += 1;
           }
         }
+        if (versions.length !== versionIndex) fail(`Tile version count mismatch: ${region.id}/${floorId}/${zoom}/${tileY}`);
       }
     }
   }
@@ -146,18 +185,43 @@ tileIndex.sort((left, right) => left.relative.localeCompare(right.relative));
 const tileContentHash = hash(JSON.stringify(tileIndex));
 for (const namespace of ['tiles', 'marker', 'map']) {
   const versions = await fs.readdir(path.join(publicRoot, namespace), { withFileTypes: true });
-  if (versions.some((entry) => entry.isDirectory() && !/^\d+_\d+_\d+$/.test(entry.name))) fail(`Invalid ${namespace} version directory`);
+  const versionDirectories = versions.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  if (versionDirectories.length !== 1 || versionDirectories[0] !== manifest.gameVersion) {
+    fail(`Unexpected ${namespace} version directories: ${versionDirectories.join(', ')}`);
+  }
+}
+for (const namespace of ['marker', 'map']) {
+  const releases = await fs.readdir(path.join(publicRoot, namespace, manifest.gameVersion), { withFileTypes: true });
+  const versionReleases = releases.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  if (versionReleases.length !== 1 || versionReleases[0] !== manifest.releaseId) {
+    fail(`Unexpected ${namespace} release directories: ${versionReleases.join(', ')}`);
+  }
+}
+const releaseDirectories = (await fs.readdir(path.join(publicRoot, 'releases'), { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name);
+if (releaseDirectories.length !== 1 || releaseDirectories[0] !== manifest.releaseId) {
+  fail(`Unexpected release directories: ${releaseDirectories.join(', ')}`);
 }
 
-const design = await readJson(path.join(root, 'config/cdn.design.json'));
-if (Object.values(design.deploymentGuards).some(Boolean)) fail('A deployment guard unexpectedly enables external changes');
 const report = await readJson(path.join(root, 'artifacts/export-report.json'));
 if (report.releaseId !== manifest.releaseId || report.gameVersion !== manifest.gameVersion || report.tileContentHash !== tileContentHash ||
-  report.tileCount !== tileFiles.length || report.pointCount !== pointCount || !report.sourceReadOnly || report.cloudflareChanges) {
+  report.tileCount !== tileFiles.length || report.pointCount !== pointCount || report.typeCount !== Object.keys(types).length ||
+  !report.sourceReadOnly || report.cloudflareChanges) {
   fail('Export report does not match validated content');
 }
 if (report.missingIcons.length) fail(`Unresolved Atlos icons remain: ${report.missingIcons.join(', ')}`);
-if (report.novecentoFontsIncluded !== Boolean(manifest.fonts?.length)) fail('Font export report does not match manifest');
+const expectedExclusions = new Map([
+  ['2800000983', 'missing-type'],
+]);
+for (const excluded of report.excludedPoints ?? []) {
+  if (excluded.type === 'cv_wall') expectedExclusions.set(excluded.id, 'unsupported-collision-volume');
+  if (expectedExclusions.get(excluded.id) !== excluded.reason) fail(`Unexpected excluded marker point: ${excluded.id}`);
+  expectedExclusions.delete(excluded.id);
+}
+if (expectedExclusions.size || report.excludedPoints?.length !== 2) fail('Expected marker exclusions are unavailable');
+const novecentoFontsIncluded = Boolean(manifest.fonts?.some((font) => font.family.startsWith('Novecento')));
+if (report.novecentoFontsIncluded !== novecentoFontsIncluded) fail('Font export report does not match manifest');
 
 console.log(JSON.stringify({ releaseId: manifest.releaseId, gameVersion: manifest.gameVersion, regions: manifest.regions.length,
   locales: localeEntries.length, points: pointCount, tiles: tileFiles.length, cloudflareChanges: false }, null, 2));

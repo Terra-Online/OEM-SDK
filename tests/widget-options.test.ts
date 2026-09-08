@@ -33,8 +33,8 @@ const manifest: OEMManifest = {
     maxZoom: 4,
     initialView,
     floors: [
-      { id: 'M', tileTemplate: '/tiles/test/Valley_4/{z}/{x}/{y}.webp' },
-      { id: 'B1', tileTemplate: '/tiles/test/Valley_4/{z}/{x}/{y}_b1.webp' },
+      { id: 'M', tileTemplate: '/tiles/1_5_3/Valley_4/{z}/{x}/{y}.webp', tileVersions: {} },
+      { id: 'B1', tileTemplate: '/tiles/1_5_3/Valley_4/{z}/{x}/{y}_b1.webp', tileVersions: {} },
     ],
     subregions: [
       { id: 'VL_1', key: 'hub', bounds: [[1000, 1000], [2000, 2000]], locales: { 'en-US': { name: 'Hub', short: 'H' } } },
@@ -43,9 +43,9 @@ const manifest: OEMManifest = {
     points: [],
     coverage: {},
   }],
-  types: { path: '/marker/1_5_3/types.json', sha256: 'hash', bytes: 2 },
+  types: { path: '/marker/1_5_3/test-release/type.json', sha256: 'hash', bytes: 2 },
   locales: {},
-  controls: { 'en-US': { layerSelect: 'Layer selection', zoomIn: 'Zoom in', zoomOut: 'Zoom out', brandName: 'Open Endfield Map', termsOfService: 'Terms of Service' } },
+  controls: { 'en-US': { layerSelect: 'Layer selection', zoomIn: 'Zoom in', zoomOut: 'Zoom out', brandName: 'Open Endfield Map', termsOfService: 'Terms of Services' } },
   fallbackLocale: 'en-US',
   source: { repository: 'test', commit: 'test', usage: 'test' },
 };
@@ -90,6 +90,10 @@ describe('widget creation options', () => {
 
     expect(host.querySelector('.regionSwitch')).not.toBeNull();
     expect(host.querySelector('.layerSwitch')).not.toBeNull();
+    expect(host.querySelector('.regionSwitch .switchLabel')?.textContent).toBe('');
+    expect(host.querySelector('.regionSwitch .switchLabel')?.classList.contains('regionLabel')).toBe(true);
+    expect(host.querySelector('.layerSwitch .switchLabel')?.textContent).toBe('');
+    expect(host.querySelector('.layerSwitch .switchLabel')?.classList.contains('layerLabel')).toBe(true);
     expect(host.querySelector('.scaleControl')).not.toBeNull();
     expect(createOEM).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
       lockDrag: false,

@@ -150,7 +150,7 @@
     padding: 0 3px;
     border-radius: 0.5rem;
     box-shadow: 0 1px 4px rgba($black-0, 0.6);
-    font-family: 'Novecento Medium', sans-serif;
+    font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
     font-size: 0.6875rem;
     font-weight: 700;
     line-height: 1rem;
@@ -435,7 +435,7 @@
         right: -0.5rem;
         background-color: $primary-accent-4;
         color: $grey-1;
-        font-family: 'Novecento Medium', sans-serif;
+        font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
         font-size: 0.75rem;
         font-weight: 700;
         min-width: 18px;

@@ -60,8 +60,15 @@ export function validateOEMManifest(value: unknown): OEMManifest {
   ) {
     throw new Error('Fallback control messages are unavailable');
   }
-  if (manifest.fonts && (!Array.isArray(manifest.fonts) || manifest.fonts.some((font) => !font.family || !font.path || !font.sha256 || !(font.bytes > 0)))) {
+  if (manifest.fonts && (!Array.isArray(manifest.fonts) || manifest.fonts.some((font) => !font.family || !font.path || !font.sha256 || !(font.bytes > 0) ||
+    !Number.isFinite(font.weight) || font.style !== 'normal' ||
+    (font.weightRange && (!Array.isArray(font.weightRange) || font.weightRange.length !== 2 ||
+      !font.weightRange.every((value) => Number.isFinite(value) && value > 0) || font.weightRange[0] > font.weightRange[1]))))) {
     throw new Error('Invalid font configuration');
+  }
+  if (manifest.fontLicenses && (!Array.isArray(manifest.fontLicenses) || manifest.fontLicenses.some((license) =>
+    !license?.path || !license.sha256 || !(license.bytes > 0)))) {
+    throw new Error('Invalid font license configuration');
   }
   return manifest;
 }
