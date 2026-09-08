@@ -10,7 +10,10 @@
     "version:game": "node scripts/game-version.mjs",
     "validate:export": "node scripts/validate-export.mjs",
     "dev": "pnpm build && pnpm export:atlos:dev && vite --host 127.0.0.1",
-    "build:demo": "pnpm build && vite build",
+    "build:demo": "pnpm build && node scripts/build-demo.mjs",
+    "deploy:pages": "pnpm build:demo && wrangler pages deploy dist --project-name oem-sdk --branch main --commit-dirty=true",
+    "prepare:data": "pnpm validate:export && node scripts/prepare-r2-upload.mjs",
+    "deploy:data": "node scripts/publish-r2.mjs --apply",
     "export:atlos": "node scripts/export-atlos.mjs",
     "export:atlos:dev": "node scripts/export-atlos.mjs --include-licensed-novecento",
     "check": "pnpm validate:export && pnpm typecheck && pnpm test && pnpm build:demo",
@@ -20,8 +23,8 @@
   "devDependencies": {
     "@opendfieldmap/core": "workspace:*",
     "@opendfieldmap/map": "workspace:*",
-    "@opendfieldmap/sdk": "workspace:*",
     "@opendfieldmap/react": "workspace:*",
+    "@opendfieldmap/sdk": "workspace:*",
     "@types/leaflet": "1.9.16",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.10",
@@ -35,6 +38,7 @@
     "sass": "^1.85.1",
     "typescript": "~5.8.3",
     "vite": "^6.2.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.129.1"
   }
 }

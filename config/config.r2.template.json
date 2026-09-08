@@ -1,0 +1,19 @@
+{
+  "web": {
+    "build": {
+      "cdn": "https://data.example.com",
+      "r2": {
+        "endpoint": "https://<account-id>.r2.cloudflarestorage.com",
+        "bucket": "opendfieldmap-pubsdk",
+        "region": "auto",
+        "prefix": "",
+        "zoneId": "",
+        "corsFile": "deploy/r2-cors.json",
+        "minimumTlsVersion": "1.2",
+        "transfers": 96,
+        "accessKeyId": "",
+        "accessKeySecret": ""
+      }
+    }
+  }
+}

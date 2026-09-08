@@ -2,6 +2,12 @@ import type { OEMManifest, OEMPointType } from '@opendfieldmap/core';
 import type { OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
 
 const FLOOR_ORDER = ['L4', 'L3', 'L2', 'L1', 'M', 'B1', 'B2', 'B3', 'B4'];
+const REGION_CODES: Readonly<Record<string, string>> = Object.freeze({
+  Valley_4: 'VL',
+  Wuling: 'WL',
+  Dijiang: 'DJ',
+  Weekraid_1: 'ES',
+});
 
 /** Creation-only Widget options exposed by the interactive Demo. */
 export interface DemoCreationConfig {
@@ -13,9 +19,17 @@ export interface DemoCreationConfig {
   theme: 'light' | 'dark';
 }
 
+/** A map release offered by the Demo's optional version selector. */
+export interface DemoVersionOption {
+  id: string;
+  label: string;
+  manifestPath: string;
+}
+
 interface DemoConfigPanelCallbacks {
   update(config: OEMWidgetConfig): void;
   recreate(config: Partial<DemoCreationConfig>): void;
+  selectVersion?(id: string): void;
   reset(): void;
 }
 
@@ -24,6 +38,7 @@ export interface DemoConfigPanel {
   element: HTMLDetailsElement;
   setBusy(busy: boolean): void;
   sync(state: OEMWidgetState, creation: DemoCreationConfig): void;
+  destroy(): void;
 }
 
 const createOption = (value: string, label = value): HTMLOptionElement => {
@@ -35,6 +50,7 @@ const createOption = (value: string, label = value): HTMLOptionElement => {
 
 const createSelect = (label: string): HTMLSelectElement => {
   const select = document.createElement('select');
+  select.autocomplete = 'off';
   select.setAttribute('aria-label', label);
   return select;
 };
@@ -45,7 +61,17 @@ const createField = (label: string, control: HTMLElement, full = false): HTMLLab
   const caption = document.createElement('span');
   caption.className = 'demoFieldLabel';
   caption.textContent = label;
-  field.append(caption, control);
+  if (control instanceof HTMLSelectElement) {
+    const selectControl = document.createElement('span');
+    selectControl.className = 'demoSelectControl';
+    const disclosure = document.createElement('span');
+    disclosure.className = 'demoSelectDisclosure';
+    disclosure.setAttribute('aria-hidden', 'true');
+    selectControl.append(control, disclosure);
+    field.append(caption, selectControl);
+  } else {
+    field.append(caption, control);
+  }
   return field;
 };
 
@@ -54,10 +80,162 @@ const createToggle = (label: string): { field: HTMLLabelElement; input: HTMLInpu
   field.className = 'demoToggle';
   const input = document.createElement('input');
   input.type = 'checkbox';
+  input.autocomplete = 'off';
   const text = document.createElement('span');
   text.textContent = label;
   field.append(input, text);
   return { field, input };
+};
+
+interface DemoNumberControl {
+  element: HTMLSpanElement;
+  input: HTMLInputElement;
+  scrubber: HTMLSpanElement;
+}
+
+const createNumberControl = (prefix: string, label: string): DemoNumberControl => {
+  const element = document.createElement('span');
+  element.className = 'demoNumberControl';
+  const scrubber = document.createElement('span');
+  scrubber.className = 'demoNumberPrefix';
+  scrubber.textContent = prefix;
+  scrubber.setAttribute('aria-hidden', 'true');
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '1';
+  input.autocomplete = 'off';
+  input.setAttribute('aria-label', label);
+  element.append(scrubber, input);
+  return { element, input, scrubber };
+};
+
+/** Adds Figma-style horizontal scrubbing to a number field's prefix. */
+const bindNumberScrubber = (control: DemoNumberControl, commit: () => void): (() => void) => {
+  let pointerId: number | null = null;
+  let startX = 0;
+  let startValue = 0;
+  let changed = false;
+
+  const onPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || control.input.disabled) return;
+    event.preventDefault();
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startValue = Number(control.input.value) || 0;
+    changed = false;
+    control.scrubber.setPointerCapture(event.pointerId);
+    control.element.classList.add('scrubbing');
+  };
+  const onPointerMove = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    event.preventDefault();
+    const multiplier = event.shiftKey ? 10 : 1;
+    const value = Math.round(startValue + (event.clientX - startX) * multiplier);
+    changed ||= value !== Number(control.input.value);
+    control.input.value = String(value);
+  };
+  const onPointerEnd = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return;
+    pointerId = null;
+    control.element.classList.remove('scrubbing');
+    if (changed) commit();
+  };
+  control.scrubber.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerEnd);
+  window.addEventListener('pointercancel', onPointerEnd);
+  return () => {
+    control.scrubber.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerEnd);
+    window.removeEventListener('pointercancel', onPointerEnd);
+  };
+};
+
+const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLElement): (() => void) => {
+  const margin = 16;
+  let pointerId: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+  let moved = false;
+  let suppressClick = false;
+
+  const place = (left: number, top: number): void => {
+    const rect = element.getBoundingClientRect();
+    const maxLeft = Math.max(margin, window.innerWidth - margin - rect.width);
+    // The body max-height follows the top offset, so the header is the stable
+    // minimum height used to clamp the panel while it contracts downward.
+    const maxTop = Math.max(margin, window.innerHeight - margin - handle.getBoundingClientRect().height);
+    const nextLeft = Math.min(Math.max(margin, left), maxLeft);
+    const nextTop = Math.min(Math.max(margin, top), maxTop);
+    element.style.left = `${nextLeft}px`;
+    element.style.right = 'auto';
+    element.style.setProperty('--demoPanelTop', `${nextTop}px`);
+  };
+
+  const onPointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0 || element.classList.contains('busy')) return;
+    const rect = element.getBoundingClientRect();
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    startLeft = rect.left;
+    startTop = rect.top;
+    moved = false;
+    place(startLeft, startTop);
+    element.classList.add('dragging');
+    handle.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  };
+
+  const onPointerMove = (event: PointerEvent): void => {
+    if (event.pointerId !== pointerId) return;
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    if (!moved && Math.hypot(deltaX, deltaY) < 4) return;
+    moved = true;
+    place(startLeft + deltaX, startTop + deltaY);
+    event.preventDefault();
+  };
+
+  const onPointerEnd = (event: PointerEvent): void => {
+    if (event.pointerId !== pointerId) return;
+    pointerId = null;
+    element.classList.remove('dragging');
+    if (moved) suppressClick = true;
+    if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture?.(event.pointerId);
+  };
+
+  const onClick = (event: MouseEvent): void => {
+    if (!suppressClick) return;
+    suppressClick = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+
+  const onResize = (): void => {
+    if (element.style.left) {
+      const rect = element.getBoundingClientRect();
+      place(rect.left, rect.top);
+    }
+  };
+
+  handle.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerEnd);
+  window.addEventListener('pointercancel', onPointerEnd);
+  handle.addEventListener('click', onClick);
+  window.addEventListener('resize', onResize);
+  return () => {
+    handle.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerEnd);
+    window.removeEventListener('pointercancel', onPointerEnd);
+    handle.removeEventListener('click', onClick);
+    window.removeEventListener('resize', onResize);
+  };
 };
 
 const createSection = (title: string): { fieldset: HTMLFieldSetElement; content: HTMLDivElement } => {
@@ -71,11 +249,6 @@ const createSection = (title: string): { fieldset: HTMLFieldSetElement; content:
   return { fieldset, content };
 };
 
-const setSelectedValues = (select: HTMLSelectElement, values: readonly string[]): void => {
-  const selected = new Set(values);
-  for (const option of select.options) option.selected = selected.has(option.value);
-};
-
 const quote = (value: string): string => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
 
 /** Produces a reproducible snippet while omitting options still at SDK defaults. */
@@ -83,6 +256,7 @@ const createWidgetCode = (
   manifest: OEMManifest,
   state: OEMWidgetState,
   creation: DemoCreationConfig,
+  version?: DemoVersionOption,
 ): string => {
   const region = manifest.regions.find((entry) => entry.id === state.regionId)!;
   const subregion = state.subregionId
@@ -96,9 +270,17 @@ const createWidgetCode = (
     : region.initialView;
   const presetZoom = subregion ? Math.max(region.minZoom, Math.min(region.maxZoom, 1)) : region.initialView.zoom;
   const lines = [
-    `  region: ${quote(state.regionId)},`,
+    `  region: ${quote(REGION_CODES[state.regionId] ?? state.regionId)},`,
     `  locale: ${quote(state.locale)},`,
   ];
+  if (version?.manifestPath !== undefined && version.manifestPath !== '/channels/stable.json') {
+    lines.unshift(
+      '  resources: {',
+      "    baseUrl: 'https://data.opendfieldmap.org',",
+      `    manifestPath: ${quote(version.manifestPath)},`,
+      '  },',
+    );
+  }
   if (state.subregionId) lines.push(`  subregion: ${quote(state.subregionId)},`);
   if (state.floorId !== 'M') lines.push(`  floor: ${quote(state.floorId)},`);
   if (state.markerTypes === '*') lines.push("  markerTypes: '*',");
@@ -132,6 +314,7 @@ export function createDemoConfigPanel(
   pointTypes: Record<string, OEMPointType>,
   initialMarkerTypes: readonly string[],
   callbacks: DemoConfigPanelCallbacks,
+  versions?: { selected: string; options: readonly DemoVersionOption[] },
 ): DemoConfigPanel {
   const element = document.createElement('details');
   element.className = 'demoPanel';
@@ -145,16 +328,13 @@ export function createDemoConfigPanel(
   heading.className = 'demoPanelHeading';
   const disclosure = document.createElement('span');
   disclosure.className = 'demoPanelDisclosure';
-  disclosure.textContent = '▶';
+  disclosure.textContent = '✦';
   disclosure.setAttribute('aria-hidden', 'true');
   const title = document.createElement('span');
   title.className = 'demoPanelTitle';
-  title.textContent = 'Widget config';
-  const version = document.createElement('span');
-  version.className = 'demoPanelVersion';
-  version.textContent = manifest.gameVersion.replaceAll('_', '.');
+  title.textContent = 'Widget Config';
   heading.append(disclosure, title);
-  summaryRow.append(heading, version);
+  summaryRow.append(heading);
   summary.append(summaryRow);
   summary.setAttribute('aria-expanded', String(element.open));
 
@@ -162,6 +342,7 @@ export function createDemoConfigPanel(
   body.className = 'demoPanelBody';
   element.append(summary, body);
   element.classList.toggle('expanded', element.open);
+  const destroyPanelDragging = bindPanelDragging(element, summary);
 
   let expanded = element.open;
   let panelAnimation: Animation | null = null;
@@ -195,23 +376,35 @@ export function createDemoConfigPanel(
   for (const locale of Object.keys(manifest.locales).sort()) localeSelect.append(createOption(locale));
   const themeSelect = createSelect('Theme');
   themeSelect.append(createOption('light', 'Light'), createOption('dark', 'Dark'));
+  let versionSelect: HTMLSelectElement | undefined;
+  if (versions) {
+    versionSelect = createSelect('Version');
+    for (const version of versions.options) versionSelect.append(createOption(version.id, version.label));
+    versionSelect.value = versions.selected;
+  }
 
   const zoomWrap = document.createElement('span');
   zoomWrap.className = 'demoRange';
+  const zoomTrack = document.createElement('span');
+  zoomTrack.className = 'demoRangeTrack';
   const zoomInput = document.createElement('input');
   zoomInput.type = 'range';
   zoomInput.step = '0.05';
+  zoomInput.autocomplete = 'off';
   zoomInput.setAttribute('aria-label', 'Zoom');
+  const zoomThumb = document.createElement('span');
+  zoomThumb.className = 'demoRangeThumb';
+  zoomThumb.setAttribute('aria-hidden', 'true');
+  zoomTrack.append(zoomInput, zoomThumb);
   const zoomValue = document.createElement('output');
-  zoomWrap.append(zoomInput, zoomValue);
-  const centerX = document.createElement('input');
-  centerX.type = 'number';
-  centerX.step = '1';
-  centerX.setAttribute('aria-label', 'Center X');
-  const centerY = document.createElement('input');
-  centerY.type = 'number';
-  centerY.step = '1';
-  centerY.setAttribute('aria-label', 'Center Y');
+  zoomWrap.append(zoomTrack, zoomValue);
+  const center = document.createElement('span');
+  center.className = 'demoCoordinatePair';
+  const centerXControl = createNumberControl('X', 'Center X');
+  const centerYControl = createNumberControl('Y', 'Center Y');
+  const centerX = centerXControl.input;
+  const centerY = centerYControl.input;
+  center.append(centerXControl.element, centerYControl.element);
 
   const view = createSection('View');
   view.fieldset.classList.add('demoViewSection');
@@ -221,9 +414,9 @@ export function createDemoConfigPanel(
     createField('Floor', floorSelect),
     createField('Language', localeSelect),
     createField('Theme', themeSelect),
-    createField('Zoom', zoomWrap),
-    createField('Center X', centerX),
-    createField('Center Y', centerY),
+    ...(versionSelect ? [createField('Version', versionSelect)] : []),
+    createField('Zoom', zoomWrap, true),
+    createField('Center', center, true),
   );
 
   const markerMode = document.createElement('div');
@@ -237,23 +430,56 @@ export function createDemoConfigPanel(
     input.type = 'radio';
     input.name = 'demoMarkerMode';
     input.value = value;
+    input.autocomplete = 'off';
     const text = document.createElement('span');
     text.textContent = label;
     segment.append(input, text);
     markerMode.append(segment);
     markerModes.set(value, input);
   }
-  const markerSelect = createSelect('Marker types');
-  markerSelect.multiple = true;
-  markerSelect.size = 6;
-  for (const key of Object.keys(pointTypes).sort()) markerSelect.append(createOption(key));
-  const markerCount = document.createElement('output');
-  markerCount.className = 'demoMarkerCount';
-  const markerCaption = document.createElement('span');
-  markerCaption.className = 'demoFieldLabel demoMarkerLabel';
-  markerCaption.append(document.createTextNode('Marker types'), markerCount);
-  const markerField = createField('', markerSelect, true);
-  markerField.firstElementChild?.replaceWith(markerCaption);
+  const markerPicker = document.createElement('div');
+  markerPicker.className = 'demoMarkerPicker';
+  const markerTrigger = document.createElement('button');
+  markerTrigger.type = 'button';
+  markerTrigger.className = 'demoMarkerTrigger';
+  markerTrigger.setAttribute('aria-expanded', 'false');
+  markerTrigger.setAttribute('aria-haspopup', 'listbox');
+  const markerSelection = document.createElement('span');
+  markerSelection.className = 'demoMarkerSelection';
+  const markerDisclosure = document.createElement('span');
+  markerDisclosure.className = 'demoMarkerDisclosure';
+  markerDisclosure.setAttribute('aria-hidden', 'true');
+  markerTrigger.append(markerSelection, markerDisclosure);
+  const markerMenu = document.createElement('div');
+  markerMenu.className = 'demoMarkerMenu';
+  const markerSearch = document.createElement('input');
+  markerSearch.type = 'search';
+  markerSearch.className = 'demoMarkerSearch';
+  markerSearch.placeholder = 'Filter marker types';
+  markerSearch.autocomplete = 'off';
+  markerSearch.setAttribute('aria-label', 'Filter marker types');
+  const markerOptions = document.createElement('div');
+  markerOptions.className = 'demoMarkerOptions';
+  markerOptions.setAttribute('role', 'listbox');
+  markerOptions.setAttribute('aria-multiselectable', 'true');
+  const markerInputs = new Map<string, HTMLInputElement>();
+  for (const key of Object.keys(pointTypes).sort()) {
+    const option = document.createElement('label');
+    option.className = 'demoMarkerOption';
+    option.setAttribute('role', 'option');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = key;
+    input.autocomplete = 'off';
+    const text = document.createElement('span');
+    text.textContent = key;
+    option.append(input, text);
+    markerOptions.append(option);
+    markerInputs.set(key, input);
+  }
+  markerMenu.append(markerSearch, markerOptions);
+  markerPicker.append(markerTrigger, markerMenu);
+  const markerField = createField('Marker types', markerPicker, true);
 
   const labels = createToggle('Place names');
   const boundaries = createToggle('Boundaries');
@@ -274,6 +500,7 @@ export function createDemoConfigPanel(
   const reset = document.createElement('button');
   reset.type = 'button';
   reset.className = 'demoReset';
+  reset.setAttribute('aria-label', 'Reset widget configuration');
   reset.textContent = 'Reset';
   const codeSection = document.createElement('section');
   codeSection.className = 'demoCodeSection';
@@ -284,21 +511,82 @@ export function createDemoConfigPanel(
   const copyCode = document.createElement('button');
   copyCode.type = 'button';
   copyCode.className = 'demoCopy';
+  copyCode.setAttribute('aria-label', 'Copy creation code');
   copyCode.textContent = 'Copy';
   const codeActions = document.createElement('span');
   codeActions.className = 'demoCodeActions';
-  const codeBlock = document.createElement('pre');
-  codeBlock.className = 'demoCode';
-  const code = document.createElement('code');
-  codeBlock.append(code);
+  const code = document.createElement('textarea');
+  code.className = 'demoCode';
+  code.readOnly = true;
+  code.wrap = 'off';
+  code.spellcheck = false;
+  code.setAttribute('aria-label', 'Creation code');
   codeActions.append(reset, copyCode);
   codeHeader.append(codeTitle, codeActions);
-  codeSection.append(codeHeader, codeBlock);
+  codeSection.append(codeHeader, code);
   body.append(view.fieldset, content.fieldset, controls.fieldset, codeSection);
 
   let optionRegion = '';
   let optionLocale = '';
-  let markerSelectEnabled = false;
+  let markerPickerEnabled = false;
+  const closeMarkerPicker = () => {
+    markerPicker.classList.remove('open');
+    markerTrigger.setAttribute('aria-expanded', 'false');
+  };
+  const setMarkerPickerOpen = (open: boolean) => {
+    if (!markerPickerEnabled) return;
+    markerPicker.classList.toggle('open', open);
+    markerTrigger.setAttribute('aria-expanded', String(open));
+    if (open) markerSearch.focus();
+  };
+  const selectedMarkerTypes = () => [...markerInputs]
+    .filter(([, input]) => input.checked)
+    .map(([key]) => key);
+  const syncMarkerPicker = (selected: readonly string[]) => {
+    const selectedSet = new Set(selected);
+    for (const [key, input] of markerInputs) input.checked = selectedSet.has(key);
+    markerSelection.textContent = selected.length === 1 ? '1 type selected' : `${selected.length} types selected`;
+  };
+  const filterMarkerOptions = () => {
+    const query = markerSearch.value.trim().toLocaleLowerCase();
+    for (const [key, input] of markerInputs) {
+      input.parentElement!.hidden = Boolean(query) && !key.toLocaleLowerCase().includes(query);
+    }
+  };
+  const onDocumentPointerDown = (event: PointerEvent) => {
+    if (!markerPicker.contains(event.target as Node)) closeMarkerPicker();
+  };
+  document.addEventListener('pointerdown', onDocumentPointerDown);
+
+  let zoomFrame: number | null = null;
+  let renderedZoomProgress: number | null = null;
+  let targetZoomProgress = 0;
+  const renderZoomProgress = () => {
+    zoomFrame = null;
+    if (renderedZoomProgress === null) renderedZoomProgress = targetZoomProgress;
+    const delta = targetZoomProgress - renderedZoomProgress;
+    renderedZoomProgress += delta * 0.24;
+    if (Math.abs(delta) < 0.001) renderedZoomProgress = targetZoomProgress;
+    zoomTrack.style.setProperty('--demoRangeProgress', `${renderedZoomProgress * 100}%`);
+    zoomThumb.style.left = `${renderedZoomProgress * 100}%`;
+    if (renderedZoomProgress !== targetZoomProgress) zoomFrame = requestAnimationFrame(renderZoomProgress);
+  };
+  const updateZoomDisplay = (immediate = false) => {
+    const minimum = Number(zoomInput.min);
+    const maximum = Number(zoomInput.max);
+    const value = Number(zoomInput.value);
+    const progress = maximum > minimum ? (value - minimum) / (maximum - minimum) : 0;
+    targetZoomProgress = Math.min(1, Math.max(0, progress));
+    zoomValue.value = value.toFixed(2);
+    if (immediate) {
+      if (zoomFrame !== null) cancelAnimationFrame(zoomFrame);
+      zoomFrame = null;
+      renderedZoomProgress = targetZoomProgress;
+      renderZoomProgress();
+    } else if (zoomFrame === null) {
+      zoomFrame = requestAnimationFrame(renderZoomProgress);
+    }
+  };
   const updateRegionOptions = (state: OEMWidgetState) => {
     if (optionRegion === state.regionId && optionLocale === state.locale) return;
     optionRegion = state.regionId;
@@ -324,17 +612,20 @@ export function createDemoConfigPanel(
     floorSelect.value = state.floorId;
     localeSelect.value = state.locale;
     themeSelect.value = creation.theme;
+    if (versionSelect && versions) versionSelect.value = versions.selected;
     if (document.activeElement !== zoomInput) zoomInput.value = String(state.zoom);
-    zoomValue.value = state.zoom.toFixed(2);
+    updateZoomDisplay(true);
     if (document.activeElement !== centerX) centerX.value = String(Math.round(state.center.x));
     if (document.activeElement !== centerY) centerY.value = String(Math.round(state.center.y));
 
     const selectedTypes = state.markerTypes === '*' ? [] : state.markerTypes;
     markerModes.get(state.markerTypes === '*' ? 'all' : selectedTypes.length ? 'selected' : 'none')!.checked = true;
-    markerSelectEnabled = state.markerTypes !== '*' && selectedTypes.length > 0;
-    markerSelect.disabled = !markerSelectEnabled;
-    if (selectedTypes.length) setSelectedValues(markerSelect, selectedTypes);
-    markerCount.value = state.markerTypes === '*' ? 'all' : String(selectedTypes.length);
+    markerPickerEnabled = state.markerTypes !== '*' && selectedTypes.length > 0;
+    markerPicker.classList.toggle('disabled', !markerPickerEnabled);
+    markerTrigger.disabled = !markerPickerEnabled;
+    if (!markerPickerEnabled) closeMarkerPicker();
+    if (selectedTypes.length) syncMarkerPicker(selectedTypes);
+    else markerSelection.textContent = state.markerTypes === '*' ? 'All types' : 'No types selected';
 
     labels.input.checked = state.labels;
     boundaries.input.checked = state.boundaries;
@@ -344,7 +635,8 @@ export function createDemoConfigPanel(
     scaleBar.input.checked = creation.showScaleBar;
     lockDrag.input.checked = creation.lockDrag;
     lockZoom.input.checked = creation.lockZoom;
-    code.textContent = createWidgetCode(manifest, state, creation);
+    const selectedVersion = versions?.options.find((version) => version.id === versions.selected);
+    code.value = createWidgetCode(manifest, state, creation, selectedVersion);
   };
 
   regionSelect.addEventListener('change', () => callbacks.update({ region: regionSelect.value as OEMRegionSelector }));
@@ -352,7 +644,8 @@ export function createDemoConfigPanel(
   floorSelect.addEventListener('change', () => callbacks.update({ floor: floorSelect.value as OEMFloorId }));
   localeSelect.addEventListener('change', () => callbacks.update({ locale: localeSelect.value as OEMLocale }));
   themeSelect.addEventListener('change', () => callbacks.recreate({ theme: themeSelect.value as DemoCreationConfig['theme'] }));
-  zoomInput.addEventListener('input', () => { zoomValue.value = Number(zoomInput.value).toFixed(2); });
+  versionSelect?.addEventListener('change', () => callbacks.selectVersion?.(versionSelect.value));
+  zoomInput.addEventListener('input', () => updateZoomDisplay());
   zoomInput.addEventListener('change', () => callbacks.update({ zoom: Number(zoomInput.value) }));
   const updateCenter = () => {
     const x = Number(centerX.value);
@@ -361,18 +654,31 @@ export function createDemoConfigPanel(
   };
   centerX.addEventListener('change', updateCenter);
   centerY.addEventListener('change', updateCenter);
+  const destroyScrubbers = [
+    bindNumberScrubber(centerXControl, updateCenter),
+    bindNumberScrubber(centerYControl, updateCenter),
+  ];
 
   markerMode.addEventListener('change', () => {
     const mode = [...markerModes].find(([, input]) => input.checked)?.[0];
     if (mode === 'all') callbacks.update({ markerTypes: '*' });
     else if (mode === 'none') callbacks.update({ markerTypes: false });
     else {
-      const selected = [...markerSelect.selectedOptions].map((option) => option.value);
+      const selected = selectedMarkerTypes();
       callbacks.update({ markerTypes: selected.length ? selected : initialMarkerTypes });
     }
   });
-  markerSelect.addEventListener('change', () => {
-    const selected = [...markerSelect.selectedOptions].map((option) => option.value);
+  markerTrigger.addEventListener('click', () => setMarkerPickerOpen(!markerPicker.classList.contains('open')));
+  markerSearch.addEventListener('input', filterMarkerOptions);
+  markerSearch.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeMarkerPicker();
+      markerTrigger.focus();
+    }
+  });
+  markerOptions.addEventListener('change', () => {
+    const selected = selectedMarkerTypes();
+    markerSelection.textContent = selected.length === 1 ? '1 type selected' : `${selected.length} types selected`;
     callbacks.update({ markerTypes: selected.length ? selected : false });
   });
   labels.input.addEventListener('change', () => callbacks.update({ labels: labels.input.checked }));
@@ -390,7 +696,7 @@ export function createDemoConfigPanel(
       window.setTimeout(() => { copyCode.textContent = 'Copy'; }, 1200);
       return;
     }
-    void navigator.clipboard.writeText(code.textContent ?? '').then(() => {
+    void navigator.clipboard.writeText(code.value).then(() => {
       copyCode.textContent = 'Copied';
       window.setTimeout(() => { copyCode.textContent = 'Copy'; }, 1200);
     }).catch(() => {
@@ -405,9 +711,16 @@ export function createDemoConfigPanel(
       element.classList.toggle('busy', busy);
       element.setAttribute('aria-busy', String(busy));
       for (const control of body.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button')) {
-        control.disabled = busy || (control === markerSelect && !markerSelectEnabled);
+        control.disabled = busy || ((control === markerTrigger || markerInputs.has(control.value)) && !markerPickerEnabled);
       }
     },
     sync,
+    destroy() {
+      panelAnimation?.cancel();
+      if (zoomFrame !== null) cancelAnimationFrame(zoomFrame);
+      destroyPanelDragging();
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
+      for (const destroy of destroyScrubbers) destroy();
+    },
   };
 }
