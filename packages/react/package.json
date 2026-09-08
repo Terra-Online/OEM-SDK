@@ -1,0 +1,13 @@
+{
+  "name": "@opendfieldmap/react",
+  "version": "0.1.0-alpha.0",
+  "description": "React lifecycle wrapper for the Open Endfield Map widget",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "files": ["dist", "LICENSE"],
+  "sideEffects": false,
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
+  "dependencies": {"@opendfieldmap/sdk": "workspace:^"},
+  "publishConfig": {"access": "public"},
+  "peerDependencies": {"react": ">=18 <20"}
+}

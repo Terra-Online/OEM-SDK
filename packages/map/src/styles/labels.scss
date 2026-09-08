@@ -1,0 +1,59 @@
+@use './palette.scss' as *;
+
+.mapRoot, .mapRoot[data-theme='light'] {
+    --labelColor: #{$light-1};
+    --labelShadowPrimary: #{rgba($black-0, 0.8)};
+    --labelShadowSecondary: #{$grey-1};
+}
+.mapRoot[data-theme='dark'] {
+    --labelColor: #{$light-2};
+    --labelShadowPrimary: #{$black-0};
+    --labelShadowSecondary: #{$grey-1};
+}
+
+.innerSub, .innerSite {
+    color: var(--labelColor);
+    font-size: 0.9375rem;
+    font-weight: 560;
+    text-transform: uppercase;
+    letter-spacing: -0.5px;
+    line-height: 1.02;
+    word-break: break-word;
+    text-overflow: ellipsis;
+    width: 8.8rem;
+    text-align: center;
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, -50%);
+    user-select: none;
+    text-shadow: 1px 1px 1px var(--labelShadowPrimary), 0 0 1px var(--labelShadowSecondary), -.5px -.5px 2px var(--labelShadowSecondary);
+    font-family: 'Novecento Medium', sans-serif;
+    animation: fadeIn 0.3s ease-in-out;
+}
+.innerSub {
+    font-family: 'Novecento DemiBold', sans-serif;
+    text-transform: capitalize;
+    letter-spacing: -0.2px;
+    font-size: 18px;
+    font-weight: 700;
+    width: 9.6rem;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}

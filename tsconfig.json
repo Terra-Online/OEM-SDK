@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@opendfieldmap/core": ["packages/core/src/index.ts"],
+      "@opendfieldmap/map": ["packages/map/src/index.ts"],
+      "@opendfieldmap/sdk": ["packages/sdk/src/index.ts"],
+      "@opendfieldmap/react": ["packages/react/src/index.tsx"]
+    }
+  },
+  "include": ["packages/*/src", "examples", "tests", "vite.config.ts"]
+}

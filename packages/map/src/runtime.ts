@@ -1,0 +1,567 @@
+import L from 'leaflet';
+import 'leaflet.markercluster';
+import {
+  createOEMPointUrl,
+  fetchOEMJson,
+  fromOEMLeafletPosition,
+  getOEMRegion,
+  normalizeOEMLocale,
+  resolveOEMAsset,
+  toOEMLeafletPosition,
+} from '@opendfieldmap/core';
+import type {
+  OEMAsset,
+  OEMBoundary,
+  OEMLabel,
+  OEMLocaleMessages,
+  OEMManifest,
+  OEMPoint,
+  OEMPointFilter,
+  OEMPointType,
+  OEMPosition,
+  OEMRegion,
+  OEMView,
+} from '@opendfieldmap/core';
+import type { OEM as OEMContract, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions } from './types';
+import { SmoothTileLayer } from './atlos/smoothTileLayer';
+import { enableSmoothWheelZoom } from './atlos/smoothWheelZoom';
+import { isMapOverdragged, toMapBounds } from './atlos/mapOverdrag';
+
+const mounted = new WeakSet<HTMLElement>();
+const CLUSTER_SUBCATEGORIES = new Set(['boss', 'collection', 'mob', 'natural', 'valuable', 'exploration']);
+const FEATURE_NAMES = ['points', 'labels', 'boundaries'] as const;
+const TERMS_URL = 'https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright';
+
+const cloneFilter = (filter: OEMPointFilter): OEMPointFilter => ({
+  types: filter.types ? [...filter.types] : undefined,
+  subregions: filter.subregions ? [...filter.subregions] : undefined,
+  floorOnly: filter.floorOnly,
+});
+
+const sameList = (left?: string[], right?: string[]): boolean =>
+  left === right || (!!left && !!right && left.length === right.length &&
+    left.every((value, index) => value === right[index]));
+
+const sameFilter = (left: OEMPointFilter, right: OEMPointFilter): boolean =>
+  left.floorOnly === right.floorOnly &&
+  sameList(left.types, right.types) &&
+  sameList(left.subregions, right.subregions);
+
+/** Leaflet marker with the subpixel positioning used by Atlos. */
+class OEMMarker extends L.Marker {
+  update(): this {
+    const marker = this as unknown as { _icon?: HTMLElement; _map?: L.Map; _latlng: L.LatLng; _setPos(point: L.Point): void };
+    if (marker._icon && marker._map) marker._setPos(marker._map.latLngToLayerPoint(marker._latlng));
+    return this;
+  }
+  _animateZoom(event: { center: L.LatLng; zoom: number }): void {
+    const marker = this as unknown as {
+      _map?: L.Map & { _latLngToNewLayerPoint(latlng: L.LatLng, zoom: number, center: L.LatLng): L.Point };
+      _latlng: L.LatLng;
+      _setPos(point: L.Point): void;
+    };
+    if (marker._map) marker._setPos(marker._map._latLngToNewLayerPoint(marker._latlng, event.zoom, event.center));
+  }
+}
+
+/** Tile layer that skips coordinates absent from the published coverage index. */
+class CoveredTileLayer extends SmoothTileLayer {
+  constructor(url: string, options: L.TileLayerOptions, private coverage: OEMRegion['coverage'], private floorId: string) {
+    super(url, options);
+  }
+  private hasTile(coords: L.Coords): boolean {
+    const ranges = this.coverage[String(coords.z)]?.[this.floorId]?.[String(coords.y)] ?? [];
+    for (let index = 0; index < ranges.length; index += 2) {
+      if (coords.x >= ranges[index] && coords.x <= ranges[index + 1]) return true;
+    }
+    return false;
+  }
+  _isValidTile(coords: L.Coords): boolean {
+    const prototype = L.GridLayer.prototype as unknown as {
+      _isValidTile(this: L.GridLayer, value: L.Coords): boolean;
+    };
+    return prototype._isValidTile.call(this, coords) && this.hasTile(coords);
+  }
+}
+
+/** Leaflet-backed implementation of the public OEM interface. */
+export class OEM implements OEMContract {
+  destroyed = false;
+  private map: L.Map;
+  private root: HTMLDivElement;
+  private region: OEMRegion;
+  private floorId = 'M';
+  private features: OEMFeatures = {};
+  private listeners = new Map<keyof OEMEvents, Set<(payload: never) => void>>();
+  private requests = new Map<keyof OEMFeatures, AbortController>();
+  private baseTiles?: L.TileLayer;
+  private floorTiles?: L.TileLayer;
+  private pointsLayer = L.layerGroup();
+  private pointClusters = new Map<string, L.MarkerClusterGroup>();
+  private labelsLayer = L.layerGroup();
+  private boundariesLayer = L.layerGroup();
+  private points: OEMPoint[] = [];
+  private types: Record<string, OEMPointType> = {};
+  private labels: OEMLabel[] = [];
+  private visibleLabelType?: OEMLabel['type'];
+  private messages: OEMLocaleMessages = {};
+  private filter: OEMPointFilter = {};
+  private markerClustering: boolean;
+  private locale: string;
+  private resolvedLocale: string;
+  private attributionBrand: HTMLSpanElement;
+  private attributionLink: HTMLAnchorElement;
+  private observer?: ResizeObserver;
+  private updatingView = false;
+  private emittedView?: OEMView;
+  private wheel: ReturnType<typeof enableSmoothWheelZoom>;
+
+  constructor(private container: HTMLElement, readonly manifest: OEMManifest, private options: OEMOptions) {
+    if (mounted.has(container)) throw new Error('This container already hosts an OEM instance');
+    this.region = getOEMRegion(manifest, options.view?.regionId ?? options.regionId ?? manifest.defaultRegionId);
+    this.filter = cloneFilter(options.pointFilter ?? {});
+    this.markerClustering = options.markerClustering ?? true;
+    const initialFloor = options.view?.floorId ?? options.floorId ?? 'M';
+    this.validateFloor(initialFloor);
+    if (options.view) this.validatePosition(options.view);
+    this.locale = options.locale ?? manifest.fallbackLocale;
+    this.resolvedLocale = normalizeOEMLocale(this.locale, Object.keys(manifest.locales), manifest.fallbackLocale);
+    this.root = document.createElement('div');
+    this.root.className = 'mapRoot';
+    this.root.dataset.theme = options.theme ?? 'light';
+    container.append(this.root);
+    mounted.add(container);
+    this.map = L.map(this.root, {
+      crs: L.CRS.Simple, minZoom: 0, maxZoom: 3, zoomControl: false, attributionControl: false,
+      dragging: !options.lockDrag, touchZoom: !options.lockZoom, boxZoom: !options.lockZoom,
+      keyboard: !options.lockZoom, doubleClickZoom: false, scrollWheelZoom: false, zoomAnimation: true,
+      markerZoomAnimation: true, fadeAnimation: true, zoomSnap: 0, zoomDelta: 0.25,
+    });
+    this.wheel = enableSmoothWheelZoom(this.map, {
+      enableInertia: true,
+      panEnabled: !options.lockDrag,
+      zoomEnabled: !options.lockZoom,
+    });
+    const pane = this.map.createPane('placeLabels');
+    pane.style.zIndex = '650';
+    pane.style.pointerEvents = 'none';
+    this.pointsLayer.addTo(this.map);
+    this.labelsLayer.addTo(this.map);
+    this.boundariesLayer.addTo(this.map);
+    const credit = document.createElement('div');
+    credit.className = 'attribution';
+    this.attributionBrand = document.createElement('span');
+    this.attributionBrand.className = 'attributionBrand';
+    const separator = document.createElement('span');
+    separator.className = 'attributionSeparator';
+    separator.textContent = '·';
+    separator.setAttribute('aria-hidden', 'true');
+    this.attributionLink = document.createElement('a');
+    this.attributionLink.className = 'attributionLink';
+    this.attributionLink.href = TERMS_URL;
+    this.attributionLink.target = '_blank';
+    this.attributionLink.rel = 'noopener noreferrer';
+    credit.append(this.attributionBrand, separator, this.attributionLink);
+    this.updateAttribution();
+    this.root.append(credit);
+    this.applyRegion(options.view);
+    this.setFloor(initialFloor);
+    this.map.on('moveend zoomend', this.emitView);
+    this.map.on('move drag', () => {
+      const bounds = toMapBounds(this.map.options.maxBounds);
+      this.root.classList.toggle('overdrag', !!bounds && isMapOverdragged(this.map, bounds));
+    });
+    this.map.on('moveend dragend zoomstart', () => this.root.classList.remove('overdrag'));
+    if (typeof ResizeObserver !== 'undefined') {
+      this.observer = new ResizeObserver(() => this.resize());
+      this.observer.observe(container);
+    }
+    options.signal?.addEventListener('abort', this.destroy, { once: true });
+  }
+
+  /** Prevents calls against a released map instance. */
+  private assertAlive(): void { if (this.destroyed) throw new Error('OEM instance has been destroyed'); }
+  private validateFloor(id: string): void {
+    if (!this.region.floors.some((floor) => floor.id === id)) throw new Error(`Unknown floor ${id} in ${this.region.id}`);
+  }
+  private validatePosition(position: OEMPosition): void { toOEMLeafletPosition(position, this.region); }
+  private position(latlng: L.LatLng): OEMPosition {
+    return fromOEMLeafletPosition(latlng.lat, latlng.lng, this.region, this.floorId);
+  }
+  private emit<Event extends keyof OEMEvents>(event: Event, payload: OEMEvents[Event]): void {
+    this.listeners.get(event)?.forEach((handler) => handler(payload as never));
+    if (event === 'error') this.options.onError?.(payload as Error);
+  }
+  /** Emits one resolved view for duplicate Leaflet move and zoom events. */
+  private emitView = (): void => {
+    if (this.destroyed || this.updatingView) return;
+    const view = this.getView();
+    if (this.emittedView && view.regionId === this.emittedView.regionId &&
+      view.floorId === this.emittedView.floorId && view.x === this.emittedView.x &&
+      view.y === this.emittedView.y && view.zoom === this.emittedView.zoom) return;
+    this.emittedView = view;
+    this.emit('viewchange', view);
+    this.renderLabels();
+  };
+  /** Resolves the compact attribution without inheriting the map control font. */
+  private updateAttribution(): void {
+    const messages = this.manifest.controls[this.resolvedLocale] ?? this.manifest.controls[this.manifest.fallbackLocale];
+    if (!messages) throw new Error('Missing OEM attribution messages');
+    this.attributionBrand.textContent = messages.brandName;
+    this.attributionLink.textContent = messages.termsOfService;
+  }
+  on<Event extends keyof OEMEvents>(event: Event, handler: (payload: OEMEvents[Event]) => void): () => void {
+    this.assertAlive();
+    const handlers = this.listeners.get(event) ?? new Set();
+    handlers.add(handler as (payload: never) => void);
+    this.listeners.set(event, handlers);
+    return () => { handlers.delete(handler as (payload: never) => void); };
+  }
+  /** Rebuilds the base map constraints and main tile layer for one region. */
+  private applyRegion(view?: OEMView): void {
+    this.updatingView = true;
+    this.baseTiles?.remove();
+    this.floorTiles?.remove();
+    this.floorTiles = undefined;
+    this.floorId = 'M';
+    this.map.setMaxBounds(L.latLngBounds([]));
+    this.map.setMinZoom(this.region.minZoom);
+    this.map.setMaxZoom(this.region.maxZoom);
+    const target = view ?? this.region.initialView;
+    this.map.setView(toOEMLeafletPosition(target, this.region), this.clampZoom(target.zoom), { animate: false });
+    this.map.setMaxBounds(this.regionBounds());
+    this.baseTiles = this.makeTiles('M').addTo(this.map);
+    this.updatingView = false;
+  }
+  /** Converts the region's published pixel extent to Simple CRS bounds. */
+  private regionBounds(): L.LatLngBounds {
+    const { x, y } = this.region.boundsOffset;
+    return L.latLngBounds(
+      toOEMLeafletPosition({ regionId: this.region.id, x, y }, this.region),
+      toOEMLeafletPosition({ regionId: this.region.id, x: x + this.region.dimensions[0], y: y + this.region.dimensions[1] }, this.region),
+    );
+  }
+  /** Creates a coverage-aware layer for one region floor. */
+  private makeTiles(floorId: string): L.TileLayer {
+    const floor = this.region.floors.find((entry) => entry.id === floorId)!;
+    const regionId = this.region.id;
+    const layer = new CoveredTileLayer(resolveOEMAsset(this.options.resources.baseUrl, floor.tileTemplate), {
+      tileSize: this.region.tileSize, noWrap: true, bounds: this.regionBounds(),
+      maxNativeZoom: this.region.maxNativeZoom, maxZoom: Math.ceil(this.region.maxZoom),
+    }, this.region.coverage, floorId);
+    layer.on('load', () => { if (!this.destroyed && this.region.id === regionId) this.emit('load', { regionId, floorId }); });
+    layer.on('tileerror', () => this.emit('error', new Error(`Tile load failed: ${regionId}/${floorId}`)));
+    return layer;
+  }
+  private clampZoom(zoom: number): number {
+    if (!Number.isFinite(zoom)) throw new Error('Zoom must be finite');
+    return Math.max(this.region.minZoom, Math.min(this.region.maxZoom, zoom));
+  }
+  /** Returns the current view in the OEM pixel coordinate system. */
+  getView(): OEMView { this.assertAlive(); return { ...this.position(this.map.getCenter()), zoom: this.map.getZoom() }; }
+
+  /** Sets the view without exposing Leaflet's coordinate objects. */
+  setView(view: OEMView): void {
+    this.assertAlive();
+    this.validatePosition(view);
+    const zoom = this.clampZoom(view.zoom);
+    if (view.floorId) this.setFloor(view.floorId);
+    this.map.setView(toOEMLeafletPosition(view, this.region), zoom, { animate: false });
+  }
+  /** Changes zoom around the current center with an optional native transition. */
+  setZoom(zoom: number, options: OEMZoomOptions = {}): void {
+    this.assertAlive();
+    this.map.setZoom(this.clampZoom(zoom), { animate: options.animate ?? false });
+  }
+  /** Fits the map to an OEM pixel-coordinate extent. */
+  fitBounds(bounds: [OEMPosition, OEMPosition]): void {
+    this.assertAlive();
+    this.map.fitBounds(L.latLngBounds(toOEMLeafletPosition(bounds[0], this.region), toOEMLeafletPosition(bounds[1], this.region)), { animate: false });
+  }
+  /** Switches regions and reloads only the features currently enabled. */
+  async setRegion(regionId: string): Promise<void> {
+    this.assertAlive();
+    const region = getOEMRegion(this.manifest, regionId);
+    if (region === this.region) return;
+    this.cancelRequests();
+    this.region = region;
+    this.points = [];
+    this.labels = [];
+    this.visibleLabelType = undefined;
+    this.clearPointLayers();
+    this.labelsLayer.clearLayers();
+    this.boundariesLayer.clearLayers();
+    this.applyRegion();
+    this.emit('regionchange', { regionId });
+    this.emit('floorchange', { floorId: 'M' });
+    this.emitView();
+    await this.loadFeatures();
+  }
+  /** Switches the rendered floor while retaining the current region view. */
+  setFloor(floorId: string): void {
+    this.assertAlive();
+    this.validateFloor(floorId);
+    if (floorId === this.floorId) return;
+    this.floorTiles?.remove();
+    this.floorTiles = undefined;
+    this.floorId = floorId;
+    const base = this.baseTiles?.getContainer();
+    if (base) base.style.filter = floorId === 'M' ? 'brightness(1)' : 'brightness(0.5)';
+    if (floorId !== 'M') this.floorTiles = this.makeTiles(floorId).addTo(this.map);
+    this.renderPoints();
+    this.emit('floorchange', { floorId });
+    this.emitView();
+  }
+  /** Changes label language and applies the manifest fallback chain. */
+  async setLocale(locale: string): Promise<void> {
+    this.assertAlive();
+    const resolved = normalizeOEMLocale(locale, Object.keys(this.manifest.locales), this.manifest.fallbackLocale);
+    const changed = resolved !== this.resolvedLocale;
+    this.locale = locale;
+    if (!changed) return;
+    this.resolvedLocale = resolved;
+    this.updateAttribution();
+    if (this.features.labels) await this.loadFeature('labels');
+  }
+  /** Returns both the requested and resolved locale values. */
+  getLocale(): { requested: string; resolved: string } { return { requested: this.locale, resolved: this.resolvedLocale }; }
+
+  /** Changes only this instance's theme attribute. */
+  setTheme(theme: 'light' | 'dark'): void { this.assertAlive(); this.root.dataset.theme = theme; }
+
+  /** Enables or disables static layers and cancels disabled layer requests. */
+  async setFeatures(features: OEMFeatures): Promise<void> {
+    this.assertAlive();
+    const loads: Promise<void>[] = [];
+    for (const feature of FEATURE_NAMES) {
+      if (features[feature] === undefined || features[feature] === this.features[feature]) continue;
+      this.features[feature] = features[feature];
+      this.cancelRequest(feature);
+      if (features[feature]) loads.push(this.loadFeature(feature));
+      else if (feature === 'points') { this.points = []; this.clearPointLayers(); }
+      else if (feature === 'labels') { this.labels = []; this.visibleLabelType = undefined; this.labelsLayer.clearLayers(); }
+      else this.boundariesLayer.clearLayers();
+    }
+    await Promise.all(loads);
+  }
+  private cancelRequest(feature: keyof OEMFeatures): void {
+    if (!this.requests.has(feature)) return;
+    this.requests.get(feature)!.abort();
+    this.requests.delete(feature);
+    this.emit('loading', { feature, loading: false });
+  }
+  private cancelRequests(): void { for (const feature of this.requests.keys()) this.cancelRequest(feature); }
+  private async loadFeatures(): Promise<void> {
+    await Promise.all(FEATURE_NAMES.filter((feature) => this.features[feature]).map((feature) => this.loadFeature(feature)));
+  }
+  /** Loads one feature with a request token so stale responses are ignored. */
+  private async loadFeature(feature: keyof OEMFeatures): Promise<void> {
+    this.cancelRequest(feature);
+    const request = new AbortController();
+    this.requests.set(feature, request);
+    this.emit('loading', { feature, loading: true });
+    const read = <Data>(ref: OEMAsset) => fetchOEMJson<Data>(resolveOEMAsset(this.options.resources.baseUrl, ref.path), request.signal);
+    try {
+      if (feature === 'points') {
+        const [groups, types] = await Promise.all([
+          Promise.all(this.region.points.map((ref) => read<OEMPoint[]>(ref))),
+          Object.keys(this.types).length ? this.types : read<Record<string, OEMPointType>>(this.manifest.types),
+        ]);
+        if (request.signal.aborted) return;
+        this.points = groups.flat();
+        this.types = types;
+        this.renderPoints();
+      } else if (feature === 'labels') {
+        const [labels, messages] = await Promise.all([
+          this.region.labels ? read<OEMLabel[]>(this.region.labels) : Promise.resolve([]),
+          this.manifest.locales[this.resolvedLocale] ? read<OEMLocaleMessages>(this.manifest.locales[this.resolvedLocale]) : Promise.resolve({}),
+        ]);
+        if (request.signal.aborted) return;
+        this.labels = labels;
+        this.messages = messages;
+        this.renderLabels(true);
+      } else {
+        const boundaries = this.region.boundaries ? await read<OEMBoundary[]>(this.region.boundaries) : [];
+        if (request.signal.aborted) return;
+        this.renderBoundaries(boundaries);
+      }
+    } catch (error) {
+      if (!request.signal.aborted) {
+        this.features[feature] = false;
+        this.emit('error', error instanceof Error ? error : new Error(String(error)));
+        throw error;
+      }
+    } finally {
+      if (this.requests.get(feature) === request) {
+        this.requests.delete(feature);
+        this.emit('loading', { feature, loading: false });
+      }
+    }
+  }
+  /** Applies a client-side filter without making another network request. */
+  setPointFilter(filter: OEMPointFilter): void {
+    this.assertAlive();
+    const next = cloneFilter(filter);
+    if (sameFilter(this.filter, next)) return;
+    this.filter = next;
+    this.renderPoints();
+  }
+
+  /** Enables or disables Atlos-style marker clustering without reloading point data. */
+  setMarkerClustering(enabled: boolean): void {
+    this.assertAlive();
+    if (enabled === this.markerClustering) return;
+    this.markerClustering = enabled;
+    this.renderPoints();
+  }
+
+  private clearPointLayers(): void {
+    this.pointsLayer.clearLayers();
+    for (const group of this.pointClusters.values()) {
+      group.clearLayers();
+      group.remove();
+    }
+    this.pointClusters.clear();
+  }
+
+  /** Builds the shared Atlos marker composition for points and cluster summaries. */
+  private createMarkerVisual(type: OEMPointType, point?: OEMPoint, count?: number): HTMLElement {
+    const inner = document.createElement(point ? 'a' : 'div');
+    inner.className = type.noFrame ? 'noFrameInner' : 'markerInner';
+    if (point) {
+      const link = inner as HTMLAnchorElement;
+      link.href = createOEMPointUrl(point.id);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      inner.classList.toggle('offLayer', point.position.floorId !== this.floorId);
+      if (point.tier) inner.dataset.tier = point.position.floorId;
+    }
+    if (count !== undefined) inner.classList.add('clusterMarker');
+    const image = document.createElement('img');
+    image.src = resolveOEMAsset(this.options.resources.baseUrl, type.icon);
+    image.alt = type.key;
+    image.draggable = false;
+    if (type.noFrame) {
+      image.className = 'noFrameImage';
+      inner.append(image);
+    } else {
+      const frame = document.createElement('div');
+      frame.className = 'frameImage';
+      frame.append(image);
+      inner.append(frame);
+    }
+    if (type.subIcon) {
+      const sub = document.createElement('div');
+      sub.className = 'subIconContainer';
+      const subImage = document.createElement('img');
+      subImage.className = 'subIcon';
+      subImage.src = resolveOEMAsset(this.options.resources.baseUrl, type.subIcon);
+      subImage.alt = '';
+      sub.append(subImage);
+      inner.append(sub);
+    }
+    if (count !== undefined) {
+      const badge = document.createElement('span');
+      badge.className = 'clusterCount';
+      badge.textContent = String(count);
+      inner.append(badge);
+    }
+    return inner;
+  }
+
+  private createPointMarker(point: OEMPoint, type: OEMPointType): OEMMarker {
+    return new OEMMarker(toOEMLeafletPosition(point.position, this.region), {
+      interactive: true, keyboard: false, bubblingMouseEvents: false,
+      icon: L.divIcon({ html: this.createMarkerVisual(type, point),
+        className: `${type.noFrame ? 'noFrameMarkerIcon' : 'frameMarkerIcon'} incompleteMarker`,
+        iconSize: type.noFrame ? [50, 50] : [32, 32], iconAnchor: type.noFrame ? [25, 25] : [16, 32] }),
+    });
+  }
+
+  private createPointCluster(type: OEMPointType): L.MarkerClusterGroup {
+    return L.markerClusterGroup({
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: !this.options.lockZoom,
+      spiderfyOnMaxZoom: !this.options.lockZoom,
+      disableClusteringAtZoom: 2,
+      maxClusterRadius: 60,
+      iconCreateFunction: (cluster) => L.divIcon({
+        html: this.createMarkerVisual(type, undefined, cluster.getChildCount()),
+        className: `${type.noFrame ? 'noFrameMarkerIcon' : 'frameMarkerIcon'} markerClusterCustom`,
+        iconSize: type.noFrame ? [50, 50] : [32, 32],
+        iconAnchor: type.noFrame ? [25, 25] : [16, 32],
+      }),
+    });
+  }
+
+  /** Rebuilds visible markers and groups eligible types with Atlos clustering rules. */
+  private renderPoints(): void {
+    this.clearPointLayers();
+    const types = this.filter.types ? new Set(this.filter.types) : undefined;
+    const subregions = this.filter.subregions ? new Set(this.filter.subregions) : undefined;
+    for (const point of this.points) {
+      if (types && !types.has(point.type)) continue;
+      if (subregions && !subregions.has(point.subregionId)) continue;
+      if (this.filter.floorOnly && point.position.floorId !== this.floorId) continue;
+      const type = this.types[point.type];
+      if (!type) continue;
+      const marker = this.createPointMarker(point, type);
+      if (this.markerClustering && CLUSTER_SUBCATEGORIES.has(type.category.sub)) {
+        let group = this.pointClusters.get(type.key);
+        if (!group) {
+          group = this.createPointCluster(type);
+          this.pointClusters.set(type.key, group);
+        }
+        group.addLayer(marker);
+      } else marker.addTo(this.pointsLayer);
+    }
+    for (const group of this.pointClusters.values()) if (group.getLayers().length) group.addTo(this.map);
+  }
+
+  /** Renders Atlos-style fill and dashed stroke layers for published subregions. */
+  private renderBoundaries(boundaries: OEMBoundary[]): void {
+    this.boundariesLayer.clearLayers();
+    for (const boundary of boundaries) {
+      const rings = boundary.rings.map((ring) => ring.map((position) => toOEMLeafletPosition(position, this.region)));
+      L.polygon(rings, { color: 'transparent', fillOpacity: 0.2, interactive: false,
+        className: 'subregionBoundaryFill' }).addTo(this.boundariesLayer);
+      L.polygon(rings, { weight: 2, opacity: 0.8, fill: false, interactive: false,
+        className: 'subregionBoundaryStroke' }).addTo(this.boundariesLayer);
+    }
+  }
+  /** Renders Atlos site or subregion labels according to the current zoom. */
+  private renderLabels(force = false): void {
+    const showSub = this.map.getZoom() <= 0.25 && this.labels.some((label) => label.type === 'sub');
+    const visibleType: OEMLabel['type'] = showSub ? 'sub' : 'site';
+    if (!force && visibleType === this.visibleLabelType) return;
+    this.visibleLabelType = visibleType;
+    this.labelsLayer.clearLayers();
+    for (const label of this.labels) {
+      if (label.type !== visibleType) continue;
+      const inner = document.createElement('div');
+      inner.className = label.type === 'sub' ? 'innerSub' : 'innerSite';
+      inner.textContent = this.messages[label.textKey] ?? label.id.split('/').at(-1) ?? label.id;
+      new OEMMarker(toOEMLeafletPosition(label.position, this.region), {
+        pane: 'placeLabels', interactive: false, keyboard: false,
+        icon: L.divIcon({ className: 'mapLabel', html: inner, iconSize: [0, 0] }),
+      }).addTo(this.labelsLayer);
+    }
+  }
+  /** Recalculates Leaflet dimensions after the host element changes size. */
+  resize(): void { if (!this.destroyed) this.map.invalidateSize({ animate: false }); }
+
+  /** Releases listeners, observers, pending requests, layers and DOM nodes. */
+  destroy = (): void => {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.cancelRequests();
+    this.observer?.disconnect();
+    this.wheel.dispose();
+    this.options.signal?.removeEventListener('abort', this.destroy);
+    this.listeners.clear();
+    this.map.remove();
+    this.root.remove();
+    this.points = [];
+    mounted.delete(this.container);
+  };
+}

@@ -1,0 +1,21 @@
+{
+  "source": {
+    "repository": "Atlos",
+    "commit": "f25b5e8f55748cd08ff4a87298c0b33f0574bc5f",
+    "access": "read-only"
+  },
+  "adoptedAreas": [
+    "map interaction",
+    "tile transitions",
+    "marker presentation",
+    "region and floor controls",
+    "scale controls",
+    "palette and motion curves",
+    "control artwork"
+  ],
+  "policy": {
+    "modifySourceRepository": false,
+    "generateReplacementArtwork": false,
+    "bundleApplicationShell": false
+  }
+}

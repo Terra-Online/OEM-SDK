@@ -1,0 +1,11 @@
+{
+  "name": "@opendfieldmap/core",
+  "version": "0.1.0-alpha.0",
+  "description": "Static protocol and coordinate types for Open Endfield Map",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "files": ["dist", "LICENSE"],
+  "sideEffects": false,
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
+  "publishConfig": {"access": "public"}
+}

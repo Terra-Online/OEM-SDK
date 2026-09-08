@@ -1,0 +1,8 @@
+node_modules/
+dist/
+packages/*/dist/
+public/
+artifacts/
+.export-tmp/
+.DS_Store
+.history/

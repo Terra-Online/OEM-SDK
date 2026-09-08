@@ -1,0 +1,28 @@
+@use './palette.scss' as *;
+
+.mapRoot,
+.mapRoot[data-theme='light'] {
+  --boundary: #{$primary-accent-5};
+}
+
+.mapRoot[data-theme='dark'] {
+  --boundary: #{$primary-accent-4};
+}
+
+.subregionBoundaryStroke {
+  stroke: var(--boundary);
+  stroke-width: 2;
+  fill: none;
+  stroke-dasharray: 5, 3;
+  opacity: 0.8;
+  filter: drop-shadow(0 0 4px rgba($black-0, 0.4));
+}
+
+.subregionBoundaryFill {
+  fill: var(--boundary);
+  fill-opacity: 0.2;
+  stroke: var(--boundary);
+  stroke-width: 1;
+  stroke-dasharray: 2, 2;
+  opacity: 0.6;
+}

@@ -1,0 +1,440 @@
+@use '../../map/src/styles/palette.scss' as *;
+@use '../../map/src/styles/curves.scss' as *;
+@use 'sass:color';
+
+.oemWidget,
+.oemWidget[data-theme='light'] {
+  --switchBg: #{rgba($white-2, 0.25)};
+  --switchItem: #{$grey-1};
+  --switchItemHover: #{$grey-2};
+  --switchSelected: #{$primary-accent-4};
+  --switchIconOn: #{$grey-1};
+  --switchIconOff: #{$white-1};
+  --scaleBg: #{rgba($white-1, 0.2)};
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 180px;
+  min-height: 180px;
+  overflow: hidden;
+  isolation: isolate;
+  container-type: size;
+  letter-spacing: 0;
+}
+
+.oemWidget *,
+.oemWidget *::before,
+.oemWidget *::after { box-sizing: border-box; }
+
+.oemWidget[data-theme='dark'] {
+  --switchBg: #{rgba($grey-2, 0.3)};
+  --switchItem: #{$black-1};
+  --switchItemHover: #{$grey-1};
+  --switchIconOn: #{$black-1};
+  --switchIconOff: #{$light-2};
+  --scaleBg: #{rgba($grey-2, 0.2)};
+}
+
+.mapHost,
+.controlOverlay {
+  position: absolute;
+  inset: 0;
+}
+
+.controlOverlay {
+  z-index: 800;
+  pointer-events: none;
+}
+
+.oemWidget::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1400;
+  width: 100%;
+  height: 2px;
+  background: $primary-accent-4;
+  transform: scaleX(0);
+  transform-origin: left;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.oemWidget.loading::after {
+  opacity: 1;
+  animation: widgetLoading 1s ease-in-out infinite;
+}
+
+@keyframes widgetLoading {
+  0% { transform: scaleX(0); transform-origin: left; }
+  45% { transform: scaleX(1); transform-origin: left; }
+  55% { transform: scaleX(1); transform-origin: right; }
+  100% { transform: scaleX(0); transform-origin: right; }
+}
+
+.switchArea {
+  position: absolute;
+  top: 26%;
+  left: 1rem;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: auto;
+  font-family: 'Novecento Medium', sans-serif;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: 'lnum' 1, 'onum' 0, 'case' 1;
+}
+
+.switch {
+  --itemSize: 2.5rem;
+  --itemGap: 0.6rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--itemGap);
+  padding: 5px;
+  border-radius: 3px;
+  box-shadow: 0 0 5px rgba($black-0, 0.6);
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 3px;
+  background: var(--switchBg);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  transition: background-color 0.35s $moderato-curve;
+}
+
+.switch > * {
+  position: relative;
+  z-index: 1;
+}
+
+.switchLabel {
+  position: relative;
+  width: var(--itemSize);
+  height: calc(var(--itemSize) / 2.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  color: var(--switchSelected);
+  background: var(--switchItem);
+  filter: drop-shadow(0 0 2px rgba($black-0, 0.6));
+  font-family: 'Novecento Medium', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1;
+  text-shadow: 0 0 2px rgba($black-0, 0.6);
+}
+
+.switchLabel::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 0;
+  height: 0;
+  border-width: 10px 10px 0;
+  border-style: solid;
+  border-color: var(--switchItem) transparent transparent;
+  transform: translateY(8.5px);
+}
+
+.switchIndicator {
+  position: absolute;
+  left: 1.5px;
+  z-index: 10;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid color.adjust($primary-accent-4, $lightness: -10%);
+  transform: translateY(-50%);
+  filter: drop-shadow(0 0 1px rgba($black-0, 0.8));
+  transition: transform 0.4s $presto-curve, opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.switchIndicator.hidden { opacity: 0; }
+
+.regionEntry {
+  position: relative;
+}
+
+.switchItem,
+.selectionItem {
+  width: var(--itemSize);
+  height: var(--itemSize);
+  display: flex;
+  flex: 0 0 var(--itemSize);
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border: 0;
+  border-radius: 3px;
+  color: var(--switchIconOff);
+  background: var(--switchItem);
+  box-shadow: 0 0 4px rgba($black-0, 0.6);
+  cursor: pointer;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+}
+
+.switchItem:hover,
+.switchItem:focus-visible,
+.selectionItem:hover,
+.selectionItem:focus-visible {
+  background: var(--switchItemHover);
+  box-shadow: 0 0 2px rgba($black-0, 0.75);
+  outline: 0;
+}
+
+.switchItem.selected,
+.selectionItem.selected {
+  color: var(--switchIconOn);
+  background: var(--switchSelected);
+  box-shadow: 0 0 4px rgba($black-0, 0.75);
+}
+
+.switchIcon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 0.72rem;
+}
+
+.switchIcon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: currentColor;
+  transition: fill 0.3s ease;
+}
+
+.floorPanel,
+.subregionPanel {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  padding-left: 1rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.switchItem:hover > .floorPanel,
+.switchItem:hover > .subregionPanel,
+.switchItem.expanded > .floorPanel,
+.switchItem.expanded > .subregionPanel {
+  pointer-events: auto;
+}
+
+.floorList,
+.subregionList {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--itemGap);
+  max-height: calc(100cqh - 1rem);
+  padding: 5px;
+  overflow-y: auto;
+  border-radius: 3px;
+  background: var(--switchBg);
+  box-shadow: 0 0 5px rgba($black-0, 0.6);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  will-change: opacity, backdrop-filter;
+}
+
+.switchItem:hover > .floorPanel > .floorList,
+.switchItem:hover > .subregionPanel > .subregionList,
+.switchItem.expanded > .floorPanel > .floorList,
+.switchItem.expanded > .subregionPanel > .subregionList {
+  opacity: 1;
+}
+
+.floorItem,
+.subregionItem {
+  font-family: 'Novecento Bold', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.floorList .switchIndicator,
+.subregionList .switchIndicator { left: 1.5px; }
+
+.scaleControl {
+  position: absolute;
+  top: 40%;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem 0;
+  transform: translateY(-50%);
+  user-select: none;
+  pointer-events: auto;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: 'lnum' 1, 'onum' 0, 'case' 1;
+}
+
+.scaleDecoration { display: none; }
+
+.scaleFrame {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid $white-1;
+  border-radius: 4px;
+  background: rgba($white-2, 0.35);
+  box-shadow: 0 0 2px 1px rgba($black-0, 0.4), inset 0 0 2px rgba($black-0, 0.2);
+  backdrop-filter: blur(1px) brightness(100%);
+}
+
+.zoomInFrame { margin-bottom: 6px; }
+.zoomOutFrame { margin-top: 6px; }
+
+.zoomButton {
+  width: calc(1rem + 1px);
+  height: calc(1rem + 1px);
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  color: $white-1;
+  background: $grey-1;
+  box-shadow: 0 0 2px 1px rgba($black-0, 0.4);
+  font-family: 'Novecento Medium', sans-serif;
+  font-size: 18px;
+  line-height: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.zoomButton:not(:disabled):hover,
+.zoomButton:not(:disabled):focus-visible {
+  color: $grey-1;
+  background: $primary-accent-4;
+  outline: 0;
+}
+
+.zoomButton:active { background: rgba($grey-1, 0.2); }
+
+.zoomButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scaleTrack {
+  --scale: 0;
+  position: relative;
+  width: 1.5rem;
+  height: 9rem;
+  padding: 2px;
+  overflow: hidden;
+  border: 2px solid $grey-1;
+  border-radius: 4px;
+  background: var(--scaleBg);
+  box-shadow: 0 0 2.5px 1px rgba($white-0, 0.6), inset 0 0 2px rgba($white-0, 0.3);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.scaleControl.locked .scaleTrack {
+  cursor: not-allowed;
+}
+
+.scaleFill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  margin: 2px;
+  border-radius: 2px;
+  background: $primary-accent-4;
+  box-shadow:
+    0 0 3px 0.5px rgba($black-0, 0.4),
+    0 calc(1.5px * max(1, min(10, 1 / max(0.1, var(--scale))))) 4px 0.5px rgba($black-0, 0.2),
+    0 calc(-1.5px * max(1, min(10, 1 / max(0.1, var(--scale))))) 4px 0.5px rgba($black-0, 0.2);
+  transform: scaleY(var(--scale));
+  transform-origin: bottom;
+  transition: transform 0.4s ease, box-shadow 0.1s ease;
+  pointer-events: none;
+}
+
+@container (width < 480px) {
+  .switchArea { top: 25%; left: 0.65rem; }
+  .switch { --itemSize: 2.25rem; --itemGap: 0.4rem; }
+  .switchLabel { font-size: 0.78rem; }
+  .switchLabel::before { border-width: 8px 8px 0; transform: translateY(7.5px); }
+  .switchIndicator { left: 2.5px; border-top-width: 5px; border-bottom-width: 5px; border-left-width: 6px; }
+  .floorItem { font-size: 1rem; }
+  .scaleControl {
+    top: 45%;
+    right: 0;
+    padding: 0;
+    border-radius: 6px 0 0 6px;
+  }
+  .scaleFrame { display: none; }
+  .scaleDecoration {
+    position: absolute;
+    right: 0;
+    display: block;
+    width: 1.5rem;
+    height: 1.5rem;
+    background: var(--scaleBg);
+    backdrop-filter: blur(10px);
+  }
+  .scaleDecorationTop {
+    top: 1px;
+    transform: translateY(-100%);
+    clip-path: path('M0 24h24V0c0 6.2388-10.4322 23.871-24 24Z');
+  }
+  .scaleDecorationBottom {
+    bottom: 0;
+    transform: translateY(100%);
+    clip-path: path('M0 0h24v24C24 17.7612 13.5678.129 0 0Z');
+  }
+  .scaleTrack {
+    width: 2rem;
+    height: 10rem;
+    padding: 4px;
+    border: 0;
+    border-radius: 6px 0 0 6px;
+    box-shadow: inset 0 0 2px rgba($white-0, 0.3), 0 0 3px 1px rgba($black-0, 0.3);
+    backdrop-filter: blur(4px);
+    cursor: grab;
+  }
+  .scaleTrack:active { cursor: grabbing; }
+  .scaleFill {
+    width: calc(100% - 8px);
+    height: calc(100% - 8px);
+    margin: 4px;
+    border-radius: 3px;
+    transition: transform 0.2s ease, box-shadow 0.1s ease;
+  }
+  .scaleControl.dragging .scaleFill { transition: box-shadow 0.1s ease; }
+}
+
+@container (height < 560px) {
+  .switchArea { top: 0.65rem; }
+  .switch { --itemSize: 2.25rem; --itemGap: 0.35rem; }
+  .scaleControl { top: 50%; }
+  .scaleTrack { height: 7rem; }
+}
+
+@container (width < 220px), (height < 220px) {
+  .switchArea,
+  .scaleControl { display: none; }
+}

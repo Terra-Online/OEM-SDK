@@ -1,0 +1,88 @@
+@use './palette.scss' as *;
+@use './curves.scss' as *;
+@use './markers.scss';
+@use './labels.scss';
+@use './boundaries.scss';
+
+.mapRoot,
+.mapRoot[data-theme='light'] {
+  --mapBg: #{$light-1};
+  --mapPatternBg: #{$white-3};
+  --mapPatternErrorBg: #{$secondary-accent-4};
+  --primaryAccent4: #{$primary-accent-4};
+  --attributionBg: #{rgba($white-0, 0.72)};
+  --attributionColor: #{$grey-1};
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  isolation: isolate;
+  font-family: inherit;
+  font-size: 16px;
+  background: var(--mapBg);
+  touch-action: none;
+}
+
+.mapRoot[data-theme='dark'] {
+  --mapBg: #{$black-1};
+  --mapPatternBg: #{$grey-1};
+  --mapPatternErrorBg: #{$primary-accent-4};
+  --primaryAccent4: #{$primary-accent-4};
+  --attributionBg: #{rgba($black-1, 0.72)};
+  --attributionColor: #{$light-2};
+}
+
+.mapRoot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  transform: translateX(-1px);
+  background: var(--mapPatternBg);
+  mask-image: url('./assets/map-pattern.svg');
+  mask-repeat: repeat;
+  mask-size: 100px;
+  transition: background-color 0.3s $moderato-curve;
+}
+
+.mapRoot.overdrag::before { background: var(--mapPatternErrorBg); }
+.mapRoot img.leaflet-tile { mix-blend-mode: normal; }
+
+.mapRoot .attribution {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 4px 8px;
+  border-radius: 3px 0 0;
+  color: var(--attributionColor);
+  background: var(--attributionBg);
+  backdrop-filter: blur(8px);
+  font-family: inherit;
+  font-size: 10px;
+  font-feature-settings: normal;
+  font-variant-numeric: normal;
+  line-height: 1.2;
+  pointer-events: auto;
+}
+
+.mapRoot .attributionBrand { font-weight: 500; }
+.mapRoot .attributionSeparator { opacity: 0.45; }
+
+.mapRoot .attributionLink {
+  color: inherit;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.mapRoot .attributionLink:hover,
+.mapRoot .attributionLink:focus-visible {
+  color: var(--primaryAccent4);
+  text-decoration-color: currentColor;
+  outline: 0;
+}

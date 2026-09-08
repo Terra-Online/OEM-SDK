@@ -1,0 +1,18 @@
+{
+  "name": "@opendfieldmap/sdk",
+  "version": "0.1.0-alpha.0",
+  "description": "Embeddable Open Endfield Map widget",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": ["**/*.css"],
+  "exports": {
+    ".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"},
+    "./style.css": "./dist/style.css"
+  },
+  "dependencies": {
+    "@opendfieldmap/core": "workspace:^",
+    "@opendfieldmap/map": "workspace:^"
+  },
+  "publishConfig": {"access": "public"}
+}

@@ -1,0 +1,40 @@
+{
+  "name": "oem-sdk-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.5.0",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "version:game": "node scripts/game-version.mjs",
+    "validate:export": "node scripts/validate-export.mjs",
+    "dev": "pnpm build && pnpm export:atlos:dev && vite --host 127.0.0.1",
+    "build:demo": "pnpm build && vite build",
+    "export:atlos": "node scripts/export-atlos.mjs",
+    "export:atlos:dev": "node scripts/export-atlos.mjs --include-licensed-novecento",
+    "check": "pnpm validate:export && pnpm typecheck && pnpm test && pnpm build:demo",
+    "pack:release": "pnpm build && node scripts/pack-release.mjs",
+    "release:check": "pnpm export:atlos && pnpm check && node scripts/pack-release.mjs"
+  },
+  "devDependencies": {
+    "@opendfieldmap/core": "workspace:*",
+    "@opendfieldmap/map": "workspace:*",
+    "@opendfieldmap/sdk": "workspace:*",
+    "@opendfieldmap/react": "workspace:*",
+    "@types/leaflet": "1.9.16",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.1.0",
+    "postcss": "^8.5.6",
+    "postcss-selector-parser": "^7.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sass": "^1.85.1",
+    "typescript": "~5.8.3",
+    "vite": "^6.2.0",
+    "vitest": "^3.2.4"
+  }
+}
