@@ -54,5 +54,3 @@ A package release may support multiple game-data releases through the same schem
 3. Publish `@opendfieldmap/sdk`.
 4. Publish `@opendfieldmap/react` when needed.
 5. Install the published SDK in a blank application and run a browser smoke test.
-
-The current packages are alpha release candidates. No command in this repository publishes to npm or mutates external infrastructure automatically.

@@ -1,20 +1,44 @@
-# Open Endfield Map SDK
+# 終末地地圖集（OEM）SDK
 
-語言：[English](../README.md) · [简体中文](README.zh-CN.md) · 繁體中文（香港）
+[![線上示範](https://img.shields.io/badge/demo-sdk.opendfieldmap.org-111111?style=flat-square)](https://sdk.opendfieldmap.org/demo/)
+[![GitHub](https://img.shields.io/badge/source-GitHub-24292f?style=flat-square&logo=github)](https://github.com/Terra-Online/OEM-SDK)
+[![授權條款](https://img.shields.io/badge/license-AGPL--3.0--only-fbc825?style=flat-square)](LICENSE)
 
-Open Endfield Map SDK 為 Wiki、攻略、資料庫及其他 Web 應用程式提供可嵌入的終末地地圖。它可以獨立渲染地圖、點位、地名、邊界和精簡地圖控制項，不要求宿主接入完整的 Open Endfield Map 主站。
+其他語言版本：[English](../README.md) · [简体中文](README.zh-CN.md) · 繁體中文
 
-## 安裝
+Open Endfield Map SDK 系面向《明日方舟：終末地》Wiki、資料庫及其他社群工具項目的、易整合的地圖元件。透過即開即用的整合介面，即可建立功能豐富、可互動的終末地地圖，毋須自行維護底層地圖瓦片和遊戲資料。
+
+依託 [Open Endfield Map](https://github.com/Terra-Online/Atlos)，SDK 可直接使用由我們持續維護的地圖來源和資料集。歷史版本亦會與目前數據一併保留，可用於版本差異比對、內容核驗、考據及研究。
+
+**一次整合，自動更新，地圖維護交給我們。**
+
+## 預覽
+
+互動式示範可於 [sdk.opendfieldmap.org/demo](https://sdk.opendfieldmap.org/demo/) 查看。
+
+![Open Endfield Map SDK 預覽](assets/preview.webp)
+
+## 提供能力
+
+- **互動式地圖渲染**，支援點位、標籤、邊界、區域、樓層、聚合、主題和可設定控制項。
+- **與框架無關的整合方式**，並提供一流的 React 支援。
+- **帶版本的地圖來源和資料集**，涵蓋目前及歷史遊戲版本。
+- **本地化支援**，可使用所支援的語言建立地圖內容。
+- **由 OEM 基礎設施託管的資料與資源分發**。您毋須再為地圖瓦片和資料採集、更新或託管操心。
+
+多數常用設定皆可在 [**SDK Demo**](https://sdk.opendfieldmap.org/demo) 中直接體驗、設定，並會隨著設定調整產生可直接使用的整合程式碼。
+
+至於需要精細控制的應用程式，OEM SDK 亦提供更底層的 API。詳見我們的 [Widget API 文件](api.zh-HK.md)。
+
+## 安裝與設定
+
+主要入口套件為 `@opendfieldmap/sdk`：
 
 ```bash
 npm install @opendfieldmap/sdk
 ```
 
-此套件只提供 ESM，並附帶 TypeScript 類型聲明。宿主應用程式只需匯入一次樣式表。
-
-## 快速開始
-
-為宿主元素設定明確高度，然後使用具名參數建立 Widget：
+為宿主元素設定明確高度，匯入一次樣式檔案，然後使用具名選項建立 Widget：
 
 ```html
 <div id="map" style="height: 480px"></div>
@@ -25,43 +49,32 @@ import { createOEMWidget } from '@opendfieldmap/sdk';
 import '@opendfieldmap/sdk/style.css';
 
 const widget = await createOEMWidget('#map', {
-  region: 'Valley_4',
-  floor: 'M',
+  region: 'WL',
   locale: 'zh-HK',
-  markerTypes: ['crate_i', 'aurylene'],
-  labels: true,
-  boundaries: false,
-  markerClustering: true,
-  showRegionSelector: true,
-  showFloorSelector: true,
-  showScaleBar: true,
-});
-```
-
-所有參數均可選。地區、樓層和縮放控制項預設顯示；拖曳和縮放預設可用；點位聚合預設開啟；邊界預設關閉；只有傳入 `markerTypes` 後才會載入點位資料。
-
-點擊點位會開啟對應的 `https://oem.re/<token>` 標準頁面。Widget 不包含主站側邊欄或應用程式狀態。
-
-## 執行時更新
-
-內容和視圖參數可直接更新，毋須替換 Widget：
-
-```ts
-await widget.setOptions({
-  region: 'Wuling',
-  subregion: 'WL_1',
-  markerTypes: ['gather'],
-  boundaries: true,
+  markerTypes: '*',
+  zoom: 2,
+  center: { x: 7425, y: 6257 },
 });
 
-const state = widget.getState();
-widget.resize();
+// 後續：
+await widget.setOptions({ region: 'WL', markerTypes: ['gather'] });
 widget.destroy();
 ```
 
-控制項可見性、互動鎖定、資源位址、主題和生命週期 callback 屬於建立參數；如需修改，應重新建立 Widget。
+預設情況下，SDK 會使用由 Open Endfield Map 維護的最新穩定版地圖資料。您亦可以選擇使用帶有本 SDK 可識別之 manifest 的自行託管資源：
 
-## React
+```ts
+const widget = await createOEMWidget('#map', {
+  resources: {
+    baseUrl: 'https://maps.example.com',
+    manifestPath: '/channels/stable.json',
+  },
+  region: 'DJ',
+  markerTypes: false,
+});
+```
+
+對於 React 應用程式：
 
 ```bash
 npm install @opendfieldmap/react
@@ -72,75 +85,36 @@ import { OEMWidget } from '@opendfieldmap/react';
 import '@opendfieldmap/sdk/style.css';
 
 export function MapPanel() {
-  return (
-    <OEMWidget
-      options={{ region: 'Valley_4', markerTypes: ['crate_i'] }}
-      style={{ height: 480 }}
-    />
-  );
+  return <OEMWidget options={{ region: 'ES', markerTypes: ['crate_i'] }} style={{ height: 480 }} />;
 }
 ```
 
-## 架構
+## 套件結構
 
-```text
-宿主應用程式
-  ├─ @opendfieldmap/sdk      Widget 生命週期與控制項
-  │    ├─ @opendfieldmap/map   框架無關的地圖渲染器
-  │    └─ @opendfieldmap/core  Manifest、資源和座標協議
-  └─ @opendfieldmap/react    可選的 React 生命週期封裝
-
-靜態資源源
-  └─ channel → release manifest → 不可變資料 + 內容版本化瓦片
-```
-
-- `@opendfieldmap/sdk` 是主要接入套件。
-- `@opendfieldmap/map` 提供底層 `OEM` 渲染器，適合自訂整合。
-- `@opendfieldmap/core` 提供共用協議類型和資源工具。
-- `@opendfieldmap/react` 管理 Widget 的建立、更新和銷毀。
-
-npm 套件只包含程式碼、樣式和控制項資產；瓦片與地圖資料從設定的靜態資源源載入。
-
-## 資源
-
-預設資源源為 `https://data.opendfieldmap.org`，亦可接入完整相容的自託管資源樹：
-
-```ts
-const widget = await createOEMWidget('#map', {
-  resources: {
-    baseUrl: 'https://maps.example.com',
-    manifestPath: '/channels/stable.json',
-  },
-});
-```
-
-未設定資源版本時，SDK 會透過 `/channels/stable.json` 自動選擇最新的 schema v1 release。manifest 會解析不可變的點位、地名、邊界和可選字體資源，以及帶單一瓦片 `v` 快取鍵的穩定瓦片路徑。使用方毋須自行拼接單一資源位址。
+| 套件 | 用途 |
+| --- | --- |
+| `@opendfieldmap/sdk` | 主要的嵌入式 Widget 與標準控制項 |
+| `@opendfieldmap/map` | 更底層、與框架無關的地圖渲染器 |
+| `@opendfieldmap/core` | Manifest schema、資源輔助工具、座標和點位連結 |
+| `@opendfieldmap/react` | Widget 的 React 生命週期封裝 |
 
 ## 開發
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev                 # 本機 HMR 示範：http://127.0.0.1:4173/demo/
+pnpm build               # 建置各套件發佈產物
+pnpm pack:release        # 將 npm tarball 寫入 artifacts/npm
+pnpm build:demo          # 建置 Pages 部署產物
 ```
 
-實作修改完成後執行完整本機檢查：
+Demo 建置僅包含應用程式本身，不會打包地圖瓦片或資料。
 
-```bash
-pnpm check
-```
+## 連結
 
-產生 npm 候選套件：
-
-```bash
-pnpm pack:release
-```
-
-倉庫不會自動發佈 npm 套件，也不會自動修改外部基礎設施。
-
-## 文件
-
-- [Widget API](api.zh-HK.md)
-- [靜態資源協議](cdn-design.zh-HK.md)
-- [套件與發佈結構](npm-release.zh-HK.md)
-
-SDK 原始碼採用 AGPL-3.0-only 授權條款。靜態遊戲資源和第三方資產可能適用其他條款。
+- [線上 SDK Demo](https://sdk.opendfieldmap.org/demo/)
+- [OEM-SDK 原始碼儲存庫](https://github.com/Terra-Online/OEM-SDK)
+- [Widget API](api.zh-HK.md) · [English](api.md) · [简体中文](api.zh-CN.md)
+- [靜態資源協定](cdn-design.zh-HK.md) · [English](cdn-design.md) · [简体中文](cdn-design.zh-CN.md)
+- [套件與 NPM 發佈結構](npm-release.zh-HK.md) · [English](npm-release.md) · [简体中文](npm-release.zh-CN.md)
+- [服務條款](https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright)

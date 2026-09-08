@@ -36,8 +36,6 @@ channel 是可更新的小型指標。schema v1 release manifest 選擇一套完
 `gameVersion` 使用路徑安全形式，例如 `1_5_3`。`releaseId` 令 manifest、點位、地名和邊界保持不可變。`type.json` 保留一般點位類型，並將來源資料中的全部 NPC 和檔案條目分別統一為 `npc` 與 `files` 兩種聚合類型。瓦片物件路徑在同一遊戲版本內保持穩定，SDK 為每張瓦片附加由內容產生的短 `v` 值；未變更的瓦片可跨 release 重用 CDN 快取，只有變更的瓦片需要回源。不帶 `v` 時會存取該穩定路徑下的最新物件。主層瓦片檔名不帶樓層後綴，其他樓層使用 `_l1` 這類小寫檔名後綴。
 
 使用方只需設定 `baseUrl` 和 `manifestPath`，不應自行拼接單一內容路徑。
-manifest 中的 `HMSans_EN` 是預設西文/UI 字體；取得授權時還會附帶
-Novecento Wide 的基礎、俄文和越南語 family 變體。
 
 ## 託管契約
 

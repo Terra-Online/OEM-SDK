@@ -53,6 +53,4 @@ npm 包使用 SemVer，并与以下版本独立：
 2. 发布 `@opendfieldmap/map`。
 3. 发布 `@opendfieldmap/sdk`。
 4. 按需发布 `@opendfieldmap/react`。
-5. 在空白应用中安装已发布 SDK，并执行浏览器冒烟检查。
-
-当前包属于 alpha 候选版本。仓库中的命令不会自动发布 npm，也不会修改外部基础设施。
+5. 在空白应用中安装已发布 SDK，并执行浏览器检查。

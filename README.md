@@ -1,33 +1,35 @@
 # Open Endfield Map SDK
 
-An embeddable Endfield map for wikis, guides, databases, and companion tools.
-The SDK gives a host application a fast, configurable map with markers, labels,
-boundaries, region/floor controls, and a small integration surface.
-
 [![Live demo](https://img.shields.io/badge/demo-sdk.opendfieldmap.org-111111?style=flat-square)](https://sdk.opendfieldmap.org/demo/)
 [![GitHub](https://img.shields.io/badge/source-GitHub-24292f?style=flat-square&logo=github)](https://github.com/Terra-Online/OEM-SDK)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-fbc825?style=flat-square)](LICENSE)
 
-Languages: English · [简体中文](docs/README.zh-CN.md) · [繁體中文（香港）](docs/README.zh-HK.md)
+Languages: English · [简体中文](docs/README.zh-CN.md) · [繁體中文](docs/README.zh-HK.md)
+
+Open Endfield Map SDK is an easy-to-integrate map toolkit for Arknights: Endfield wikis, databases, and companion tools. Build rich, interactive Endfield maps through a lightweight integration surface, without maintaining the underlying map infrastructure and game data yourself.
+
+Backed by [Open Endfield Map](https://github.com/Terra-Online/Atlos), the SDK provides access to our carefully maintained map sources and datasets. Historical releases are preserved alongside current data, supporting version comparison, verification, archival work, and research.
+
+**Integrate once, stay up to date, and leave the map maintenance to us.**
 
 ## Preview
 
-<!-- Preview slot: save the screenshot as docs/assets/preview.png and uncomment the image below. -->
-<!-- ![Open Endfield Map SDK preview](docs/assets/preview.png) -->
-
 The interactive demo is available at [sdk.opendfieldmap.org/demo](https://sdk.opendfieldmap.org/demo/).
+
+![Open Endfield Map SDK preview](docs/assets/preview.webp)
+
 
 ## What it provides
 
-- A framework-neutral map renderer with an optional React wrapper.
-- Atlos-aligned region and floor controls, marker clustering, scale control, and themes.
-- Data-driven marker types, localized labels, subregions, and boundaries.
-- Stable tile URLs with per-tile `v` cache keys, so unchanged tiles remain cacheable across data releases.
-- Compact `VL`, `WL`, `DJ`, and `ES` region aliases and canonical `oem.re` point links.
-- SSR-safe module imports and TypeScript declarations.
+- **Interactive map rendering** with markers, labels, boundaries, regions, floors, clustering, themes, and configurable controls.
+- **Framework-neutral integration** with first-class React support.
+- **Versioned map sources and datasets**, covering both current and historical game releases.
+- **Localization support** for map content across supported languages.
+- **Managed data and asset delivery** through OEM infrastructure. You won’t need to worry about datamining, updating, or hosting map tiles and data yourself.
 
-The npm packages contain the runtime only. Map data, tiles, labels, marker assets,
-and fonts are loaded from the static origin at `https://data.opendfieldmap.org`.
+Most common configurations can be explored in the [**SDK Demo**](https://sdk.opendfieldmap.org/demo), which generates ready-to-use integration code as you adjust the map.
+
+More advanced APIs are available for applications that need finer control beyond the demo. You can find them in our [Widget API Docs](docs/api.md).
 
 ## Install and configure
 
@@ -49,14 +51,11 @@ import { createOEMWidget } from '@opendfieldmap/sdk';
 import '@opendfieldmap/sdk/style.css';
 
 const widget = await createOEMWidget('#map', {
-  region: 'VL',
-  subregion: null,
-  floor: 'M',
-  locale: 'en-US',
-  markerTypes: ['aurylene', 'crate_i', 'crate_ii', 'crate_iii', 'cratesurprise', 'cratelocked'],
-  labels: true,
-  boundaries: false,
-  markerClustering: true,
+  region: 'WL',
+  locale: 'zh-HK',
+  markerTypes: '*',
+  zoom: 2,
+  center: { x: 7425, y: 6257 },
 });
 
 // Later:
@@ -64,10 +63,7 @@ await widget.setOptions({ region: 'WL', markerTypes: ['gather'] });
 widget.destroy();
 ```
 
-All options are optional. Without a custom resource configuration, the SDK
-follows `https://data.opendfieldmap.org/channels/stable.json` and automatically
-uses the current stable data release. To pin a compatible manifest or use a
-self-hosted tree:
+By default, the SDK uses the latest stable map data maintained by Open Endfield Map. Or you can use a self-hosted tree with a compatible manifest:
 
 ```ts
 const widget = await createOEMWidget('#map', {
@@ -95,6 +91,7 @@ export function MapPanel() {
 }
 ```
 
+
 ## Package layout
 
 | Package | Role |
@@ -103,34 +100,6 @@ export function MapPanel() {
 | `@opendfieldmap/map` | Lower-level framework-neutral renderer |
 | `@opendfieldmap/core` | Manifest schema, resource helpers, coordinates, and point links |
 | `@opendfieldmap/react` | React lifecycle wrapper for the Widget |
-
-## Technology
-
-- TypeScript, ESM, and generated declaration files
-- Leaflet and `leaflet.markercluster` for map rendering and clustering
-- React 18/19 adapter (`@opendfieldmap/react`)
-- Sass and Vite for namespaced styles and the demo build
-- Cloudflare Pages for the demo application
-- Cloudflare R2 for versioned static map resources
-- Atlos-compatible assets and typography, with `HMSans_EN` as the global Latin fallback
-
-## Project status
-
-This repository is an early alpha release candidate (`0.1.0-alpha.0`). The demo
-is live, the stable static data channel is operational, and npm tarballs can be
-generated locally. npm publication is intentionally manual and has not been
-performed yet.
-
-The repository is split into two deployable surfaces:
-
-```text
-OEM-SDK npm packages       runtime, controls, types, and styles
-data.opendfieldmap.org     manifests, markers, labels, fonts, and tiles
-sdk.opendfieldmap.org      public SDK demo
-```
-
-Static game resources are distributed separately from npm packages and may carry
-their own licensing terms. Source code in this repository is AGPL-3.0-only.
 
 ## Development
 
@@ -141,14 +110,13 @@ pnpm build               # build package distributions
 pnpm pack:release        # write npm tarballs to artifacts/npm
 pnpm build:demo          # build the Pages artifact
 ```
-
 The demo build is application-only; it does not bundle map tiles or data.
 
 ## Links
 
-- [Live SDK demo](https://sdk.opendfieldmap.org/demo/)
-- [OEM-SDK source repository](https://github.com/Terra-Online/OEM-SDK)
-- [Widget API](docs/api.md) · [简体中文](docs/api.zh-CN.md) · [繁體中文（香港）](docs/api.zh-HK.md)
-- [Static resource protocol](docs/cdn-design.md) · [简体中文](docs/cdn-design.zh-CN.md) · [繁體中文（香港）](docs/cdn-design.zh-HK.md)
-- [Package and npm release structure](docs/npm-release.md) · [简体中文](docs/npm-release.zh-CN.md) · [繁體中文（香港）](docs/npm-release.zh-HK.md)
+- [Live SDK Demo](https://sdk.opendfieldmap.org/demo/)
+- [OEM-SDK Source Repo](https://github.com/Terra-Online/OEM-SDK)
+- [Widget API](docs/api.md) · [简体中文](docs/api.zh-CN.md) · [繁體中文](docs/api.zh-HK.md)
+- [Static Resource Protocol](docs/cdn-design.md) · [简体中文](docs/cdn-design.zh-CN.md) · [繁體中文](docs/cdn-design.zh-HK.md)
+- [Package and NPM Release Structure](docs/npm-release.md) · [简体中文](docs/npm-release.zh-CN.md) · [繁體中文](docs/npm-release.zh-HK.md)
 - [Terms of Services](https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright)

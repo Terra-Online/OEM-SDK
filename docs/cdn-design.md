@@ -43,8 +43,6 @@ cache key across releases and only changed tiles return to origin. Omitting
 no floor suffix; additional floors use a lowercase suffix such as `_l1`.
 
 Consumers should provide only `baseUrl` and `manifestPath`. They should not construct individual content paths.
-The manifest's `HMSans_EN` face is the default Western/UI font. Licensed Novecento
-Wide faces may additionally include the Cyrillic and Vietnamese family variants.
 
 ## Hosting Contract
 

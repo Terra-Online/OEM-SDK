@@ -1,20 +1,44 @@
-# Open Endfield Map SDK
+# 终末地地图集（OEM）SDK
 
-语言：[English](../README.md) · 简体中文 · [繁體中文（香港）](README.zh-HK.md)
+[![在线演示](https://img.shields.io/badge/demo-sdk.opendfieldmap.org-111111?style=flat-square)](https://sdk.opendfieldmap.org/demo/)
+[![GitHub](https://img.shields.io/badge/source-GitHub-24292f?style=flat-square&logo=github)](https://github.com/Terra-Online/OEM-SDK)
+[![许可证](https://img.shields.io/badge/license-AGPL--3.0--only-fbc825?style=flat-square)](LICENSE)
 
-Open Endfield Map SDK (`@opendfieldmap/sdk`) 为 Wiki、攻略、资料库及其他 Web 应用提供可嵌入的终末地地图。它可以独立渲染地图、点位、地名、边界和地图控件，而无需接入完整的 Open Endfield Map 主站。
+其他语言版本：[English](../README.md) · 简体中文 · [繁體中文](README.zh-HK.md)
 
-## 安装
+终末地地图集（OEM）SDK 是一个面向《明日方舟：终末地》Wiki、数据库及其他社区工具项目的易集成地图组件。通过开箱即用的集成接口，即可构建功能丰富、可交互的终末地地图，而无需自行维护底层地图瓦片和游戏数据。
+
+依托 [Open Endfield Map](https://github.com/Terra-Online/Atlos)，SDK 可直接使用由我们持续维护的地图源和数据集。历史版本也会与当前数据一并保留，可用于版本差异对比、内容核验、考据和研究。
+
+**一次集成，自動更新，地图维护交给我们。**
+
+## 预览
+
+交互式演示可在 [sdk.opendfieldmap.org/demo](https://sdk.opendfieldmap.org/demo/) 查看。
+
+![Open Endfield Map SDK 预览](assets/preview.webp)
+
+## 提供能力
+
+- **交互式地图渲染**，支持点位、标签、边界、区域、楼层、聚合、主题和可配置控件。
+- **框架无关的集成方式**，并提供一流的 React 支持。
+- **带版本的地图源和数据集**，覆盖当前及历史游戏版本。
+- **本地化支持**，可在所支持的语言中构建地图内容。
+- **由 OEM 基础设施托管的数据与资源分发**。您无需再为地图瓦片和数据采集、更新或托管操心。
+
+多数常用配置都可以在 [**SDK Demo**](https://sdk.opendfieldmap.org/demo) 中直接体验、配置，并会随着配置调整生成可直接使用的集成代码。
+
+对于需要精细控制的应用，OEM SDK 也提供更底层的 API。详见我们的 [Widget API 文档](api.zh-CN.md)。
+
+## 安装与配置
+
+主要入口包为 `@opendfieldmap/sdk`：
 
 ```bash
 npm install @opendfieldmap/sdk
 ```
 
-该包仅提供 ESM，并附带 TypeScript 类型声明。宿主应用只需引入一次样式表。
-
-## 快速开始
-
-为宿主元素设置明确高度，然后使用具名参数创建 Widget：
+为宿主元素设置明确的高度，导入一次样式文件，然后使用具名选项创建 Widget：
 
 ```html
 <div id="map" style="height: 480px"></div>
@@ -25,65 +49,32 @@ import { createOEMWidget } from '@opendfieldmap/sdk';
 import '@opendfieldmap/sdk/style.css';
 
 const widget = await createOEMWidget('#map', {
-  region: 'Valley_4',
-  subregion: null,
-  floor: 'M',
-  locale: 'zh-CN',
-  markerTypes: ['crate_i', 'aurylene'],
-  labels: true,
-  boundaries: false,
-  markerClustering: true,
+  region: 'WL',
+  locale: 'zh-HK',
+  markerTypes: '*',
   zoom: 2,
-  center: { x: 3000, y: 5000 },
-  showRegionSelector: true,
-  showFloorSelector: true,
-  showScaleBar: true,
-  lockDrag: false,
-  lockZoom: false,
+  center: { x: 7425, y: 6257 },
 });
 
+// 后续动作：
+await widget.setOptions({ region: 'WL', markerTypes: ['gather'] });
 widget.destroy();
 ```
 
-所有内容属性都是可选的。当前公开契约如下：
-
-| 属性 | 类型和可接受值 | 默认值 |
-| --- | --- | --- |
-| `region` | `Valley_4`、`Wuling`、`Dijiang`、`Weekraid_1`，或别名 `VL`、`WL`、`DJ`、`ES` | manifest 默认地区（当前导出为 `Valley_4`） |
-| `subregion` | 属于所选地区的子地区 ID，或 `null` | `null` |
-| `floor` | 当前地区已发布的 `M`、`L1`–`L4` 或 `B1`–`B4` | `M` |
-| `locale` | manifest 中已发布的语言；当前类型包含 `en-US`、`zh-CN`、`zh-HK`、`ja-JP`、`ko-KR`、`ru-RU`、`es-ES`、`fr-FR`、`de-DE`、`it-IT`、`id-ID`、`pt-BR`、`th-TH` 和 `vi-VN` | 最接近的浏览器语言，否则使用 manifest 回退语言（`en-US`） |
-| `markerTypes` | manifest 中的类型 key 数组、`'*'`（全部）或 `false`（不显示） | 不请求 marker 数据（`false`） |
-| `labels` | `true` 或 `false` | `true` |
-| `boundaries` | 显示已发布的子地区 polygon 及矩形 fallback | `false` |
-| `markerClustering` | 按 Atlos 规则聚合邻近且类型相同的合格 marker | `true` |
-| `zoom` | 有限数字，会限制在所选地区的缩放范围内 | 地区预设值 |
-| `center` | 地区像素坐标 `{ x: number, y: number }` | 地区或子地区预设值 |
-
-`markerTypes` 使用 manifest 类型 key，而不是固定的 SDK 联合类型，因此数据发布新增类型时不需要同步发布新的包版本。空数组和 `false` 都会禁用 marker 数据；`getState()` 会将这两种选择报告为空数组。
-
-点击点位会打开对应的 `https://oem.re/<token>` 标准页面。Widget 不包含主站侧边栏或应用状态。
-
-## 运行时更新
-
-内容和视图参数可直接更新，无需替换 Widget：
+默认情况下，SDK 会使用由 Open Endfield Map 维护的最新稳定版地图数据。您也可以选择使用具有本 SDK 可识别之 manifest 的自托管资源：
 
 ```ts
-await widget.setOptions({
-  region: 'Wuling',
-  subregion: 'WL_1',
-  markerTypes: ['gather'],
-  boundaries: true,
+const widget = await createOEMWidget('#map', {
+  resources: {
+    baseUrl: 'https://maps.example.com',
+    manifestPath: '/channels/stable.json',
+  },
+  region: 'DJ',
+  markerTypes: false,
 });
-
-const state = widget.getState();
-widget.resize();
-widget.destroy();
 ```
 
-控件可见性、交互锁定、资源地址、主题和生命周期回调属于创建参数；如需修改，应重新创建 Widget。
-
-## React
+对于 React 应用：
 
 ```bash
 npm install @opendfieldmap/react
@@ -94,75 +85,36 @@ import { OEMWidget } from '@opendfieldmap/react';
 import '@opendfieldmap/sdk/style.css';
 
 export function MapPanel() {
-  return (
-    <OEMWidget
-      options={{ region: 'Valley_4', markerTypes: ['crate_i'] }}
-      style={{ height: 480 }}
-    />
-  );
+  return <OEMWidget options={{ region: 'ES', markerTypes: ['crate_i'] }} style={{ height: 480 }} />;
 }
 ```
 
-## 架构
+## 包结构
 
-```text
-宿主应用
-  ├─ @opendfieldmap/sdk      Widget 生命周期与控件
-  │    ├─ @opendfieldmap/map   框架无关的地图渲染器
-  │    └─ @opendfieldmap/core  Manifest、资源和坐标协议
-  └─ @opendfieldmap/react    可选的 React 生命周期封装
-
-静态资源源
-  └─ channel → release manifest → 不可变数据 + 内容版本化瓦片
-```
-
-- `@opendfieldmap/sdk` 是主要接入包。
-- `@opendfieldmap/map` 提供底层 `OEM` 渲染器，适合自定义集成。
-- `@opendfieldmap/core` 提供共享协议类型和资源工具。
-- `@opendfieldmap/react` 管理 Widget 的创建、更新和销毁。
-
-npm 包只包含代码、样式和控件资产；瓦片与地图数据从配置的静态资源源加载。
-
-## 资源
-
-默认资源源为 `https://data.opendfieldmap.org`，也可以接入完整兼容的自托管资源树：
-
-```ts
-const widget = await createOEMWidget('#map', {
-  resources: {
-    baseUrl: 'https://maps.example.com',
-    manifestPath: '/channels/stable.json',
-  },
-});
-```
-
-未配置资源版本时，SDK 会通过 `/channels/stable.json` 自动选择最新的 schema v1 release。manifest 会解析不可变的点位、地名、边界和可选字体资源，以及带单瓦片 `v` 缓存键的稳定瓦片路径。使用方无需自行拼接单个资源地址。
+| 包 | 用途 |
+| --- | --- |
+| `@opendfieldmap/sdk` | 主要的嵌入式 Widget 与标准控件 |
+| `@opendfieldmap/map` | 更底层、框架无关的地图渲染器 |
+| `@opendfieldmap/core` | Manifest schema、资源辅助工具、坐标和点位链接 |
+| `@opendfieldmap/react` | Widget 的 React 生命周期封装 |
 
 ## 开发
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev                 # 本地 HMR 演示：http://127.0.0.1:4173/demo/
+pnpm build               # 构建各包发布产物
+pnpm pack:release        # 将 npm tarball 写入 artifacts/npm
+pnpm build:demo          # 构建 Pages 部署产物
 ```
 
-实现修改完成后运行完整本地检查：
+Demo 构建仅包含应用本身，不会打包地图瓦片或数据。
 
-```bash
-pnpm check
-```
+## 链接
 
-生成 npm 候选包：
-
-```bash
-pnpm pack:release
-```
-
-仓库不会自动发布 npm 包，也不会自动修改外部基础设施。
-
-## 文档
-
-- [Widget API](api.zh-CN.md)
-- [静态资源协议](cdn-design.zh-CN.md)
-- [包与发布结构](npm-release.zh-CN.md)
-
-SDK 源码采用 AGPL-3.0-only 许可证。静态游戏资源和第三方资产可能适用其他条款。
+- [在线 SDK Demo](https://sdk.opendfieldmap.org/demo/)
+- [OEM-SDK 源代码仓库](https://github.com/Terra-Online/OEM-SDK)
+- [Widget API](api.zh-CN.md) · [English](api.md) · [繁體中文](api.zh-HK.md)
+- [静态资源协议](cdn-design.zh-CN.md) · [English](cdn-design.md) · [繁體中文](cdn-design.zh-HK.md)
+- [包与 NPM 发布结构](npm-release.zh-CN.md) · [English](npm-release.md) · [繁體中文](npm-release.zh-HK.md)
+- [服务条款](https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright)

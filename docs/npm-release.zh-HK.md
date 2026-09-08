@@ -54,5 +54,3 @@ npm 套件使用 SemVer，並與以下版本獨立：
 3. 發佈 `@opendfieldmap/sdk`。
 4. 按需發佈 `@opendfieldmap/react`。
 5. 在空白應用程式中安裝已發佈 SDK，並執行瀏覽器 smoke test。
-
-目前套件屬於 alpha 候選版本。倉庫中的命令不會自動發佈 npm，也不會修改外部基礎設施。
