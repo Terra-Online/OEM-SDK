@@ -1,20 +1,44 @@
 # Open Endfield Map SDK
 
+An embeddable Endfield map for wikis, guides, databases, and companion tools.
+The SDK gives a host application a fast, configurable map with markers, labels,
+boundaries, region/floor controls, and a small integration surface.
+
+[![Live demo](https://img.shields.io/badge/demo-sdk.opendfieldmap.org-111111?style=flat-square)](https://sdk.opendfieldmap.org/demo/)
+[![GitHub](https://img.shields.io/badge/source-GitHub-24292f?style=flat-square&logo=github)](https://github.com/Terra-Online/OEM-SDK)
+[![License](https://img.shields.io/badge/license-AGPL--3.0--only-fbc825?style=flat-square)](LICENSE)
+
 Languages: English · [简体中文](docs/README.zh-CN.md) · [繁體中文（香港）](docs/README.zh-HK.md)
 
-Open Endfield Map SDK (`@opendfieldmap/sdk`) provides an embeddable Endfield map for wikis, guides, databases, and other web applications. It renders the map, markers, place names, boundaries, and compact map controls without requiring the full Open Endfield Map application.
+## Preview
 
-## Install
+<!-- Preview slot: save the screenshot as docs/assets/preview.png and uncomment the image below. -->
+<!-- ![Open Endfield Map SDK preview](docs/assets/preview.png) -->
+
+The interactive demo is available at [sdk.opendfieldmap.org/demo](https://sdk.opendfieldmap.org/demo/).
+
+## What it provides
+
+- A framework-neutral map renderer with an optional React wrapper.
+- Atlos-aligned region and floor controls, marker clustering, scale control, and themes.
+- Data-driven marker types, localized labels, subregions, and boundaries.
+- Stable tile URLs with per-tile `v` cache keys, so unchanged tiles remain cacheable across data releases.
+- Compact `VL`, `WL`, `DJ`, and `ES` region aliases and canonical `oem.re` point links.
+- SSR-safe module imports and TypeScript declarations.
+
+The npm packages contain the runtime only. Map data, tiles, labels, marker assets,
+and fonts are loaded from the static origin at `https://data.opendfieldmap.org`.
+
+## Install and configure
+
+The primary integration package is `@opendfieldmap/sdk`:
 
 ```bash
 npm install @opendfieldmap/sdk
 ```
 
-The package is ESM-only and includes TypeScript declarations. Import its stylesheet once in the host application.
-
-## Quick Start
-
-Give the host element an explicit height, then create a Widget with named options:
+Give the host element an explicit height, import the stylesheet once, and create
+the widget with named options:
 
 ```html
 <div id="map" style="height: 480px"></div>
@@ -25,64 +49,38 @@ import { createOEMWidget } from '@opendfieldmap/sdk';
 import '@opendfieldmap/sdk/style.css';
 
 const widget = await createOEMWidget('#map', {
-  region: 'Valley_4',
+  region: 'VL',
   subregion: null,
   floor: 'M',
   locale: 'en-US',
-  markerTypes: ['crate_i', 'aurylene'],
+  markerTypes: ['aurylene', 'crate_i', 'crate_ii', 'crate_iii', 'cratesurprise', 'cratelocked'],
   labels: true,
   boundaries: false,
   markerClustering: true,
-  zoom: 2,
-  center: { x: 3000, y: 5000 },
-  showRegionSelector: true,
-  showFloorSelector: true,
-  showScaleBar: true,
-  lockDrag: false,
-  lockZoom: false,
 });
 
+// Later:
+await widget.setOptions({ region: 'WL', markerTypes: ['gather'] });
 widget.destroy();
 ```
 
-All options are optional. Region, floor, and scale controls are shown by default. Dragging and zooming are enabled, marker clustering is enabled, boundaries are hidden, and marker data is disabled until `markerTypes` is provided.
-
-Point markers open their canonical `https://oem.re/<token>` pages. The Widget does not include the main-site sidebar or application state.
-
-| Property | Type and accepted values | Default |
-| --- | --- | --- |
-| `region` | `Valley_4`, `Wuling`, `Dijiang`, `Weekraid_1`, or the aliases `VL`, `WL`, `DJ`, `ES` | The manifest default region (`Valley_4` in the current export) |
-| `subregion` | A subregion ID belonging to the selected region, or `null` | `null` |
-| `floor` | `M`, `L1`–`L4`, or `B1`–`B4` when published for the region | `M` |
-| `locale` | A locale published in the manifest; the current type includes `en-US`, `zh-CN`, `zh-HK`, `ja-JP`, `ko-KR`, `ru-RU`, `es-ES`, `fr-FR`, `de-DE`, `it-IT`, `id-ID`, `pt-BR`, `th-TH`, and `vi-VN` | Closest browser locale, then the manifest fallback (`en-US`) |
-| `markerTypes` | An array of manifest type keys, `'*'` for all, or `false` for none | No marker data (`false`) |
-| `labels` | `true` or `false` | `true` |
-| `boundaries` | Shows published subregion polygons and rectangular fallbacks | `false` |
-| `markerClustering` | Groups nearby markers of the same eligible type using Atlos clustering rules | `true` |
-| `zoom` | A finite number, clamped to the selected region range | Region preset |
-| `center` | `{ x: number, y: number }` in region pixel coordinates | Region or subregion preset |
-
-## Runtime Updates
-
-Content and view options can be updated without replacing the Widget:
+All options are optional. Without a custom resource configuration, the SDK
+follows `https://data.opendfieldmap.org/channels/stable.json` and automatically
+uses the current stable data release. To pin a compatible manifest or use a
+self-hosted tree:
 
 ```ts
-await widget.setOptions({
-  region: 'Wuling',
-  subregion: 'WL_1',
-  floor: 'M',
-  markerTypes: ['gather'],
-  boundaries: true,
+const widget = await createOEMWidget('#map', {
+  resources: {
+    baseUrl: 'https://maps.example.com',
+    manifestPath: '/channels/stable.json',
+  },
+  region: 'DJ',
+  markerTypes: false,
 });
-
-const state = widget.getState();
-widget.resize();
-widget.destroy();
 ```
 
-Control visibility, interaction locks, resources, theme, and lifecycle callbacks are creation options. Recreate the Widget when those options need to change.
-
-## React
+For React applications:
 
 ```bash
 npm install @opendfieldmap/react
@@ -93,75 +91,64 @@ import { OEMWidget } from '@opendfieldmap/react';
 import '@opendfieldmap/sdk/style.css';
 
 export function MapPanel() {
-  return (
-    <OEMWidget
-      options={{ region: 'Valley_4', markerTypes: ['crate_i'] }}
-      style={{ height: 480 }}
-    />
-  );
+  return <OEMWidget options={{ region: 'ES', markerTypes: ['crate_i'] }} style={{ height: 480 }} />;
 }
 ```
 
-## Architecture
+## Package layout
+
+| Package | Role |
+| --- | --- |
+| `@opendfieldmap/sdk` | Primary embeddable Widget and standard controls |
+| `@opendfieldmap/map` | Lower-level framework-neutral renderer |
+| `@opendfieldmap/core` | Manifest schema, resource helpers, coordinates, and point links |
+| `@opendfieldmap/react` | React lifecycle wrapper for the Widget |
+
+## Technology
+
+- TypeScript, ESM, and generated declaration files
+- Leaflet and `leaflet.markercluster` for map rendering and clustering
+- React 18/19 adapter (`@opendfieldmap/react`)
+- Sass and Vite for namespaced styles and the demo build
+- Cloudflare Pages for the demo application
+- Cloudflare R2 for versioned static map resources
+- Atlos-compatible assets and typography, with `HMSans_EN` as the global Latin fallback
+
+## Project status
+
+This repository is an early alpha release candidate (`0.1.0-alpha.0`). The demo
+is live, the stable static data channel is operational, and npm tarballs can be
+generated locally. npm publication is intentionally manual and has not been
+performed yet.
+
+The repository is split into two deployable surfaces:
 
 ```text
-Host application
-  ├─ @opendfieldmap/sdk      Widget lifecycle and controls
-  │    ├─ @opendfieldmap/map   Framework-neutral renderer
-  │    └─ @opendfieldmap/core  Manifest, resources, and coordinates
-  └─ @opendfieldmap/react    Optional React lifecycle wrapper
-
-Static origin
-  └─ channel → release manifest → versioned map resources
+OEM-SDK npm packages       runtime, controls, types, and styles
+data.opendfieldmap.org     manifests, markers, labels, fonts, and tiles
+sdk.opendfieldmap.org      public SDK demo
 ```
 
-- `@opendfieldmap/sdk` is the primary integration package.
-- `@opendfieldmap/map` exposes the lower-level `OEM` renderer for custom integrations.
-- `@opendfieldmap/core` contains shared protocol types and resource utilities.
-- `@opendfieldmap/react` wraps Widget creation, updates, and cleanup.
-
-The runtime packages contain code, styles, and control assets. Tiles and map data are loaded from the configured static origin.
-
-## Resources
-
-The default resource origin is `https://data.opendfieldmap.org`. A complete compatible static tree can also be hosted elsewhere:
-
-```ts
-const widget = await createOEMWidget('#map', {
-  resources: {
-    baseUrl: 'https://maps.example.com',
-    manifestPath: '/channels/stable.json',
-  },
-});
-```
-
-The channel selects a schema v1 release manifest. The manifest then resolves all versioned marker, label, boundary, tile, and optional font resources. Consumers do not need to construct individual asset URLs.
+Static game resources are distributed separately from npm packages and may carry
+their own licensing terms. Source code in this repository is AGPL-3.0-only.
 
 ## Development
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev                 # local HMR demo at http://127.0.0.1:4173/demo/
+pnpm build               # build package distributions
+pnpm pack:release        # write npm tarballs to artifacts/npm
+pnpm build:demo          # build the Pages artifact
 ```
 
-Run the complete local verification after implementation changes:
+The demo build is application-only; it does not bundle map tiles or data.
 
-```bash
-pnpm check
-```
+## Links
 
-Create release-candidate npm tarballs with:
-
-```bash
-pnpm pack:release
-```
-
-The repository does not publish npm packages or change external infrastructure automatically.
-
-## Documentation
-
-- [Widget API](docs/api.md)
-- [Static resource protocol](docs/cdn-design.md)
-- [Package and release structure](docs/npm-release.md)
-
-The SDK source is licensed under AGPL-3.0-only. Static game resources and third-party assets may have separate terms.
+- [Live SDK demo](https://sdk.opendfieldmap.org/demo/)
+- [OEM-SDK source repository](https://github.com/Terra-Online/OEM-SDK)
+- [Widget API](docs/api.md) · [简体中文](docs/api.zh-CN.md) · [繁體中文（香港）](docs/api.zh-HK.md)
+- [Static resource protocol](docs/cdn-design.md) · [简体中文](docs/cdn-design.zh-CN.md) · [繁體中文（香港）](docs/cdn-design.zh-HK.md)
+- [Package and npm release structure](docs/npm-release.md) · [简体中文](docs/npm-release.zh-CN.md) · [繁體中文（香港）](docs/npm-release.zh-HK.md)
+- [Terms of Services](https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright)
