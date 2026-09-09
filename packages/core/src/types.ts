@@ -9,6 +9,16 @@ export const OEM_SCHEMA_VERSION = 1 as const;
  */
 export interface OEMPosition {
   regionId: string;
+  subregionId?: string;
+  x: number;
+  y: number;
+  floorId?: string;
+}
+
+/** A normalized map position, equivalent to published coordinates divided by the native scale. */
+export interface OEMMapPosition {
+  regionId: string;
+  subregionId?: string;
   x: number;
   y: number;
   floorId?: string;
@@ -21,6 +31,12 @@ export interface OEMGamePosition {
   z: number;
 }
 
+/** The horizontal game-space coordinates recoverable from a 2D map position. */
+export interface OEMGameXZPosition {
+  x: number;
+  z: number;
+}
+
 /** A pixel position relative to the map host element. */
 export interface OEMScreenPosition { x: number; y: number }
 
@@ -29,6 +45,14 @@ export interface OEMView extends OEMPosition { zoom: number }
 
 /** An inclusive rectangular extent in region pixel coordinates. */
 export type OEMPixelBounds = [[number, number], [number, number]];
+
+/** Linear transform between Atlos map coordinates and game X/Z coordinates. */
+export interface OEMGameTransform {
+  scaleX: number;
+  scaleZ: number;
+  offsetX: number;
+  offsetZ: number;
+}
 
 /** A versioned static asset reference with integrity metadata. */
 export interface OEMAsset { path: string; sha256: string; bytes: number }
@@ -44,6 +68,7 @@ export interface OEMSubregion {
   id: string;
   key: string;
   bounds?: OEMPixelBounds;
+  gameTransform?: OEMGameTransform;
   locales?: Record<string, { name: string; short: string }>;
 }
 /** A webfont that may be loaded from the static origin after authorization. */
@@ -68,6 +93,7 @@ export interface OEMRegion {
   initialView: OEMView;
   floors: OEMFloor[];
   subregions: OEMSubregion[];
+  gameTransform?: OEMGameTransform;
   points: OEMAsset[];
   labels?: OEMAsset;
   boundaries?: OEMAsset;

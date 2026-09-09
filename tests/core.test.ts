@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createOEMPointUrl, defaultOEMResources, encodeOEMPointToken, fromOEMLeafletPosition, normalizeOEMLocale, OEM_SCHEMA_VERSION, resolveOEMAsset, toOEMLeafletPosition, validateOEMManifest } from '@opendfieldmap/core';
+import { createOEMPointUrl, defaultOEMResources, encodeOEMPointToken, fromOEMLeafletPosition, gameToOEMPosition, gameXZToOEMPosition, normalizeOEMLocale, OEM_SCHEMA_VERSION, oemToGamePosition, resolveOEMAsset, toOEMLeafletPosition, validateOEMManifest } from '@opendfieldmap/core';
 import type { OEMManifest, OEMRegion } from '@opendfieldmap/core';
 
 const region: OEMRegion = {
@@ -16,11 +16,44 @@ const manifest: OEMManifest = {
   source: { repository: 'test', commit: 'test', usage: 'test' },
 };
 
+const valleyRegion: OEMRegion = {
+  ...region,
+  id: 'Valley_4',
+  gameTransform: {
+    scaleX: 0.4687511298,
+    scaleZ: 0.4687511298,
+    offsetX: 519.6990737,
+    offsetZ: -479.9101599,
+  },
+};
+
 describe('core protocol', () => {
   it('round-trips max-zoom pixel coordinates', () => {
     const position = { regionId: 'test', x: 1632.25, y: 2048.5, floorId: 'M' };
     const [lat, lng] = toOEMLeafletPosition(position, region);
     expect(fromOEMLeafletPosition(lat, lng, region)).toEqual(position);
+  });
+
+  it('round-trips horizontal game coordinates', () => {
+    const raw = { x: 123.5, y: 42, z: -77.25 };
+    expect(oemToGamePosition(gameToOEMPosition(raw, region), region)).toEqual({ x: raw.x, z: raw.z });
+    expect(() => oemToGamePosition({ regionId: 'other', x: 1, y: 2 }, region)).toThrow('Invalid OEM position');
+  });
+
+  it('converts Atlos horizontal coordinates to normalized map coordinates', () => {
+    expect(gameXZToOEMPosition({ x: 400.0071, z: -562.8297 }, region)).toEqual({
+      regionId: 'test', x: 400.0071, y: 562.8297, floorId: 'M',
+    });
+  });
+
+  it('applies the Atlos region transform without changing normalized map units', () => {
+    const mapPosition = gameXZToOEMPosition({ x: -255.34226179053363, z: -176.89459252157732 }, valleyRegion);
+    expect(mapPosition.x).toBeCloseTo(400.0071, 8);
+    expect(mapPosition.y).toBeCloseTo(562.8297, 8);
+    expect(oemToGamePosition({ ...mapPosition, x: mapPosition.x * 8, y: mapPosition.y * 8 }, valleyRegion)).toEqual({
+      x: expect.closeTo(-255.34226179053363, 8),
+      z: expect.closeTo(-176.89459252157732, 8),
+    });
   });
 
   it('normalizes supported locale aliases', () => {
