@@ -14,6 +14,9 @@ const confirmedRelease = confirmationIndex >= 0 ? args[confirmationIndex + 1] : 
 const localBuildConfig = JSON.parse(await fs.readFile(path.join(root, 'config/config.r2.json'), 'utf8'))?.web?.build;
 const localR2Config = localBuildConfig?.r2;
 if (!localR2Config?.bucket) throw new Error('R2 bucket is missing from config/config.r2.json');
+const accessKeyId = process.env.OEM_R2_ACCESS_KEY_ID ?? localR2Config.accessKeyId;
+const accessKeySecret = process.env.OEM_R2_ACCESS_KEY_SECRET ?? localR2Config.accessKeySecret;
+const endpointValue = process.env.OEM_R2_ENDPOINT ?? localR2Config.endpoint;
 
 const runCommand = (command, commandArgs, capture = false, env = process.env) => new Promise((resolve, reject) => {
   const child = spawn(command, commandArgs, {
@@ -52,11 +55,11 @@ if (confirmedRelease !== plan.releaseId) {
 }
 
 let endpoint;
-try { endpoint = new URL(localR2Config.endpoint); } catch { throw new Error('Invalid R2 S3 endpoint in config/config.r2.json'); }
+try { endpoint = new URL(endpointValue); } catch { throw new Error('Invalid R2 S3 endpoint in R2 configuration'); }
 if (endpoint.protocol !== 'https:' || !endpoint.hostname.endsWith('.r2.cloudflarestorage.com') ||
   localR2Config.bucket !== plan.bucket ||
-  !localR2Config?.accessKeyId || !localR2Config?.accessKeySecret) {
-  throw new Error('R2 S3 credentials are missing or do not match the prepared bucket in config/config.r2.json');
+  !accessKeyId || !accessKeySecret) {
+  throw new Error('R2 S3 credentials are missing or do not match the prepared bucket');
 }
 const remoteName = 'oempubsdk';
 const remoteRoot = `${remoteName}:${plan.bucket}`;
@@ -64,9 +67,9 @@ const rcloneEnv = {
   ...process.env,
   [`RCLONE_CONFIG_${remoteName.toUpperCase()}_TYPE`]: 's3',
   [`RCLONE_CONFIG_${remoteName.toUpperCase()}_PROVIDER`]: 'Cloudflare',
-  [`RCLONE_CONFIG_${remoteName.toUpperCase()}_ACCESS_KEY_ID`]: localR2Config.accessKeyId,
-  [`RCLONE_CONFIG_${remoteName.toUpperCase()}_SECRET_ACCESS_KEY`]: localR2Config.accessKeySecret,
-  [`RCLONE_CONFIG_${remoteName.toUpperCase()}_ENDPOINT`]: localR2Config.endpoint,
+  [`RCLONE_CONFIG_${remoteName.toUpperCase()}_ACCESS_KEY_ID`]: accessKeyId,
+  [`RCLONE_CONFIG_${remoteName.toUpperCase()}_SECRET_ACCESS_KEY`]: accessKeySecret,
+  [`RCLONE_CONFIG_${remoteName.toUpperCase()}_ENDPOINT`]: endpointValue,
   [`RCLONE_CONFIG_${remoteName.toUpperCase()}_REGION`]: localR2Config.region || 'auto',
 };
 const runRclone = (rcloneArgs, capture = false) => runCommand('rclone', rcloneArgs, capture, rcloneEnv);
@@ -81,14 +84,14 @@ await runRclone([
   '--header-upload', 'Cache-Control: public, max-age=31536000, immutable',
   ...commonRcloneArgs,
 ]);
-
-await runWrangler(['r2', 'bucket', 'cors', 'set', plan.bucket, '--file', localR2Config.corsFile, '--force']);
 await runRclone([
-  'copyto', 'public/channels/stable.json', `${remoteRoot}/channels/stable.json`,
-  '--s3-no-check-bucket',
-  '--header-upload', 'Cache-Control: public, max-age=60, must-revalidate',
+  'copy', 'public/fonts', `${remoteRoot}/fonts`,
+  '--ignore-times',
+  '--header-upload', 'Cache-Control: public, max-age=31536000, immutable',
+  ...commonRcloneArgs,
 ]);
 
+await runWrangler(['r2', 'bucket', 'cors', 'set', plan.bucket, '--file', localR2Config.corsFile, '--force']);
 const domains = await runWrangler(['r2', 'bucket', 'domain', 'list', plan.bucket], true);
 if (!domains.stdout.includes(`domain:            ${plan.domain}`)) {
   await runWrangler([
@@ -100,8 +103,16 @@ if (!domains.stdout.includes(`domain:            ${plan.domain}`)) {
   ]);
 }
 
+await runCommand(process.execPath, [path.join(root, 'scripts/validate-r2.mjs'), '--preflight']);
+await runRclone([
+  'copyto', 'public/channels/stable.json', `${remoteRoot}/channels/stable.json`,
+  '--s3-no-check-bucket',
+  '--header-upload', 'Cache-Control: public, max-age=60, must-revalidate',
+]);
+
 const localChannel = JSON.parse(await fs.readFile(path.join(root, 'public/channels/stable.json'), 'utf8'));
 const remoteChannel = await runRclone(['cat', `${remoteRoot}/channels/stable.json`, '--s3-no-check-bucket'], true);
 const published = JSON.parse(remoteChannel.stdout);
 if (published.manifest?.path !== localChannel.manifest?.path) throw new Error('Published stable channel verification failed');
+await runCommand(process.execPath, [path.join(root, 'scripts/validate-r2.mjs')]);
 console.log(`Published ${plan.releaseId} to https://${plan.domain}/channels/stable.json`);
