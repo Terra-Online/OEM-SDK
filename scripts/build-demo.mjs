@@ -22,6 +22,9 @@ await Promise.all(['_headers'].map((filename) =>
 ));
 await fs.copyFile(path.join(root, 'examples', 'basic', 'custom-points.json'), path.join(root, 'dist', 'demo', 'assets', 'custom-points.json'));
 await fs.copyFile(path.join(root, 'examples', 'assets', 'instance.webp'), path.join(root, 'dist', 'demo', 'assets', 'instance.webp'));
+await fs.mkdir(path.join(root, 'dist', 'assets'), { recursive: true });
+await fs.copyFile(path.join(root, 'examples', 'basic', 'custom-points.json'), path.join(root, 'dist', 'assets', 'custom-points.json'));
+await fs.copyFile(path.join(root, 'examples', 'assets', 'instance.webp'), path.join(root, 'dist', 'assets', 'instance.webp'));
 
 const dist = path.join(root, 'dist');
 for (const namespace of ['channels', 'releases', 'marker', 'map', 'tiles', 'fonts']) {

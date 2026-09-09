@@ -42,7 +42,9 @@ const defaultCreation: DemoCreationConfig = {
   theme: 'light',
 };
 const instanceIcon = new URL('../assets/instance.webp', import.meta.url).href;
-const defaultCustomPointsUrl = new URL('./custom-points.json', import.meta.url).href;
+const defaultCustomPointsUrl = usesLocalResources
+  ? new URL('/examples/basic/custom-points.json', document.baseURI).href
+  : new URL('assets/custom-points.json', document.baseURI).href;
 const defaultCustomPoints: OEMCustomPoint[] = [
   {
     id: 'custom-instance-1',

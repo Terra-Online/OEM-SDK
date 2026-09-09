@@ -303,7 +303,7 @@ const createWidgetCode = (
   if (!state.markerClustering) lines.push('  markerClustering: false,');
   const regionCustomPoints = customPoints.filter((point) => point.position.regionId === state.regionId);
   if (customPointsUrl && regionCustomPoints.length) {
-    lines.push("  customPointsUrl: new URL('./custom-points.json', import.meta.url).href,");
+    lines.push(`  customPointsUrl: ${quote(new URL(customPointsUrl, window.location.href).pathname)},`);
   } else if (regionCustomPoints.length) {
     const serialized = JSON.stringify(regionCustomPoints, null, 2).split('\n');
     lines.push(`  customPoints: ${serialized[0]}`);
