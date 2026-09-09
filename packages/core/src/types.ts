@@ -11,7 +11,7 @@ export interface OEMPosition {
   regionId: string;
   subregionId?: string;
   x: number;
-  y: number;
+  z: number;
   floorId?: string;
 }
 
@@ -20,9 +20,12 @@ export interface OEMMapPosition {
   regionId: string;
   subregionId?: string;
   x: number;
-  y: number;
+  z: number;
   floorId?: string;
 }
+
+/** A horizontal map offset in the published region coordinate system. */
+export interface OEMMapOffset { x: number; z: number }
 
 /** A game-space position retained alongside its rendered map position. */
 export interface OEMGamePosition {
@@ -85,7 +88,7 @@ export interface OEMRegion {
   name: string;
   locales: Record<string, string>;
   dimensions: [number, number];
-  boundsOffset: OEMScreenPosition;
+  boundsOffset: OEMMapOffset;
   tileSize: number;
   minZoom: number;
   maxNativeZoom: number;
@@ -97,6 +100,8 @@ export interface OEMRegion {
   points: OEMAsset[];
   labels?: OEMAsset;
   boundaries?: OEMAsset;
+  /** Official game-space level-grid boundaries converted to OEM map coordinates. */
+  gameBoundaries?: OEMAsset;
   coverage: Record<string, Record<string, Record<string, number[]>>>;
 }
 /** Localized strings used by the Atlos-aligned controls. */
@@ -160,6 +165,9 @@ export interface OEMLabel { id: string; type: 'site' | 'sub'; position: OEMPosit
 
 /** A non-interactive region boundary composed of one or more rings. */
 export interface OEMBoundary { id: string; rings: OEMPosition[][] }
+
+/** Selects the source used for the optional boundary layer. */
+export type OEMBoundarySource = 'oem' | 'game';
 
 /** Flattened locale messages published for labels and static UI. */
 export type OEMLocaleMessages = Record<string, string>;

@@ -3,9 +3,9 @@ import { createOEMPointUrl, defaultOEMResources, encodeOEMPointToken, fromOEMLea
 import type { OEMManifest, OEMRegion } from '@opendfieldmap/core';
 
 const region: OEMRegion = {
-  id: 'test', name: 'Test', locales: { 'en-US': 'Test' }, dimensions: [8000, 8000], boundsOffset: { x: 0, y: 0 },
+  id: 'test', name: 'Test', locales: { 'en-US': 'Test' }, dimensions: [8000, 8000], boundsOffset: { x: 0, z: 0 },
   tileSize: 200, minZoom: 0, maxNativeZoom: 3, maxZoom: 4.5,
-  initialView: { regionId: 'test', x: 4000, y: 4000, zoom: 2 },
+  initialView: { regionId: 'test', x: 4000, z: 4000, zoom: 2 },
   floors: [{ id: 'M', tileTemplate: '/tiles/1_5_3/test/{z}/{x}/{y}.webp', tileVersions: {} }], subregions: [], points: [], coverage: {},
 };
 const manifest: OEMManifest = {
@@ -29,7 +29,7 @@ const valleyRegion: OEMRegion = {
 
 describe('core protocol', () => {
   it('round-trips max-zoom pixel coordinates', () => {
-    const position = { regionId: 'test', x: 1632.25, y: 2048.5, floorId: 'M' };
+    const position = { regionId: 'test', x: 1632.25, z: 2048.5, floorId: 'M' };
     const [lat, lng] = toOEMLeafletPosition(position, region);
     expect(fromOEMLeafletPosition(lat, lng, region)).toEqual(position);
   });
@@ -37,20 +37,20 @@ describe('core protocol', () => {
   it('round-trips horizontal game coordinates', () => {
     const raw = { x: 123.5, y: 42, z: -77.25 };
     expect(oemToGamePosition(gameToOEMPosition(raw, region), region)).toEqual({ x: raw.x, z: raw.z });
-    expect(() => oemToGamePosition({ regionId: 'other', x: 1, y: 2 }, region)).toThrow('Invalid OEM position');
+    expect(() => oemToGamePosition({ regionId: 'other', x: 1, z: 2 }, region)).toThrow('Invalid OEM position');
   });
 
   it('converts Atlos horizontal coordinates to normalized map coordinates', () => {
     expect(gameXZToOEMPosition({ x: 400.0071, z: -562.8297 }, region)).toEqual({
-      regionId: 'test', x: 400.0071, y: 562.8297, floorId: 'M',
+      regionId: 'test', x: 400.0071, z: -562.8297, floorId: 'M',
     });
   });
 
   it('applies the Atlos region transform without changing normalized map units', () => {
     const mapPosition = gameXZToOEMPosition({ x: -255.34226179053363, z: -176.89459252157732 }, valleyRegion);
     expect(mapPosition.x).toBeCloseTo(400.0071, 8);
-    expect(mapPosition.y).toBeCloseTo(562.8297, 8);
-    expect(oemToGamePosition({ ...mapPosition, x: mapPosition.x * 8, y: mapPosition.y * 8 }, valleyRegion)).toEqual({
+    expect(mapPosition.z).toBeCloseTo(-562.8297, 8);
+    expect(oemToGamePosition({ ...mapPosition, x: mapPosition.x * 8, z: mapPosition.z * 8 }, valleyRegion)).toEqual({
       x: expect.closeTo(-255.34226179053363, 8),
       z: expect.closeTo(-176.89459252157732, 8),
     });
