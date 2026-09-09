@@ -60,6 +60,25 @@ const overrideSource = 'src/data/marker/overrides.js';
 sourceFiles[overrideSource] = sha256(await fs.readFile(path.join(source, overrideSource)));
 const { applyMarkerOverrides } = await import(pathToFileURL(path.join(source, overrideSource)).href);
 const regionCodes = { Valley_4: 'VL', Wuling: 'WL', Dijiang: 'DJ', Weekraid_1: 'ES' };
+const gameTransforms = {
+  Valley_4: { scaleX: 0.4687511298, scaleZ: 0.4687511298, offsetX: 519.6990737, offsetZ: -479.9101599 },
+  Wuling: { scaleX: 0.41269532778614415, scaleZ: 0.4126650261801654, offsetX: 953.3837664516041, offsetZ: -954.8108221139345 },
+  Dijiang: { scaleX: 2.817109225144681, scaleZ: 2.8369668977222067, offsetX: 481.07581876506237, offsetZ: -528.2046998395613 },
+  Weekraid_1: { scaleX: 2.1236893194106514, scaleZ: 2.1398455301912183, offsetX: 613.9427764351295, offsetZ: -898.0955173659895 },
+};
+const subregionGameTransforms = {
+  WL_2: { scaleX: 0.3821317314759548, scaleZ: 0.3886861967050555, offsetX: 939.0266106648364, offsetZ: -961.708480136474 },
+  WL_4: { scaleX: 0.35366404675795343, scaleZ: 0.3343953142019082, offsetX: 229.24501263356927, offsetZ: -1439.4211280688035 },
+};
+const getGameTransform = (regionId, subregionId) => subregionGameTransforms[subregionId] ?? gameTransforms[regionId];
+const mapMarkerToGame = (marker, regionId) => {
+  const transform = getGameTransform(regionId, marker.subregId);
+  return {
+    x: (marker.x - transform.offsetX) / transform.scaleX,
+    y: marker.y,
+    z: (marker.z - transform.offsetZ) / transform.scaleZ,
+  };
+};
 const regionNames = { Valley_4: '四号谷地', Wuling: '武陵', Dijiang: '帝江号', Weekraid_1: 'Etchspace Salvage' };
 const labels = await read('src/data/map/label/labels.json');
 const subregions = [...await read('src/data/map/subregionData/VL.json'), ...await read('src/data/map/subregionData/WL.json')];
@@ -221,6 +240,7 @@ for (const [id, config] of Object.entries(regionSource)) {
   const boundsOffset = config.boundsOffset ?? { x: 0, y: 0 };
   const region = {
     id, name: regionNames[id] ?? id, locales: {}, dimensions: config.dimensions, boundsOffset,
+    gameTransform: gameTransforms[id],
     tileSize: config.tileSize, minZoom: 0, maxNativeZoom: config.maxZoom,
     maxZoom: config.maxZoom + (['Valley_4', 'Wuling'].includes(id) ? 1.5 : 1),
     initialView: { regionId: id, floorId: 'M', x: boundsOffset.x + config.dimensions[0] / 2 + config.initialOffset.x,
@@ -232,7 +252,8 @@ for (const [id, config] of Object.entries(regionSource)) {
     })),
     subregions: config.subregions.map((subregionId) => {
       const subregion = subregionsById.get(subregionId);
-      return { id: subregionId, key: subregion?.name ?? subregionId, bounds: subregion?.bounds };
+      return { id: subregionId, key: subregion?.name ?? subregionId, bounds: subregion?.bounds,
+        gameTransform: subregionGameTransforms[subregionId] };
     }),
     points: [], coverage: coverage[id] ?? {},
   };
@@ -258,7 +279,8 @@ for (const [id, config] of Object.entries(regionSource)) {
       pointIds.add(point.id);
       const floorId = point.tier === 0 ? 'M' : `${point.tier < 0 ? 'B' : 'L'}${Math.abs(point.tier)}`;
       return [{ id: point.id, regionId: id, subregionId: point.subregId, type, tier: point.tier,
-        raw: { x: point.x, y: point.y, z: point.z }, position: { regionId: id, x: point.x * scale, y: -point.z * scale, floorId } }];
+        raw: mapMarkerToGame(point, id), position: { regionId: id, subregionId: point.subregId,
+          x: point.x * scale, y: -point.z * scale, floorId } }];
     });
     const ref = await versionedObject('marker', `points/${subregionId}.json`, points);
     region.points.push(ref);

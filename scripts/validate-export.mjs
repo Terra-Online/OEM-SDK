@@ -118,6 +118,16 @@ for (const region of manifest.regions) {
     if (region.subregions.length > 1 && !subregion.locales?.[manifest.fallbackLocale]?.name) {
       fail(`Subregion has no fallback name: ${subregion.id}`);
     }
+    if (subregion.gameTransform && (![subregion.gameTransform.scaleX, subregion.gameTransform.scaleZ,
+      subregion.gameTransform.offsetX, subregion.gameTransform.offsetZ].every(Number.isFinite) ||
+      subregion.gameTransform.scaleX === 0 || subregion.gameTransform.scaleZ === 0)) {
+      fail(`Invalid subregion game transform: ${subregion.id}`);
+    }
+  }
+  if (!region.gameTransform || ![region.gameTransform.scaleX, region.gameTransform.scaleZ,
+    region.gameTransform.offsetX, region.gameTransform.offsetZ].every(Number.isFinite) ||
+    region.gameTransform.scaleX === 0 || region.gameTransform.scaleZ === 0) {
+    fail(`Invalid region game transform: ${region.id}`);
   }
   for (const floor of region.floors) requirePrefix(floor.tileTemplate, `${tileRootPath}/${region.id}`);
   if (region.labels) {
@@ -141,6 +151,12 @@ for (const region of manifest.regions) {
       if (!types[point.type]) fail(`Point type missing: ${point.type}`);
       if (!floorIds.has(point.position.floorId)) fail(`Point floor missing: ${point.id}/${point.position.floorId}`);
       if (![point.raw.x, point.raw.y, point.raw.z, point.position.x, point.position.y].every(Number.isFinite)) fail(`Point coordinates invalid: ${point.id}`);
+      const transform = region.subregions.find((subregion) => subregion.id === point.subregionId)?.gameTransform ?? region.gameTransform;
+      const scale = 2 ** region.maxNativeZoom;
+      if (Math.abs(point.position.x / scale - (point.raw.x * transform.scaleX + transform.offsetX)) > 1e-5 ||
+        Math.abs(-point.position.y / scale - (point.raw.z * transform.scaleZ + transform.offsetZ)) > 1e-5) {
+        fail(`Point coordinate transform mismatch: ${point.id}`);
+      }
       if (pointIndex[point.id] !== ref.path) fail(`Point index mismatch: ${point.id}`);
     }
   }
