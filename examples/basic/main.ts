@@ -1,10 +1,12 @@
 import { fetchOEMJson, loadOEMManifest, resolveOEMAsset } from '@opendfieldmap/core';
 import type { OEMManifest, OEMPointType, OEMResources } from '@opendfieldmap/core';
 import { createOEMWidget, parseOEMUrlState } from '@opendfieldmap/sdk';
-import type { OEMWidget, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
+import type { OEMCustomPoint, OEMMapClick, OEMWidget, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
 import '@opendfieldmap/sdk/style.css';
 import { createDemoConfigPanel } from './configPanel';
 import type { DemoConfigPanel, DemoCreationConfig, DemoVersionOption } from './configPanel';
+import { createDemoCustomPointsPanel } from './customPointsPanel';
+import type { DemoCustomPointsPanel } from './customPointsPanel';
 import './style.scss';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -19,8 +21,8 @@ error.setAttribute('role', 'alert');
 app.append(widgetHost, error);
 
 const urlOptions = window.location.search ? parseOEMUrlState(window.location.search) : {};
-const isLocalPreview = window.location.hostname === '127.0.0.1' && window.location.port === '4173';
-const stableResources: OEMResources = isLocalPreview
+const usesLocalResources = document.querySelector('script[src="/@vite/client"]') !== null;
+const stableResources: OEMResources = usesLocalResources
   ? { baseUrl: window.location.origin, manifestPath: '/channels/stable.json' }
   : { baseUrl: 'https://data.opendfieldmap.org', manifestPath: '/channels/stable.json' };
 const defaultMarkerTypes = ['aurylene', 'crate_i', 'crate_ii', 'crate_iii', 'cratesurprise', 'cratelocked'];
@@ -39,18 +41,47 @@ const defaultCreation: DemoCreationConfig = {
   lockZoom: false,
   theme: 'light',
 };
+const instanceIcon = new URL('../assets/instance.webp', import.meta.url).href;
+const defaultCustomPointsUrl = new URL('./custom-points.json', import.meta.url).href;
+const defaultCustomPoints: OEMCustomPoint[] = [
+  {
+    id: 'custom-instance-1',
+    position: { regionId: 'Valley_4', x: 400, y: 562.5, floorId: 'M' },
+    style: 'framed',
+    icon: instanceIcon,
+  },
+  {
+    id: 'custom-instance-2',
+    position: { regionId: 'Valley_4', x: 500, y: 631.25, floorId: 'M' },
+    style: 'framed',
+    icon: instanceIcon,
+  },
+  {
+    id: 'custom-instance-3',
+    position: { regionId: 'Valley_4', x: 575, y: 712.5, floorId: 'M' },
+    style: 'framed',
+    icon: instanceIcon,
+  },
+];
 
 let widget: OEMWidget | undefined;
 let panel: DemoConfigPanel | undefined;
+let customPointsPanel: DemoCustomPointsPanel | undefined;
 let manifest: OEMManifest;
 let versions: readonly DemoVersionOption[] = [];
 let selectedVersion: DemoVersionOption;
 let creation = { ...defaultCreation };
+let customPoints: OEMCustomPoint[] = defaultCustomPoints.map((point) => ({ ...point, position: { ...point.position } }));
+let customPointsUrl: string | undefined = defaultCustomPointsUrl;
 let operation = Promise.resolve();
 
 const reportError = (cause: unknown) => {
   error.textContent = cause instanceof Error ? cause.message : String(cause);
   error.hidden = false;
+};
+
+const handleMapClick = (click: OEMMapClick): void => {
+  customPointsPanel?.setPickStatus(click);
 };
 
 const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
@@ -75,11 +106,13 @@ const mountWidget = async (config: OEMWidgetConfig): Promise<OEMWidget> => {
     resources,
     manifest,
     ...config,
+    ...(customPointsUrl ? { customPointsUrl } : { customPoints }),
     ...creation,
-    onStateChange: (state) => panel?.sync(state, creation),
+    onStateChange: (state) => panel?.sync(state, creation, customPoints, customPointsUrl),
     onError: reportError,
   });
-  panel?.sync(widget.getState(), creation);
+  widget.on('click', handleMapClick);
+  panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
   return widget;
 };
 
@@ -90,9 +123,6 @@ const loadVersion = async (
 ): Promise<void> => {
   const resources: OEMResources = { baseUrl: stableResources.baseUrl, manifestPath: version.manifestPath };
   const nextManifest = preloadedManifest ?? await loadOEMManifest(resources);
-  const pointTypes = await fetchOEMJson<Record<string, OEMPointType>>(
-    resolveOEMAsset(resources.baseUrl, nextManifest.types.path),
-  );
 
   widget?.destroy();
   widget = undefined;
@@ -101,35 +131,59 @@ const loadVersion = async (
   panel = undefined;
   manifest = nextManifest;
   selectedVersion = version;
-  const mountedWidget = await mountWidget(config);
+  const [pointTypes, mountedWidget] = await Promise.all([
+    fetchOEMJson<Record<string, OEMPointType>>(
+      resolveOEMAsset(resources.baseUrl, nextManifest.types.path),
+    ),
+    mountWidget(config),
+  ]);
   panel = createDemoConfigPanel(manifest, pointTypes, defaultMarkerTypes, panelCallbacks, {
     selected: selectedVersion.id,
     options: versions,
   });
   app.append(panel.element);
-  panel.sync(mountedWidget.getState(), creation);
+  panel.sync(mountedWidget.getState(), creation, customPoints, customPointsUrl);
 };
 
 /** Serializes Demo operations so expensive layer updates cannot overlap. */
-const enqueue = (task: () => Promise<void>): void => {
-  operation = operation.then(async () => {
+const enqueue = (task: () => Promise<void>): Promise<boolean> => {
+  const result = operation.then(async () => {
     error.hidden = true;
     panel?.setBusy(true);
+    customPointsPanel?.setBusy(true);
     try {
       await task();
+      return true;
     } catch (cause) {
       reportError(cause);
+      return false;
     } finally {
       panel?.setBusy(false);
+      customPointsPanel?.setBusy(false);
     }
   });
+  operation = result.then(() => undefined);
+  return result;
 };
+
+customPointsPanel = createDemoCustomPointsPanel(defaultCustomPoints, {
+  apply(points) {
+    return enqueue(async () => {
+      widget?.setCustomPoints(points);
+      customPointsUrl = undefined;
+      customPoints = points.map((point) => ({ ...point, position: { ...point.position } }));
+      customPointsPanel?.setPoints(customPoints);
+      if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
+    });
+  },
+});
+app.append(customPointsPanel.element);
 
 const panelCallbacks = {
   update(update: OEMWidgetConfig) {
     enqueue(async () => {
       await widget?.setOptions(update);
-      if (widget) panel?.sync(widget.getState(), creation);
+      if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
     });
   },
   recreate(update: Partial<DemoCreationConfig>) {
@@ -152,6 +206,9 @@ const panelCallbacks = {
   reset() {
     creation = { ...defaultCreation };
     enqueue(async () => {
+      customPoints = defaultCustomPoints.map((point) => ({ ...point, position: { ...point.position } }));
+      customPointsUrl = defaultCustomPointsUrl;
+      customPointsPanel?.setPoints(customPoints);
       await loadVersion(versions[0], defaultConfig);
     });
   },
@@ -171,6 +228,7 @@ const initialize = async () => {
 
   window.addEventListener('beforeunload', () => {
     panel?.destroy();
+    customPointsPanel?.destroy();
     widget?.destroy();
   }, { once: true });
 };

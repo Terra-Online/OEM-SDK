@@ -1,5 +1,5 @@
 import type { OEMManifest, OEMPointType } from '@opendfieldmap/core';
-import type { OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
+import type { OEMCustomPoint, OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
 
 const FLOOR_ORDER = ['L4', 'L3', 'L2', 'L1', 'M', 'B1', 'B2', 'B3', 'B4'];
 const REGION_CODES: Readonly<Record<string, string>> = Object.freeze({
@@ -37,7 +37,7 @@ interface DemoConfigPanelCallbacks {
 export interface DemoConfigPanel {
   element: HTMLDetailsElement;
   setBusy(busy: boolean): void;
-  sync(state: OEMWidgetState, creation: DemoCreationConfig): void;
+  sync(state: OEMWidgetState, creation: DemoCreationConfig, customPoints: readonly OEMCustomPoint[], customPointsUrl?: string): void;
   destroy(): void;
 }
 
@@ -152,7 +152,9 @@ const bindNumberScrubber = (control: DemoNumberControl, commit: () => void): (()
   };
 };
 
-const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLElement): (() => void) => {
+let nextPanelZIndex = 1800;
+
+export const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLElement): (() => void) => {
   const margin = 16;
   let pointerId: number | null = null;
   let startX = 0;
@@ -161,6 +163,10 @@ const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLElement): ((
   let startTop = 0;
   let moved = false;
   let suppressClick = false;
+
+  const bringToFront = (): void => {
+    element.style.zIndex = String(++nextPanelZIndex);
+  };
 
   const place = (left: number, top: number): void => {
     const rect = element.getBoundingClientRect();
@@ -177,6 +183,7 @@ const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLElement): ((
 
   const onPointerDown = (event: PointerEvent): void => {
     if (event.button !== 0 || element.classList.contains('busy')) return;
+    bringToFront();
     const rect = element.getBoundingClientRect();
     pointerId = event.pointerId;
     startX = event.clientX;
@@ -223,6 +230,8 @@ const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLElement): ((
   };
 
   handle.addEventListener('pointerdown', onPointerDown);
+  element.addEventListener('pointerdown', bringToFront);
+  element.addEventListener('focusin', bringToFront);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerEnd);
   window.addEventListener('pointercancel', onPointerEnd);
@@ -230,6 +239,8 @@ const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLElement): ((
   window.addEventListener('resize', onResize);
   return () => {
     handle.removeEventListener('pointerdown', onPointerDown);
+    element.removeEventListener('pointerdown', bringToFront);
+    element.removeEventListener('focusin', bringToFront);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerEnd);
     window.removeEventListener('pointercancel', onPointerEnd);
@@ -256,6 +267,8 @@ const createWidgetCode = (
   manifest: OEMManifest,
   state: OEMWidgetState,
   creation: DemoCreationConfig,
+  customPoints: readonly OEMCustomPoint[],
+  customPointsUrl?: string,
   version?: DemoVersionOption,
 ): string => {
   const region = manifest.regions.find((entry) => entry.id === state.regionId)!;
@@ -288,6 +301,15 @@ const createWidgetCode = (
   if (!state.labels) lines.push('  labels: false,');
   if (state.boundaries) lines.push('  boundaries: true,');
   if (!state.markerClustering) lines.push('  markerClustering: false,');
+  const regionCustomPoints = customPoints.filter((point) => point.position.regionId === state.regionId);
+  if (customPointsUrl && regionCustomPoints.length) {
+    lines.push("  customPointsUrl: new URL('./custom-points.json', import.meta.url).href,");
+  } else if (regionCustomPoints.length) {
+    const serialized = JSON.stringify(regionCustomPoints, null, 2).split('\n');
+    lines.push(`  customPoints: ${serialized[0]}`);
+    lines.push(...serialized.slice(1).map((line) => `  ${line}`));
+    lines[lines.length - 1] += ',';
+  }
   if (Math.abs(state.zoom - presetZoom) > 0.001) lines.push(`  zoom: ${Number(state.zoom.toFixed(2))},`);
   if (Math.abs(state.center.x - presetCenter.x) > 0.5 || Math.abs(state.center.y - presetCenter.y) > 0.5) {
     lines.push(`  center: { x: ${Math.round(state.center.x)}, y: ${Math.round(state.center.y)} },`);
@@ -605,7 +627,7 @@ export function createDemoConfigPanel(
     zoomInput.max = String(region.maxZoom);
   };
 
-  const sync = (state: OEMWidgetState, creation: DemoCreationConfig) => {
+  const sync = (state: OEMWidgetState, creation: DemoCreationConfig, customPoints: readonly OEMCustomPoint[], customPointsUrl?: string) => {
     updateRegionOptions(state);
     regionSelect.value = state.regionId;
     subregionSelect.value = state.subregionId ?? '';
@@ -636,7 +658,7 @@ export function createDemoConfigPanel(
     lockDrag.input.checked = creation.lockDrag;
     lockZoom.input.checked = creation.lockZoom;
     const selectedVersion = versions?.options.find((version) => version.id === versions.selected);
-    code.value = createWidgetCode(manifest, state, creation, selectedVersion);
+    code.value = createWidgetCode(manifest, state, creation, customPoints, customPointsUrl, selectedVersion);
   };
 
   regionSelect.addEventListener('change', () => callbacks.update({ region: regionSelect.value as OEMRegionSelector }));

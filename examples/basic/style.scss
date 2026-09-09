@@ -1,10 +1,6 @@
 @use '../../packages/map/src/styles/palette.scss' as *;
 @use '../../packages/map/src/styles/curves.scss' as *;
 
-/* Google Fonts CSS insertion point: add a selected @import here, then update
-   --demo-font-ui below. The HTML link location is in demo/index.html. */
-@import url('https://fonts.googleapis.com/css2?family=Geist:ital,wght@0,100..900;1,100..900&family=Noto+Sans+Arabic:wght@100..900&family=Noto+Sans+SC:wght@100..900&family=Noto+Sans+Thai:wght@100..900&family=Raleway:ital,wght@0,100..900;1,100..900&family=Roboto+Slab:wght@100..900&family=Zilla+Slab+Highlight:wght@400;700&display=swap');
-
 ::selection {
   background: rgba($primary-accent-4, 0.8);
   color: $black-1;
@@ -64,6 +60,12 @@ body,
   font-family: inherit;
   font-size: 13px;
   letter-spacing: 0;
+}
+
+.demoCustomPointsPanel {
+  left: 1rem;
+  right: auto;
+  width: min(350px, max(180px, calc(100vw - 5rem)));
 }
 
 .demoPanelSummary {
@@ -129,13 +131,15 @@ body,
 
 .demoPanelBody,
 .demoMarkerOptions,
-.demoCode {
+.demoCode,
+.demoCustomPointsCode {
   scrollbar-width: none;
 }
 
 .demoPanelBody::-webkit-scrollbar,
 .demoMarkerOptions::-webkit-scrollbar,
-.demoCode::-webkit-scrollbar {
+.demoCode::-webkit-scrollbar,
+.demoCustomPointsCode::-webkit-scrollbar {
   display: none;
 }
 
@@ -707,6 +711,93 @@ body,
   box-shadow: 0 0 4px rgba($black-0, 0.12);
 }
 
+.demoCustomPointsDescription {
+  margin: 0 0 9px;
+  color: $dim-1;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.demoCustomPointsEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.demoCustomPointsCode {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+  max-height: 42dvh;
+  margin: 0;
+  padding: 9px;
+  overflow: auto;
+  scrollbar-width: none;
+  border: 1px solid rgba($white-0, 0.58);
+  border-radius: 5px;
+  resize: vertical;
+  color: $grey-1;
+  background: rgba($white-0, 0.52);
+  font-family: var(--demo-font-code);
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre;
+  outline: 0;
+  box-shadow: 0 0 4px rgba($black-0, 0.12);
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.demoCustomPointsCode:hover {
+  background: rgba($white-0, 0.72);
+  box-shadow: 0 2px 5px rgba($black-0, 0.12);
+}
+
+.demoCustomPointsCode:focus-visible {
+  background: rgba($white-0, 0.8);
+  box-shadow: 0 0 0 1.5px rgba($primary-accent-5, 0.72), 0 3px 7px rgba($black-0, 0.16);
+}
+
+.demoCustomPointsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.demoApply {
+  min-width: 52px;
+  height: 23px;
+  padding: 0 7px;
+  border: 1px solid $primary-accent-6;
+  border-radius: 5px;
+  color: $primary-accent-7;
+  background: rgba($primary-accent-4, 0.2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.demoApply:hover,
+.demoApply:focus-visible {
+  border-color: $primary-accent-7;
+  background: rgba($primary-accent-4, 0.38);
+  box-shadow: 0 2px 6px rgba($primary-accent-7, 0.2);
+  outline: 0;
+}
+
+.demoApply:active { transform: translateY(1px) scale(0.98); box-shadow: 0 1px 2px rgba($primary-accent-7, 0.18); }
+
+.demoCustomPointsStatus {
+  min-height: 16px;
+  margin-top: 7px;
+  color: $dim-1;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.demoCustomPointsStatus.failed { color: $primary-accent-7; }
+
 .demoPanel :disabled {
   cursor: not-allowed;
 }
@@ -714,6 +805,10 @@ body,
 @media (max-width: 600px) {
   .demoPanel {
     width: min(292px, max(180px, calc(100vw - 5rem)));
+  }
+
+  .demoCustomPointsPanel {
+    width: min(350px, max(180px, calc(100vw - 5rem)));
   }
 
 }
