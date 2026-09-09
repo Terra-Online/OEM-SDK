@@ -5,8 +5,10 @@ import {
   fetchOEMJson,
   fromOEMLeafletPosition,
   getOEMRegion,
+  mapToGameXZPosition,
   normalizeOEMLocale,
   resolveOEMAsset,
+  toOEMLeafletMapPosition,
   toOEMLeafletPosition,
 } from '@opendfieldmap/core';
 import type {
@@ -18,12 +20,13 @@ import type {
   OEMManifest,
   OEMPoint,
   OEMPointFilter,
+  OEMMapPosition,
   OEMPointType,
   OEMPosition,
   OEMRegion,
   OEMView,
 } from '@opendfieldmap/core';
-import type { OEM as OEMContract, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions } from './types';
+import type { OEM as OEMContract, OEMCustomPoint, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions } from './types';
 import { SmoothTileLayer } from './atlos/smoothTileLayer';
 import { enableSmoothWheelZoom } from './atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from './atlos/mapOverdrag';
@@ -51,6 +54,17 @@ const sameFilter = (left: OEMPointFilter, right: OEMPointFilter): boolean =>
   left.floorOnly === right.floorOnly &&
   sameList(left.types, right.types) &&
   sameList(left.subregions, right.subregions);
+
+const clonePoint = (point: OEMPoint): OEMPoint => ({
+  ...point,
+  raw: { ...point.raw },
+  position: { ...point.position },
+});
+
+const cloneCustomPoint = (point: OEMCustomPoint): OEMCustomPoint => ({
+  ...point,
+  position: { ...point.position },
+});
 
 /** Leaflet marker with the subpixel positioning used by Atlos. */
 class OEMMarker extends L.Marker {
@@ -100,10 +114,16 @@ export class OEM implements OEMContract {
   private baseTiles?: L.TileLayer;
   private floorTiles?: L.TileLayer;
   private pointsLayer = L.layerGroup();
+  private customPointsLayer = L.layerGroup();
   private pointClusters = new Map<string, L.MarkerClusterGroup>();
   private labelsLayer = L.layerGroup();
   private boundariesLayer = L.layerGroup();
   private points: OEMPoint[] = [];
+  private customPoints: OEMCustomPoint[] = [];
+  private customPointsRequest?: { controller: AbortController; promise: Promise<void> };
+  private pointIndex?: Record<string, string>;
+  private pointIndexRequest?: Promise<Record<string, string>>;
+  private pointShardRequests = new Map<string, Promise<OEMPoint[]>>();
   private types: Record<string, OEMPointType> = {};
   private labels: OEMLabel[] = [];
   private visibleLabelType?: OEMLabel['type'];
@@ -117,12 +137,15 @@ export class OEM implements OEMContract {
   private observer?: ResizeObserver;
   private updatingView = false;
   private emittedView?: OEMView;
+  private overdragFrame?: number;
+  private overdragged = false;
   private wheel: ReturnType<typeof enableSmoothWheelZoom>;
 
   constructor(private container: HTMLElement, readonly manifest: OEMManifest, private options: OEMOptions) {
     if (mounted.has(container)) throw new Error('This container already hosts an OEM instance');
     this.region = getOEMRegion(manifest, options.view?.regionId ?? options.regionId ?? manifest.defaultRegionId);
     this.filter = cloneFilter(options.pointFilter ?? {});
+    this.customPoints = this.normalizeCustomPoints(options.customPoints ?? []);
     this.markerClustering = options.markerClustering ?? true;
     const initialFloor = options.view?.floorId ?? options.floorId ?? 'M';
     this.validateFloor(initialFloor);
@@ -149,6 +172,7 @@ export class OEM implements OEMContract {
     pane.style.zIndex = '650';
     pane.style.pointerEvents = 'none';
     this.pointsLayer.addTo(this.map);
+    this.customPointsLayer.addTo(this.map);
     this.labelsLayer.addTo(this.map);
     this.boundariesLayer.addTo(this.map);
     const credit = document.createElement('div');
@@ -180,12 +204,11 @@ export class OEM implements OEMContract {
     this.root.append(credit);
     this.applyRegion(options.view);
     this.setFloor(initialFloor);
+    this.renderCustomPoints();
+    this.map.on('click', this.emitMapClick);
     this.map.on('moveend zoomend', this.emitView);
-    this.map.on('move drag', () => {
-      const bounds = toMapBounds(this.map.options.maxBounds);
-      this.root.classList.toggle('overdrag', !!bounds && isMapOverdragged(this.map, bounds));
-    });
-    this.map.on('moveend dragend zoomstart', () => this.root.classList.remove('overdrag'));
+    this.map.on('move drag', this.scheduleOverdragUpdate);
+    this.map.on('moveend dragend movestart zoomstart', this.clearOverdrag);
     if (typeof ResizeObserver !== 'undefined') {
       this.observer = new ResizeObserver(() => this.resize());
       this.observer.observe(container);
@@ -199,13 +222,92 @@ export class OEM implements OEMContract {
     if (!this.region.floors.some((floor) => floor.id === id)) throw new Error(`Unknown floor ${id} in ${this.region.id}`);
   }
   private validatePosition(position: OEMPosition): void { toOEMLeafletPosition(position, this.region); }
+  private normalizeCustomPoints(points: readonly OEMCustomPoint[]): OEMCustomPoint[] {
+    const ids = new Set<string>();
+    return points.map((point) => {
+      if (!point || typeof point.id !== 'string' || !point.id.trim()) {
+        throw new Error(`Custom point IDs must be non-empty and unique: ${point?.id}`);
+      }
+      const id = point.id.trim();
+      if (ids.has(id)) throw new Error(`Custom point IDs must be non-empty and unique: ${id}`);
+      ids.add(id);
+      if (!point.position || typeof point.position.regionId !== 'string') {
+        throw new Error(`Invalid custom point position: ${id}`);
+      }
+      if (point.style !== 'framed' && point.style !== 'no-frame') {
+        throw new Error(`Invalid custom point style: ${id}`);
+      }
+      if (typeof point.icon !== 'string' || !point.icon) {
+        throw new Error(`Custom point icon must be a non-empty URL: ${id}`);
+      }
+      const pointRegion = getOEMRegion(this.manifest, point.position.regionId);
+      toOEMLeafletMapPosition(point.position);
+      if (point.position.subregionId && !pointRegion.subregions.some((subregion) => subregion.id === point.position.subregionId)) {
+        throw new Error(`Unknown custom point subregion ${point.position.subregionId} in ${point.position.regionId}`);
+      }
+      if (point.position.floorId && !pointRegion.floors.some((floor) => floor.id === point.position.floorId)) {
+        throw new Error(`Unknown custom point floor ${point.position.floorId} in ${point.position.regionId}`);
+      }
+      return { ...cloneCustomPoint(point), id };
+    });
+  }
   private position(latlng: L.LatLng): OEMPosition {
     return fromOEMLeafletPosition(latlng.lat, latlng.lng, this.region, this.floorId);
   }
+  private inferSubregionId(x: number, y: number): string | undefined {
+    const selected = this.filter.subregions?.filter((id) => this.region.subregions.some((subregion) => subregion.id === id));
+    if (selected?.length === 1) {
+      const subregion = this.region.subregions.find((entry) => entry.id === selected[0]);
+      if (!subregion?.bounds) return subregion?.id;
+      const scale = 2 ** this.region.maxNativeZoom;
+      const [[minX, minY], [maxX, maxY]] = subregion.bounds;
+      const pixelX = x * scale;
+      const pixelY = y * scale;
+      if (pixelX >= minX && pixelX <= maxX && pixelY >= minY && pixelY <= maxY) return subregion.id;
+    }
+    const scale = 2 ** this.region.maxNativeZoom;
+    const pixelX = x * scale;
+    const pixelY = y * scale;
+    return this.region.subregions.find((subregion) => {
+      if (!subregion.bounds) return false;
+      const [[minX, minY], [maxX, maxY]] = subregion.bounds;
+      return pixelX >= minX && pixelX <= maxX && pixelY >= minY && pixelY <= maxY;
+    })?.id;
+  }
+  private emitMapClick = (event: L.LeafletMouseEvent): void => {
+    if (this.destroyed) return;
+    const subregionId = this.inferSubregionId(event.latlng.lng, -event.latlng.lat);
+    const position: OEMMapPosition = {
+      regionId: this.region.id,
+      x: event.latlng.lng,
+      y: -event.latlng.lat,
+      floorId: this.floorId,
+      ...(subregionId ? { subregionId } : {}),
+    };
+    this.emit('click', { position, game: mapToGameXZPosition(position, this.region) });
+  };
   private emit<Event extends keyof OEMEvents>(event: Event, payload: OEMEvents[Event]): void {
     this.listeners.get(event)?.forEach((handler) => handler(payload as never));
     if (event === 'error') this.options.onError?.(payload as Error);
   }
+  private scheduleOverdragUpdate = (): void => {
+    if (this.overdragFrame !== undefined) return;
+    this.overdragFrame = requestAnimationFrame(() => {
+      this.overdragFrame = undefined;
+      const bounds = toMapBounds(this.map.options.maxBounds);
+      const overdragged = !!bounds && isMapOverdragged(this.map, bounds);
+      if (overdragged === this.overdragged) return;
+      this.overdragged = overdragged;
+      this.root.classList.toggle('overdrag', overdragged);
+    });
+  };
+  private clearOverdrag = (): void => {
+    if (this.overdragFrame !== undefined) cancelAnimationFrame(this.overdragFrame);
+    this.overdragFrame = undefined;
+    if (!this.overdragged) return;
+    this.overdragged = false;
+    this.root.classList.remove('overdrag');
+  };
   /** Emits one resolved view for duplicate Leaflet move and zoom events. */
   private emitView = (): void => {
     if (this.destroyed || this.updatingView) return;
@@ -306,6 +408,7 @@ export class OEM implements OEMContract {
     this.labelsLayer.clearLayers();
     this.boundariesLayer.clearLayers();
     this.applyRegion();
+    this.renderCustomPoints();
     this.emit('regionchange', { regionId });
     this.emit('floorchange', { floorId: 'M' });
     this.emitView();
@@ -323,6 +426,7 @@ export class OEM implements OEMContract {
     if (base) base.style.filter = floorId === 'M' ? 'brightness(1)' : 'brightness(0.5)';
     if (floorId !== 'M') this.floorTiles = this.makeTiles(floorId).addTo(this.map);
     this.renderPoints();
+    this.renderCustomPoints();
     this.emit('floorchange', { floorId });
     this.emitView();
   }
@@ -358,6 +462,131 @@ export class OEM implements OEMContract {
     }
     await Promise.all(loads);
   }
+
+  /** Replaces host-defined points without reloading static map data. */
+  setCustomPoints(points: readonly OEMCustomPoint[]): void {
+    this.assertAlive();
+    this.customPointsRequest?.controller.abort();
+    this.customPointsRequest = undefined;
+    this.customPoints = this.normalizeCustomPoints(points);
+    this.renderCustomPoints();
+  }
+
+  loadCustomPoints(url: string): Promise<void> {
+    this.assertAlive();
+    const value = url.trim();
+    if (!value) throw new Error('Custom points URL must be a non-empty URL');
+    let resolvedUrl: string;
+    try {
+      resolvedUrl = new URL(value, document.baseURI).toString();
+    } catch {
+      throw new Error(`Invalid custom points URL: ${url}`);
+    }
+    this.customPointsRequest?.controller.abort();
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    this.options.signal?.addEventListener('abort', abort, { once: true });
+    const request: { controller: AbortController; promise: Promise<void> } = { controller, promise: Promise.resolve() };
+    request.promise = fetchOEMJson<unknown>(resolvedUrl, controller.signal).then((value) => {
+      if (!Array.isArray(value)) throw new Error('Custom points JSON must be an array');
+      const points = value.map((point) => {
+        if (!point || typeof point !== 'object' || typeof (point as { icon?: unknown }).icon !== 'string') return point as OEMCustomPoint;
+        return {
+          ...(point as OEMCustomPoint),
+          icon: new URL((point as OEMCustomPoint).icon, resolvedUrl).toString(),
+        };
+      });
+      if (controller.signal.aborted || this.destroyed) return;
+      this.customPoints = this.normalizeCustomPoints(points);
+      this.renderCustomPoints();
+    }).finally(() => {
+      this.options.signal?.removeEventListener('abort', abort);
+      if (this.customPointsRequest === request) this.customPointsRequest = undefined;
+    });
+    this.customPointsRequest = request;
+    return request.promise;
+  }
+
+  /** Removes all host-defined points from this map instance. */
+  clearCustomPoints(): void {
+    this.assertAlive();
+    this.customPointsRequest?.controller.abort();
+    this.customPointsRequest = undefined;
+    this.customPoints = [];
+    this.customPointsLayer.clearLayers();
+  }
+
+  /** Returns a loaded published point from the current region, if available. */
+  getPoint(pointId: string): OEMPoint | undefined {
+    this.assertAlive();
+    const id = pointId.trim();
+    if (!id) throw new Error('Point ID must not be empty');
+    const point = this.points.find((entry) => entry.id === id);
+    return point ? clonePoint(point) : undefined;
+  }
+
+  /** Loads one published point by using the release point index when available. */
+  async loadPoint(pointId: string): Promise<OEMPoint | undefined> {
+    this.assertAlive();
+    const id = pointId.trim();
+    if (!id) throw new Error('Point ID must not be empty');
+    const loaded = this.getPoint(id);
+    if (loaded) return loaded;
+
+    const pointIndex = await this.loadPointIndex();
+    this.assertAlive();
+    const paths = pointIndex[id]
+      ? [pointIndex[id]]
+      : this.manifest.pointIndex
+        ? []
+        : this.manifest.regions.flatMap((region) => region.points.map((ref) => ref.path));
+    for (const path of paths) {
+      const points = await this.loadPointShard(path);
+      const point = points.find((entry) => entry.id === id);
+      if (point) return clonePoint(point);
+    }
+    return undefined;
+  }
+
+  private async loadPointIndex(): Promise<Record<string, string>> {
+    if (!this.manifest.pointIndex) return {};
+    if (this.pointIndex) return this.pointIndex;
+    if (!this.pointIndexRequest) {
+      this.pointIndexRequest = fetchOEMJson<unknown>(
+        resolveOEMAsset(this.options.resources.baseUrl, this.manifest.pointIndex.path),
+        this.options.signal,
+      ).then((value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid OEM point index');
+        const index: Record<string, string> = {};
+        for (const [id, path] of Object.entries(value)) {
+          if (!id || typeof path !== 'string' || !path) throw new Error(`Invalid OEM point index entry: ${id}`);
+          resolveOEMAsset(this.options.resources.baseUrl, path);
+          index[id] = path;
+        }
+        this.pointIndex = index;
+        return index;
+      }).catch((error) => {
+        this.pointIndexRequest = undefined;
+        throw error;
+      });
+    }
+    return this.pointIndexRequest;
+  }
+
+  private loadPointShard(path: string): Promise<OEMPoint[]> {
+    const cached = this.pointShardRequests.get(path);
+    if (cached) return cached;
+    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, path), this.options.signal).then((value) => {
+      if (!Array.isArray(value)) throw new Error(`Invalid OEM point shard: ${path}`);
+      return value as OEMPoint[];
+    }).catch((error) => {
+      if (this.pointShardRequests.get(path) === request) this.pointShardRequests.delete(path);
+      throw error;
+    });
+    this.pointShardRequests.set(path, request);
+    return request;
+  }
+
   private cancelRequest(feature: keyof OEMFeatures): void {
     if (!this.requests.has(feature)) return;
     this.requests.get(feature)!.abort();
@@ -436,6 +665,46 @@ export class OEM implements OEMContract {
       group.remove();
     }
     this.pointClusters.clear();
+  }
+
+  private createCustomPointVisual(point: OEMCustomPoint): HTMLElement {
+    const inner = document.createElement('div');
+    inner.className = point.style === 'no-frame' ? 'noFrameInner' : 'markerInner';
+    inner.setAttribute('aria-label', point.id);
+    if (point.position.floorId && point.position.floorId !== this.floorId) inner.classList.add('offLayer');
+    const image = document.createElement('img');
+    image.src = point.icon;
+    image.alt = point.id;
+    image.draggable = false;
+    if (point.style === 'no-frame') {
+      image.className = 'noFrameImage';
+      inner.append(image);
+    } else {
+      const frame = document.createElement('div');
+      frame.className = 'frameImage';
+      frame.append(image);
+      inner.append(frame);
+    }
+    return inner;
+  }
+
+  private renderCustomPoints(): void {
+    this.customPointsLayer.clearLayers();
+    for (const point of this.customPoints) {
+      if (point.position.regionId !== this.region.id) continue;
+      const marker = new OEMMarker(toOEMLeafletMapPosition(point.position), {
+        interactive: false,
+        keyboard: false,
+        bubblingMouseEvents: false,
+        icon: L.divIcon({
+          html: this.createCustomPointVisual(point),
+          className: `${point.style === 'no-frame' ? 'noFrameMarkerIcon' : 'frameMarkerIcon'} incompleteMarker`,
+          iconSize: point.style === 'no-frame' ? [50, 50] : [32, 32],
+          iconAnchor: point.style === 'no-frame' ? [25, 25] : [16, 32],
+        }),
+      });
+      marker.addTo(this.customPointsLayer);
+    }
   }
 
   /** Builds the shared Atlos marker composition for points and cluster summaries. */
@@ -569,6 +838,9 @@ export class OEM implements OEMContract {
     if (this.destroyed) return;
     this.destroyed = true;
     this.cancelRequests();
+    this.customPointsRequest?.controller.abort();
+    this.customPointsRequest = undefined;
+    if (this.overdragFrame !== undefined) cancelAnimationFrame(this.overdragFrame);
     this.observer?.disconnect();
     this.wheel.dispose();
     this.options.signal?.removeEventListener('abort', this.destroy);
@@ -576,6 +848,9 @@ export class OEM implements OEMContract {
     this.map.remove();
     this.root.remove();
     this.points = [];
+    this.customPoints = [];
+    this.customPointsLayer.clearLayers();
+    this.pointShardRequests.clear();
     mounted.delete(this.container);
   };
 }
