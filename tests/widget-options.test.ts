@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OEMManifest, OEMView } from '@opendfieldmap/core';
+import type { OEMManifest, OEMPoint, OEMView } from '@opendfieldmap/core';
+import type { OEMMapClick } from '@opendfieldmap/map';
 
 const { createOEM } = vi.hoisted(() => ({ createOEM: vi.fn() }));
 
@@ -66,6 +67,11 @@ const makeCore = () => {
     setTheme: vi.fn(),
     setFeatures: vi.fn(async (): Promise<void> => undefined),
     setPointFilter: vi.fn(),
+    setCustomPoints: vi.fn(),
+    loadCustomPoints: vi.fn(async (): Promise<void> => undefined),
+    clearCustomPoints: vi.fn(),
+    getPoint: vi.fn((): OEMPoint | undefined => undefined),
+    loadPoint: vi.fn(async (): Promise<OEMPoint | undefined> => undefined),
     setMarkerClustering: vi.fn(),
     resize: vi.fn(),
     on: vi.fn(() => () => undefined),
@@ -138,6 +144,88 @@ describe('widget creation options', () => {
     expect(core.setFeatures).not.toHaveBeenCalled();
     expect(core.setPointFilter).not.toHaveBeenCalled();
     expect(core.setView).not.toHaveBeenCalled();
+    widget.destroy();
+  });
+
+  it('exposes host-defined points and indexed point lookup', async () => {
+    const core = makeCore();
+    const point = {
+      id: '2100500004',
+      regionId: 'Valley_4',
+      subregionId: 'VL_1',
+      type: 'crate_i',
+      tier: 0,
+      raw: { x: 1, y: 2, z: 3 },
+      position: { regionId: 'Valley_4', x: 8, y: -24, floorId: 'M' },
+    };
+    core.getPoint.mockReturnValue(point);
+    core.loadPoint.mockResolvedValue(point);
+    createOEM.mockResolvedValue(core);
+    const host = document.createElement('div');
+    document.body.append(host);
+
+    const { createOEMWidget } = await import('@opendfieldmap/sdk');
+    const customPoints = [{
+      id: 'route-start',
+      position: { regionId: 'Valley_4', x: 400, y: 600 },
+      style: 'framed' as const,
+      icon: '/icons/route-start.webp',
+    }];
+    const widget = await createOEMWidget(host, { manifest, labels: false, customPoints });
+
+    expect(createOEM).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({ customPoints }));
+    widget.setCustomPoints(customPoints);
+    widget.clearCustomPoints();
+    await widget.setOptions({ customPoints });
+    expect(core.setCustomPoints).toHaveBeenCalledWith(customPoints);
+    expect(core.clearCustomPoints).toHaveBeenCalledOnce();
+    expect(widget.getPoint('2100500004')).toEqual(point);
+    await expect(widget.loadPoint('2100500004')).resolves.toEqual(point);
+    expect(core.getPoint).toHaveBeenCalledWith('2100500004');
+    expect(core.loadPoint).toHaveBeenCalledWith('2100500004');
+    widget.destroy();
+  });
+
+  it('supports URL-backed custom points without embedding the data in Widget options', async () => {
+    const core = makeCore();
+    createOEM.mockResolvedValue(core);
+    const host = document.createElement('div');
+    document.body.append(host);
+
+    const { createOEMWidget } = await import('@opendfieldmap/sdk');
+    const widget = await createOEMWidget(host, { manifest, labels: false, customPointsUrl: '/data/custom-points.json' });
+
+    expect(createOEM).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
+      customPoints: undefined,
+      customPointsUrl: '/data/custom-points.json',
+    }));
+    await widget.loadCustomPoints('/data/other-points.json');
+    expect(core.loadCustomPoints).toHaveBeenCalledWith('/data/other-points.json');
+    await widget.setOptions({ customPointsUrl: '/data/final-points.json' });
+    expect(core.loadCustomPoints).toHaveBeenLastCalledWith('/data/final-points.json');
+    widget.destroy();
+  });
+
+  it('forwards map click coordinates through the Widget handle', async () => {
+    const core = makeCore();
+    createOEM.mockResolvedValue(core);
+    const host = document.createElement('div');
+    document.body.append(host);
+
+    const { createOEMWidget } = await import('@opendfieldmap/sdk');
+    const widget = await createOEMWidget(host, { manifest, labels: false });
+    const received: OEMMapClick[] = [];
+    const unsubscribe = widget.on('click', (payload) => received.push(payload));
+    const coreClick = (core.on.mock.calls as unknown[][]).find(([event]) => event === 'click')?.[1] as unknown as ((payload: OEMMapClick) => void);
+    const payload: OEMMapClick = {
+      position: { regionId: 'Valley_4', x: 400.0071, y: 562.8297, floorId: 'M' },
+      game: { x: 400.0071, z: -562.8297 },
+    };
+    coreClick(payload);
+    expect(received).toEqual([payload]);
+    unsubscribe();
+    coreClick(payload);
+    expect(received).toHaveLength(1);
     widget.destroy();
   });
 

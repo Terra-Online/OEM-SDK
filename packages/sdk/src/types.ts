@@ -1,4 +1,5 @@
-import type { OEMManifest, OEMResources } from '@opendfieldmap/core';
+import type { OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
+import type { OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
 
 /** Stable top-level region identifiers published by OEM. */
 export type OEMRegionId = 'Valley_4' | 'Wuling' | 'Dijiang' | 'Weekraid_1';
@@ -57,6 +58,10 @@ export interface OEMWidgetConfig {
   boundaries?: boolean;
   /** Whether nearby markers are grouped by point type. Defaults to true. */
   markerClustering?: boolean;
+  /** Host-defined points rendered above the static map data. */
+  customPoints?: readonly OEMCustomPoint[];
+  /** URL of a JSON array of host-defined points. It replaces customPoints. */
+  customPointsUrl?: string;
   /** Initial zoom, clamped to the selected region's supported range. Defaults to the region preset. */
   zoom?: number;
   /** Initial map center. Defaults to the selected region or subregion preset. */
@@ -104,6 +109,11 @@ export interface OEMWidgetState {
   center: OEMWidgetCenter;
 }
 
+/** Events exposed by the embeddable Widget. */
+export interface OEMWidgetEvents {
+  click: OEMMapClick;
+}
+
 /**
  * Restricted Widget handle exposed to host applications.
  *
@@ -113,6 +123,12 @@ export interface OEMWidget {
   readonly destroyed: boolean;
   getState(): OEMWidgetState;
   setOptions(options: OEMWidgetConfig): Promise<void>;
+  setCustomPoints(points: readonly OEMCustomPoint[]): void;
+  loadCustomPoints(url: string): Promise<void>;
+  clearCustomPoints(): void;
+  getPoint(pointId: string): OEMPoint | undefined;
+  loadPoint(pointId: string): Promise<OEMPoint | undefined>;
+  on<Event extends keyof OEMWidgetEvents>(event: Event, handler: (payload: OEMWidgetEvents[Event]) => void): () => void;
   resize(): void;
   destroy(): void;
 }

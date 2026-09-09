@@ -7,7 +7,7 @@ import {
 } from '@opendfieldmap/core';
 import type { OEMManifest, OEMRegion, OEMResources, OEMSubregion } from '@opendfieldmap/core';
 import { createOEM } from '@opendfieldmap/map';
-import type { OEM } from '@opendfieldmap/map';
+import type { OEM, OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
 import { mountControls } from './components';
 import type { Control } from './components/types';
 import { installFonts } from './fonts';
@@ -17,6 +17,7 @@ import type {
   OEMRegionId,
   OEMWidget,
   OEMWidgetConfig,
+  OEMWidgetEvents,
   OEMWidgetOptions,
   OEMWidgetState,
 } from './types';
@@ -39,6 +40,7 @@ const cloneState = (state: OEMWidgetState): OEMWidgetState => ({
 const cloneConfig = (config: OEMWidgetConfig): OEMWidgetConfig => ({
   ...config,
   markerTypes: Array.isArray(config.markerTypes) ? [...config.markerTypes] : config.markerTypes,
+  customPoints: config.customPoints?.map((point) => ({ ...point, position: { ...point.position } })),
   center: config.center ? { ...config.center } : config.center,
 });
 
@@ -157,8 +159,11 @@ class Widget implements OEMWidget {
   destroyed = false;
   private applying = false;
   private updates = Promise.resolve();
+  private customPointsUrl?: string;
   private controls: Control;
-  private unsubscribe: () => void;
+  private unsubscribeView: () => void;
+  private unsubscribeClick: () => void;
+  private listeners = new Map<keyof OEMWidgetEvents, Set<(payload: never) => void>>();
 
   constructor(
     private host: HTMLElement,
@@ -168,6 +173,7 @@ class Widget implements OEMWidget {
     private options: OEMWidgetOptions,
     private state: OEMWidgetState,
   ) {
+    this.customPointsUrl = options.customPointsUrl;
     this.controls = mountControls(root, {
       regionSelector: options.showRegionSelector ?? true,
       floorSelector: options.showFloorSelector ?? true,
@@ -181,7 +187,8 @@ class Widget implements OEMWidget {
       zoomTo: (zoom, zoomOptions) => core.setZoom(zoom, zoomOptions),
     });
     this.controls.sync(state);
-    this.unsubscribe = core.on('viewchange', this.syncView);
+    this.unsubscribeView = core.on('viewchange', this.syncView);
+    this.unsubscribeClick = core.on('click', this.forwardClick);
     options.signal?.addEventListener('abort', this.destroy, { once: true });
   }
 
@@ -196,6 +203,14 @@ class Widget implements OEMWidget {
   private notify(): void {
     this.options.onStateChange?.(cloneState(this.state));
   }
+
+  private emit<Event extends keyof OEMWidgetEvents>(event: Event, payload: OEMWidgetEvents[Event]): void {
+    this.listeners.get(event)?.forEach((handler) => handler(payload as never));
+  }
+
+  private forwardClick = (payload: OEMMapClick): void => {
+    if (!this.destroyed) this.emit('click', payload);
+  };
 
   private syncView = (): void => {
     if (this.destroyed || this.applying) return;
@@ -215,6 +230,41 @@ class Widget implements OEMWidget {
   getState(): OEMWidgetState {
     this.assertAlive();
     return cloneState(this.state);
+  }
+
+  setCustomPoints(points: readonly OEMCustomPoint[]): void {
+    this.assertAlive();
+    this.core.setCustomPoints(points);
+    this.customPointsUrl = undefined;
+  }
+
+  async loadCustomPoints(url: string): Promise<void> {
+    this.assertAlive();
+    await this.core.loadCustomPoints(url);
+    this.customPointsUrl = url;
+  }
+
+  clearCustomPoints(): void {
+    this.assertAlive();
+    this.core.clearCustomPoints();
+  }
+
+  getPoint(pointId: string) {
+    this.assertAlive();
+    return this.core.getPoint(pointId);
+  }
+
+  loadPoint(pointId: string) {
+    this.assertAlive();
+    return this.core.loadPoint(pointId);
+  }
+
+  on<Event extends keyof OEMWidgetEvents>(event: Event, handler: (payload: OEMWidgetEvents[Event]) => void): () => void {
+    this.assertAlive();
+    const handlers = this.listeners.get(event) ?? new Set();
+    handlers.add(handler as (payload: never) => void);
+    this.listeners.set(event, handlers);
+    return () => { handlers.delete(handler as (payload: never) => void); };
   }
 
   setOptions(update: OEMWidgetConfig): Promise<void> {
@@ -253,7 +303,11 @@ class Widget implements OEMWidget {
 
     const previous = this.state;
     const next = normalizeState(merged, this.manifest);
-    if (sameState(previous, next)) return;
+    if (changes.customPoints !== undefined && changes.customPointsUrl !== undefined) {
+      throw new Error('Pass either customPoints or customPointsUrl, not both');
+    }
+    const customPointsChanged = changes.customPoints !== undefined || changes.customPointsUrl !== undefined;
+    if (sameState(previous, next) && !customPointsChanged) return;
 
     const regionChanged = next.regionId !== previous.regionId;
     const filterChanged = next.subregionId !== previous.subregionId ||
@@ -269,6 +323,13 @@ class Widget implements OEMWidget {
     this.applying = true;
     this.root.classList.add('loading');
     try {
+      if (changes.customPoints !== undefined) {
+        this.core.setCustomPoints(changes.customPoints);
+        this.customPointsUrl = undefined;
+      } else if (changes.customPointsUrl !== undefined) {
+        await this.core.loadCustomPoints(changes.customPointsUrl);
+        this.customPointsUrl = changes.customPointsUrl;
+      }
       if (previousMarkers && !nextMarkers) await this.core.setFeatures({ points: false });
       if (filterChanged) {
         this.core.setPointFilter({
@@ -323,7 +384,9 @@ class Widget implements OEMWidget {
   destroy = (): void => {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.unsubscribe();
+    this.unsubscribeView();
+    this.unsubscribeClick();
+    this.listeners.clear();
     this.controls.destroy?.();
     this.options.signal?.removeEventListener('abort', this.destroy);
     this.core.destroy();
@@ -338,6 +401,9 @@ export async function createOEMWidget(
   options: OEMWidgetOptions = {},
 ): Promise<OEMWidget> {
   if (typeof document === 'undefined') throw new Error('createOEMWidget must run in a browser');
+  if (options.customPoints !== undefined && options.customPointsUrl !== undefined) {
+    throw new Error('Pass either customPoints or customPointsUrl, not both');
+  }
   options.signal?.throwIfAborted();
   const host = resolveContainer(container);
   if (mounted.has(host)) throw new Error('This container already hosts an OEM Widget');
@@ -381,6 +447,8 @@ export async function createOEMWidget(
         boundaries: state.boundaries,
       },
       markerClustering: state.markerClustering,
+      customPoints: options.customPoints,
+      customPointsUrl: options.customPointsUrl,
       pointFilter: {
         types: state.markerTypes === '*' ? undefined : state.markerTypes,
         subregions: state.subregionId ? [state.subregionId] : undefined,
