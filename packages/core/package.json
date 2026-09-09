@@ -1,6 +1,6 @@
 {
   "name": "@opendfieldmap/core",
-  "version": "0.1.0-alpha.0",
+  "version": "0.2.0-beta",
   "description": "Static protocol and coordinate types for Open Endfield Map",
   "type": "module",
   "license": "AGPL-3.0-only",
