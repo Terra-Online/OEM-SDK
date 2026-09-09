@@ -83,7 +83,7 @@
   flex-direction: column;
   gap: 0.5rem;
   pointer-events: auto;
-  font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family: 'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   font-variant-numeric: lining-nums;
   font-feature-settings: 'lnum' 1, 'onum' 0, 'case' 1;
 }
@@ -127,7 +127,7 @@
   border-radius: 2px;
   background: var(--switchItem);
   filter: drop-shadow(0 0 2px rgba($black-0, 0.6));
-  font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family: 'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   line-height: 1;
 }
 
@@ -270,7 +270,7 @@
 
 .floorItem,
 .subregionItem {
-  font-family: 'Novecento Bold', 'Novecento Cyrillic DemiBold', 'Novecento Vietnamese DemiBold', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family: 'Novecento Wide Bold', 'Novecento Cyrillic DemiBold', 'Novecento Vietnamese DemiBold', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   font-size: 1.1rem;
   font-weight: 700;
 }
@@ -322,7 +322,7 @@
   color: $white-1;
   background: $grey-1;
   box-shadow: 0 0 2px 1px rgba($black-0, 0.4);
-  font-family: 'Novecento Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family: 'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
   font-size: 18px;
   line-height: 0;
   cursor: pointer;

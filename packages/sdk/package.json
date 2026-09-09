@@ -1,6 +1,6 @@
 {
   "name": "@opendfieldmap/sdk",
-  "version": "0.2.0-beta",
+  "version": "0.2.1-beta",
   "description": "Embeddable Open Endfield Map widget",
   "type": "module",
   "license": "AGPL-3.0-only",

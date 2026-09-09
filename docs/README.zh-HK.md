@@ -25,6 +25,7 @@ Open Endfield Map SDK 系面向《明日方舟：終末地》Wiki、資料庫及
 - **帶版本的地圖來源和資料集**，涵蓋目前及歷史遊戲版本。
 - **本地化支援**，可使用所支援的語言建立地圖內容。
 - **由 OEM 基礎設施託管的資料與資源分發**。您毋須再為地圖瓦片和資料採集、更新或託管操心。
+- **自訂疊加層**，支援在執行期間加入自訂點位、點擊自動加點、基於索引的單點查詢，以及遊戲座標與地圖橫向座標之間的轉換。
 
 多數常用設定皆可在 [**SDK Demo**](https://sdk.opendfieldmap.org/demo) 中直接體驗、設定，並會隨著設定調整產生可直接使用的整合程式碼。
 
@@ -53,7 +54,7 @@ const widget = await createOEMWidget('#map', {
   locale: 'zh-HK',
   markerTypes: '*',
   zoom: 2,
-  center: { x: 7425, y: 6257 },
+  center: { x: 7425, z: -6257 },
 });
 
 // 後續：
@@ -103,7 +104,6 @@ export function MapPanel() {
 ```bash
 pnpm install
 pnpm dev                 # 本機 HMR 示範：http://127.0.0.1:4173/demo/
-pnpm export:atlos:dev    # 重新整理本機產生的地圖資料
 pnpm build               # 建置各套件發佈產物
 pnpm pack:release        # 將 npm tarball 寫入 artifacts/npm
 pnpm build:demo          # 建置 Pages 部署產物

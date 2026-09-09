@@ -15,6 +15,21 @@ export interface DemoCustomPointsPanel {
 
 const serializePoints = (points: readonly OEMCustomPoint[]): string => JSON.stringify(points, null, 2);
 
+const REGION_CODES: Readonly<Record<string, string>> = Object.freeze({
+  Valley_4: 'VL',
+  Wuling: 'WL',
+  Dijiang: 'DJ',
+  Weekraid_1: 'ES',
+});
+
+const formatMapContext = (click: OEMMapClick): string => {
+  const { position } = click;
+  const region = REGION_CODES[position.regionId] ?? position.regionId;
+  const subregion = position.subregionId ? `-${position.subregionId}` : '';
+  const floor = position.floorId ? `, ${position.floorId}` : '';
+  return `${region}${subregion}${floor}`;
+};
+
 const parsePoints = (value: string): OEMCustomPoint[] => {
   let parsed: unknown;
   try {
@@ -167,7 +182,7 @@ export function createDemoCustomPointsPanel(
         return;
       }
       const { position, game } = value;
-      setStatus(`Map (x ${position.x.toFixed(4)}, y ${position.y.toFixed(4)}) · Game (x ${game.x.toFixed(4)}, z ${game.z.toFixed(4)})`);
+      setStatus(`Map (x ${position.x.toFixed(4)}, z ${position.z.toFixed(4)}) ${formatMapContext(value)}\nGame (x ${game.x.toFixed(4)}, z ${game.z.toFixed(4)})`);
     },
     destroy() {
       panelAnimation?.cancel();

@@ -22,7 +22,7 @@ The interactive demo is available at [sdk.opendfieldmap.org/demo](https://sdk.op
 ## What it provides
 
 - **Interactive map rendering** with markers, labels, boundaries, regions, floors, clustering, themes, and configurable controls.
-- **Host-defined overlays** with runtime custom points, indexed single-point lookup, and game/map horizontal coordinate conversion.
+- **Host-defined overlays** with runtime custom points, click-to-add markers, indexed single-point lookup, and game/map horizontal coordinate conversion.
 - **Framework-neutral integration** with first-class React support.
 - **Versioned map sources and datasets**, covering both current and historical game releases.
 - **Localization support** for map content across supported languages.
@@ -56,7 +56,7 @@ const widget = await createOEMWidget('#map', {
   locale: 'zh-HK',
   markerTypes: '*',
   zoom: 2,
-  center: { x: 7425, y: 6257 },
+  center: { x: 7425, z: -6257 },
 });
 
 // Later:
@@ -106,12 +106,10 @@ export function MapPanel() {
 
 ```bash
 pnpm install
-pnpm dev                 # local HMR demo at http://127.0.0.1:4173/demo/
-pnpm export:atlos:dev    # refresh generated local map data
-pnpm build               # build package distributions
-pnpm pack:release        # write npm tarballs to artifacts/npm
-pnpm build:demo          # build the Pages artifact
-pnpm validate:r2         # validate a prepared/published R2 release without browser smoke tests
+pnpm dev            # local HMR demo at http://127.0.0.1:4173/demo/
+pnpm build          # build package distributions
+pnpm pack:release   # write npm tarballs to artifacts/npm
+pnpm build:demo     # build the Pages artifact
 ```
 The demo build is application-only; it does not bundle map tiles or data.
 

@@ -25,6 +25,7 @@
 - **带版本的地图源和数据集**，覆盖当前及历史游戏版本。
 - **本地化支持**，可在所支持的语言中构建地图内容。
 - **由 OEM 基础设施托管的数据与资源分发**。您无需再为地图瓦片和数据采集、更新或托管操心。
+- **自定义叠加层**，支持运行时添加自定义点位、点击自动加点、基于索引的单点查询，以及游戏坐标与地图横向坐标之间的转换。
 
 多数常用配置都可以在 [**SDK Demo**](https://sdk.opendfieldmap.org/demo) 中直接体验、配置，并会随着配置调整生成可直接使用的集成代码。
 
@@ -53,7 +54,7 @@ const widget = await createOEMWidget('#map', {
   locale: 'zh-HK',
   markerTypes: '*',
   zoom: 2,
-  center: { x: 7425, y: 6257 },
+  center: { x: 7425, z: -6257 },
 });
 
 // 后续动作：
@@ -103,7 +104,6 @@ export function MapPanel() {
 ```bash
 pnpm install
 pnpm dev                 # 本地 HMR 演示：http://127.0.0.1:4173/demo/
-pnpm export:atlos:dev    # 刷新本地生成的地图数据
 pnpm build               # 构建各包发布产物
 pnpm pack:release        # 将 npm tarball 写入 artifacts/npm
 pnpm build:demo          # 构建 Pages 部署产物

@@ -7,6 +7,8 @@ import { createDemoConfigPanel } from './configPanel';
 import type { DemoConfigPanel, DemoCreationConfig, DemoVersionOption } from './configPanel';
 import { createDemoCustomPointsPanel } from './customPointsPanel';
 import type { DemoCustomPointsPanel } from './customPointsPanel';
+import { createDemoClickPointsPanel } from './clickPointsPanel';
+import type { DemoClickPointsPanel, OEMClickPointMode } from './clickPointsPanel';
 import './style.scss';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -31,7 +33,7 @@ const defaultConfig: OEMWidgetConfig = {
   locale: 'en-US',
   subregion: 'VL_1',
   markerTypes: defaultMarkerTypes,
-  center: { x: 3848, y: 5072 },
+  center: { x: 3848, z: -5072 },
 };
 const defaultCreation: DemoCreationConfig = {
   showRegionSelector: true,
@@ -42,25 +44,27 @@ const defaultCreation: DemoCreationConfig = {
   theme: 'light',
 };
 const instanceIcon = new URL('../assets/instance.webp', import.meta.url).href;
+// Bump this key whenever the demo's custom-point JSON schema/content changes.
+const customPointsCacheKey = 'xz-v2';
 const defaultCustomPointsUrl = usesLocalResources
-  ? new URL('/examples/basic/custom-points.json', document.baseURI).href
-  : new URL('assets/custom-points.json', document.baseURI).href;
+  ? `${new URL('/examples/basic/custom-points.json', document.baseURI).href}?v=${customPointsCacheKey}`
+  : `${new URL('assets/custom-points.json', document.baseURI).href}?v=${customPointsCacheKey}`;
 const defaultCustomPoints: OEMCustomPoint[] = [
   {
     id: 'custom-instance-1',
-    position: { regionId: 'Valley_4', x: 400, y: 562.5, floorId: 'M' },
+    position: { regionId: 'Valley_4', x: 400, z: -562.5, floorId: 'M' },
     style: 'framed',
     icon: instanceIcon,
   },
   {
     id: 'custom-instance-2',
-    position: { regionId: 'Valley_4', x: 500, y: 631.25, floorId: 'M' },
+    position: { regionId: 'Valley_4', x: 500, z: -631.25, floorId: 'M' },
     style: 'framed',
     icon: instanceIcon,
   },
   {
     id: 'custom-instance-3',
-    position: { regionId: 'Valley_4', x: 575, y: 712.5, floorId: 'M' },
+    position: { regionId: 'Valley_4', x: 575, z: -712.5, floorId: 'M' },
     style: 'framed',
     icon: instanceIcon,
   },
@@ -69,12 +73,15 @@ const defaultCustomPoints: OEMCustomPoint[] = [
 let widget: OEMWidget | undefined;
 let panel: DemoConfigPanel | undefined;
 let customPointsPanel: DemoCustomPointsPanel | undefined;
+let clickPointsPanel: DemoClickPointsPanel | undefined;
 let manifest: OEMManifest;
 let versions: readonly DemoVersionOption[] = [];
 let selectedVersion: DemoVersionOption;
 let creation = { ...defaultCreation };
 let customPoints: OEMCustomPoint[] = defaultCustomPoints.map((point) => ({ ...point, position: { ...point.position } }));
 let customPointsUrl: string | undefined = defaultCustomPointsUrl;
+let clickPointMode: OEMClickPointMode = 'multiple';
+let clickPointSequence = 0;
 let operation = Promise.resolve();
 
 const reportError = (cause: unknown) => {
@@ -83,7 +90,40 @@ const reportError = (cause: unknown) => {
 };
 
 const handleMapClick = (click: OEMMapClick): void => {
+  const point: OEMCustomPoint = {
+    id: clickPointMode === 'single' ? 'demo-click-point' : `demo-click-point-${++clickPointSequence}`,
+    position: { ...click.position },
+    style: 'framed',
+    icon: instanceIcon,
+  };
+  const hostPoints = customPoints.filter((entry) => !entry.id.startsWith('demo-click-point'));
+  const nextPoints = clickPointMode === 'single'
+    ? [...hostPoints, point]
+    : [...customPoints, point];
+  widget?.clearClickPoints();
+  widget?.setCustomPoints(nextPoints);
+  customPoints = nextPoints.map((entry) => ({ ...entry, position: { ...entry.position } }));
+  customPointsUrl = undefined;
+  customPointsPanel?.setPoints(customPoints);
+  if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
   customPointsPanel?.setPickStatus(click);
+};
+
+const applyClickPointMode = (mode: OEMClickPointMode): void => {
+  clickPointMode = mode;
+  clickPointsPanel?.setMode(mode);
+  widget?.setClickPointMode({ mode, style: 'framed', icon: instanceIcon });
+  if (mode !== 'single') return;
+  const clickPoints = customPoints.filter((entry) => entry.id.startsWith('demo-click-point'));
+  if (clickPoints.length <= 1) return;
+  const latest = clickPoints.at(-1)!;
+  const nextPoints = [...customPoints.filter((entry) => !entry.id.startsWith('demo-click-point')), latest];
+  widget?.clearClickPoints();
+  widget?.setCustomPoints(nextPoints);
+  customPoints = nextPoints.map((entry) => ({ ...entry, position: { ...entry.position } }));
+  customPointsUrl = undefined;
+  customPointsPanel?.setPoints(customPoints);
+  if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
 };
 
 const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
@@ -94,6 +134,7 @@ const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
   markerTypes: state.markerTypes === '*' ? '*' : [...state.markerTypes],
   labels: state.labels,
   boundaries: state.boundaries,
+  boundarySource: state.boundarySource,
   markerClustering: state.markerClustering,
   zoom: state.zoom,
   center: { ...state.center },
@@ -113,6 +154,7 @@ const mountWidget = async (config: OEMWidgetConfig): Promise<OEMWidget> => {
     onStateChange: (state) => panel?.sync(state, creation, customPoints, customPointsUrl),
     onError: reportError,
   });
+  widget.setClickPointMode({ mode: clickPointMode, style: 'framed', icon: instanceIcon });
   widget.on('click', handleMapClick);
   panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
   return widget;
@@ -153,6 +195,7 @@ const enqueue = (task: () => Promise<void>): Promise<boolean> => {
     error.hidden = true;
     panel?.setBusy(true);
     customPointsPanel?.setBusy(true);
+    clickPointsPanel?.setBusy(true);
     try {
       await task();
       return true;
@@ -162,6 +205,7 @@ const enqueue = (task: () => Promise<void>): Promise<boolean> => {
     } finally {
       panel?.setBusy(false);
       customPointsPanel?.setBusy(false);
+      clickPointsPanel?.setBusy(false);
     }
   });
   operation = result.then(() => undefined);
@@ -180,6 +224,11 @@ customPointsPanel = createDemoCustomPointsPanel(defaultCustomPoints, {
   },
 });
 app.append(customPointsPanel.element);
+
+clickPointsPanel = createDemoClickPointsPanel(clickPointMode, {
+  setMode: applyClickPointMode,
+});
+app.append(clickPointsPanel.element);
 
 const panelCallbacks = {
   update(update: OEMWidgetConfig) {
@@ -207,6 +256,9 @@ const panelCallbacks = {
   },
   reset() {
     creation = { ...defaultCreation };
+    clickPointMode = 'multiple';
+    clickPointSequence = 0;
+    clickPointsPanel?.setMode(clickPointMode);
     enqueue(async () => {
       customPoints = defaultCustomPoints.map((point) => ({ ...point, position: { ...point.position } }));
       customPointsUrl = defaultCustomPointsUrl;
@@ -231,6 +283,7 @@ const initialize = async () => {
   window.addEventListener('beforeunload', () => {
     panel?.destroy();
     customPointsPanel?.destroy();
+    clickPointsPanel?.destroy();
     widget?.destroy();
   }, { once: true });
 };

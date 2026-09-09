@@ -68,7 +68,7 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
     regionButton.append(icon);
     const selectRegion = () => {
       const target = region.initialView;
-      apply({ region: region.id as OEMRegionSelector, subregion: null, floor: 'M', center: { x: target.x, y: target.y }, zoom: target.zoom });
+      apply({ region: region.id as OEMRegionSelector, subregion: null, floor: 'M', center: { x: target.x, z: target.z }, zoom: target.zoom });
     };
     regionButton.addEventListener('click', selectRegion);
     regionButton.addEventListener('keydown', (event) => {
@@ -94,14 +94,14 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
         subregionButton.addEventListener('click', () => {
           context.panels.collapse(regionButton);
           const [[x1, y1], [x2, y2]] = subregion.bounds ?? [
-            [region.initialView.x, region.initialView.y],
-            [region.initialView.x, region.initialView.y],
+            [region.initialView.x, region.initialView.z],
+            [region.initialView.x, region.initialView.z],
           ];
           apply({
             region: region.id as OEMRegionSelector,
             subregion: subregion.id,
             floor: 'M',
-            center: { x: (x1 + x2) / 2, y: (y1 + y2) / 2 },
+            center: { x: (x1 + x2) / 2, z: (y1 + y2) / 2 },
             zoom: Math.max(region.minZoom, Math.min(region.maxZoom, 1)),
           });
         });

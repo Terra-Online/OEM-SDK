@@ -4,7 +4,7 @@
     "position": {
       "regionId": "Valley_4",
       "x": 400,
-      "y": 562.5,
+      "z": -562.5,
       "floorId": "M"
     },
     "style": "framed",
@@ -15,7 +15,7 @@
     "position": {
       "regionId": "Valley_4",
       "x": 500,
-      "y": 631.25,
+      "z": -631.25,
       "floorId": "M"
     },
     "style": "framed",
@@ -26,7 +26,7 @@
     "position": {
       "regionId": "Valley_4",
       "x": 575,
-      "y": 712.5,
+      "z": -712.5,
       "floorId": "M"
     },
     "style": "framed",

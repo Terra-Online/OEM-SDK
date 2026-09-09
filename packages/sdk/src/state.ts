@@ -1,4 +1,4 @@
-import type { OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig } from './types';
+import type { OEMBoundarySource, OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig } from './types';
 
 const parseBoolean = (value: string | null): boolean | undefined => {
   if (value === null) return undefined;
@@ -18,6 +18,9 @@ const parseList = (value: string | null): string[] | undefined => {
   return [...new Set(value.split(',').map((entry) => entry.trim()).filter(Boolean))];
 };
 
+const parseBoundarySource = (value: string | null): OEMBoundarySource | undefined =>
+  value === 'oem' || value === 'game' ? value : undefined;
+
 const toSearchParams = (source: string): URLSearchParams => {
   const trimmed = source.trim();
   if (/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed)) return new URL(trimmed).searchParams;
@@ -26,15 +29,15 @@ const toSearchParams = (source: string): URLSearchParams => {
 };
 
 /**
- * Adapts legacy OEM URL-state keys to the typed Widget configuration.
+ * Adapts compact OEM URL-state keys to the typed Widget configuration.
  *
  * This helper is optional; createOEMWidget accepts normal named properties.
  */
 export function parseOEMUrlState(source: string | URLSearchParams): OEMWidgetConfig {
   const params = typeof source === 'string' ? toSearchParams(source) : source;
   const filter = params.get('f');
-  const x = parseNumber(params.get('x'));
-  const y = parseNumber(params.get('y'));
+  const centerX = parseNumber(params.get('cx'));
+  const centerZ = parseNumber(params.get('cz') ?? params.get('centerZ'));
   return {
     region: (params.get('r') ?? undefined) as OEMRegionSelector | undefined,
     subregion: params.get('s'),
@@ -43,8 +46,9 @@ export function parseOEMUrlState(source: string | URLSearchParams): OEMWidgetCon
     markerTypes: filter === '*' ? '*' : filter === null ? undefined : parseList(filter) ?? false,
     labels: parseBoolean(params.get('labels') ?? params.get('names')),
     boundaries: parseBoolean(params.get('boundaries') ?? params.get('boundary')),
+    boundarySource: parseBoundarySource(params.get('boundarySource')),
     markerClustering: parseBoolean(params.get('cluster')),
     zoom: parseNumber(params.get('z')),
-    center: x === undefined || y === undefined ? undefined : { x, y },
+    center: centerX === undefined || centerZ === undefined ? undefined : { x: centerX, z: centerZ },
   };
 }

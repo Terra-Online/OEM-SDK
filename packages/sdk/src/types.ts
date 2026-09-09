@@ -1,5 +1,6 @@
-import type { OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
-import type { OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
+import type { OEMBoundarySource, OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
+export type { OEMBoundarySource } from '@opendfieldmap/core';
+import type { OEMClickPointOptions, OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
 
 /** Stable top-level region identifiers published by OEM. */
 export type OEMRegionId = 'Valley_4' | 'Wuling' | 'Dijiang' | 'Weekraid_1';
@@ -33,7 +34,7 @@ export type OEMLocale =
 /** Center coordinates in the selected region's max-native-zoom pixel space. */
 export interface OEMWidgetCenter {
   x: number;
-  y: number;
+  z: number;
 }
 
 /**
@@ -56,6 +57,8 @@ export interface OEMWidgetConfig {
   labels?: boolean;
   /** Whether subregion boundaries are loaded and displayed. Defaults to false. */
   boundaries?: boolean;
+  /** Boundary data source. Defaults to Atlos/OEM boundaries. */
+  boundarySource?: OEMBoundarySource;
   /** Whether nearby markers are grouped by point type. Defaults to true. */
   markerClustering?: boolean;
   /** Host-defined points rendered above the static map data. */
@@ -104,6 +107,7 @@ export interface OEMWidgetState {
   markerTypes: string[] | '*';
   labels: boolean;
   boundaries: boolean;
+  boundarySource: OEMBoundarySource;
   markerClustering: boolean;
   zoom: number;
   center: OEMWidgetCenter;
@@ -124,6 +128,8 @@ export interface OEMWidget {
   getState(): OEMWidgetState;
   setOptions(options: OEMWidgetConfig): Promise<void>;
   setCustomPoints(points: readonly OEMCustomPoint[]): void;
+  setClickPointMode(options?: OEMClickPointOptions | null): void;
+  clearClickPoints(): void;
   loadCustomPoints(url: string): Promise<void>;
   clearCustomPoints(): void;
   getPoint(pointId: string): OEMPoint | undefined;

@@ -7,7 +7,7 @@ import {
 } from '@opendfieldmap/core';
 import type { OEMManifest, OEMRegion, OEMResources, OEMSubregion } from '@opendfieldmap/core';
 import { createOEM } from '@opendfieldmap/map';
-import type { OEM, OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
+import type { OEM, OEMClickPointOptions, OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
 import { mountControls } from './components';
 import type { Control } from './components/types';
 import { installFonts } from './fonts';
@@ -61,17 +61,23 @@ const normalizeMarkerTypes = (value: OEMWidgetConfig['markerTypes']): string[] |
   return [...new Set(value.map((entry) => entry.trim()).filter(Boolean))];
 };
 
+const normalizeBoundarySource = (value: OEMWidgetConfig['boundarySource']): OEMWidgetState['boundarySource'] => {
+  if (value === undefined || value === 'oem') return 'oem';
+  if (value === 'game') return 'game';
+  throw new Error(`Unknown OEM boundary source: ${value}`);
+};
+
 const getPreset = (region: OEMRegion, subregion?: OEMSubregion) => {
   if (!subregion?.bounds) {
     return {
-      center: { x: region.initialView.x, y: region.initialView.y },
+      center: { x: region.initialView.x, z: region.initialView.z },
       zoom: region.initialView.zoom,
     };
   }
   return {
     center: {
       x: (subregion.bounds[0][0] + subregion.bounds[1][0]) / 2,
-      y: (subregion.bounds[0][1] + subregion.bounds[1][1]) / 2,
+      z: (subregion.bounds[0][1] + subregion.bounds[1][1]) / 2,
     },
     zoom: Math.max(region.minZoom, Math.min(region.maxZoom, 1)),
   };
@@ -99,7 +105,7 @@ const normalizeState = (input: OEMWidgetConfig, manifest: OEMManifest): OEMWidge
   }
 
   const requestedCenter = input.center;
-  if (requestedCenter && (!Number.isFinite(requestedCenter.x) || !Number.isFinite(requestedCenter.y))) {
+  if (requestedCenter && (!Number.isFinite(requestedCenter.x) || !Number.isFinite(requestedCenter.z))) {
     throw new Error('OEM Widget center coordinates must be finite');
   }
   const preset = getPreset(region, subregion);
@@ -113,11 +119,12 @@ const normalizeState = (input: OEMWidgetConfig, manifest: OEMManifest): OEMWidge
     markerTypes: normalizeMarkerTypes(input.markerTypes),
     labels: input.labels ?? true,
     boundaries: input.boundaries ?? false,
+    boundarySource: normalizeBoundarySource(input.boundarySource),
     markerClustering: input.markerClustering ?? true,
     zoom: Math.max(region.minZoom, Math.min(region.maxZoom, input.zoom ?? preset.zoom)),
     center: {
       x: requestedCenter?.x ?? preset.center.x,
-      y: requestedCenter?.y ?? preset.center.y,
+      z: requestedCenter?.z ?? preset.center.z,
     },
   };
 };
@@ -130,6 +137,7 @@ const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
   markerTypes: state.markerTypes,
   labels: state.labels,
   boundaries: state.boundaries,
+  boundarySource: state.boundarySource,
   markerClustering: state.markerClustering,
   zoom: state.zoom,
   center: { ...state.center },
@@ -147,10 +155,11 @@ const sameState = (left: OEMWidgetState, right: OEMWidgetState): boolean =>
   sameMarkers(left.markerTypes, right.markerTypes) &&
   left.labels === right.labels &&
   left.boundaries === right.boundaries &&
+  left.boundarySource === right.boundarySource &&
   left.markerClustering === right.markerClustering &&
   left.zoom === right.zoom &&
   left.center.x === right.center.x &&
-  left.center.y === right.center.y;
+  left.center.z === right.center.z;
 
 const hasMarkers = (state: OEMWidgetState): boolean =>
   state.markerTypes === '*' || state.markerTypes.length > 0;
@@ -220,7 +229,7 @@ class Widget implements OEMWidget {
       regionId: view.regionId as OEMRegionId,
       floorId: (view.floorId ?? 'M') as OEMFloorId,
       locale: this.core.getLocale().resolved as OEMLocale,
-      center: { x: view.x, y: view.y },
+      center: { x: view.x, z: view.z },
       zoom: view.zoom,
     };
     this.controls.sync(this.state);
@@ -236,6 +245,16 @@ class Widget implements OEMWidget {
     this.assertAlive();
     this.core.setCustomPoints(points);
     this.customPointsUrl = undefined;
+  }
+
+  setClickPointMode(options?: OEMClickPointOptions | null): void {
+    this.assertAlive();
+    this.core.setClickPointMode(options);
+  }
+
+  clearClickPoints(): void {
+    this.assertAlive();
+    this.core.clearClickPoints();
   }
 
   async loadCustomPoints(url: string): Promise<void> {
@@ -316,7 +335,7 @@ class Widget implements OEMWidget {
       next.floorId !== previous.floorId ||
       next.zoom !== previous.zoom ||
       next.center.x !== previous.center.x ||
-      next.center.y !== previous.center.y;
+      next.center.z !== previous.center.z;
     const previousMarkers = hasMarkers(previous);
     const nextMarkers = hasMarkers(next);
 
@@ -345,11 +364,13 @@ class Widget implements OEMWidget {
       }
       if (nextMarkers !== previousMarkers ||
         next.labels !== previous.labels ||
-        next.boundaries !== previous.boundaries) {
+        next.boundaries !== previous.boundaries ||
+        next.boundarySource !== previous.boundarySource) {
         await this.core.setFeatures({
           points: nextMarkers,
           labels: next.labels,
           boundaries: next.boundaries,
+          boundarySource: next.boundarySource,
         });
       }
       if (viewChanged) {
@@ -357,7 +378,7 @@ class Widget implements OEMWidget {
           regionId: next.regionId,
           floorId: next.floorId,
           x: next.center.x,
-          y: next.center.y,
+          z: next.center.z,
           zoom: next.zoom,
         });
       }
@@ -365,7 +386,7 @@ class Widget implements OEMWidget {
       this.state = {
         ...next,
         locale: this.core.getLocale().resolved as OEMLocale,
-        center: { x: view.x, y: view.y },
+        center: { x: view.x, z: view.z },
         zoom: view.zoom,
       };
       this.controls.sync(this.state);
@@ -438,14 +459,15 @@ export async function createOEMWidget(
         regionId: state.regionId,
         floorId: state.floorId,
         x: state.center.x,
-        y: state.center.y,
+        z: state.center.z,
         zoom: state.zoom,
       },
-      features: {
-        points: hasMarkers(state),
-        labels: state.labels,
-        boundaries: state.boundaries,
-      },
+        features: {
+          points: hasMarkers(state),
+          labels: state.labels,
+          boundaries: state.boundaries,
+          boundarySource: state.boundarySource,
+        },
       markerClustering: state.markerClustering,
       customPoints: options.customPoints,
       customPointsUrl: options.customPointsUrl,

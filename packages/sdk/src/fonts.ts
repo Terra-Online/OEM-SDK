@@ -3,9 +3,9 @@ import type { OEMManifest, OEMResources } from '@opendfieldmap/core';
 
 const FONT_FAMILIES = new Set([
   'HMSans_EN',
-  'Novecento Bold',
-  'Novecento DemiBold',
-  'Novecento Medium',
+  'Novecento Wide Bold',
+  'Novecento Wide DemiBold',
+  'Novecento Wide Medium',
   'Novecento Cyrillic DemiBold',
   'Novecento Cyrillic Medium',
   'Novecento Vietnamese DemiBold',

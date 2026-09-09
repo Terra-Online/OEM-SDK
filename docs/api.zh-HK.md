@@ -23,7 +23,7 @@ const widget = await createOEMWidget('#map', {
   markerTypes: ['crate_i'],
   customPoints: [{
     id: 'route-start',
-    position: { regionId: 'Valley_4', x: 400, y: 600, floorId: 'M' },
+    position: { regionId: 'Valley_4', x: 400, z: -600, floorId: 'M' },
     style: 'framed',
     icon: '/icons/route-start.webp',
   }],
@@ -47,9 +47,10 @@ const widget = await createOEMWidget('#map', {
 | `customPointsUrl` | 返回 `OEMCustomPoint[]` JSON 的 URL | 無 |
 | `labels` | `boolean` | `true` |
 | `boundaries` | `boolean` | `false` |
+| `boundarySource` | `'oem' | 'game'` | `'oem'` |
 | `markerClustering` | `boolean` | `true` |
 | `zoom` | 地區範圍內的有限數字 | 地區或子地區預設 |
-| `center` | `{ x: number; y: number }` | 地區或子地區預設 |
+| `center` | `{ x: number; z: number }` | 地區或子地區預設 |
 
 `markerTypes: '*'` 會載入所有已發佈點位類型。空陣列和 `false` 都會關閉點位資料。點位類型鍵由資料定義，不受 npm 套件內固定 union type 限制。
 
@@ -64,7 +65,15 @@ interface OEMCustomPoint {
 }
 ```
 
-`OEMMapPosition` 與地圖方向一致：`x` 向右增加，`y` 向下增加。例如 `Valley_4` 中發佈座標 `{ x: 3200, y: 4800 }` 對應 `{ x: 400, y: 600 }`。
+```ts
+interface OEMClickPointOptions {
+  mode: 'multiple' | 'single';
+  style: 'framed' | 'no-frame';
+  icon: string;
+}
+```
+
+`OEMMapPosition` 使用水平 `{ x, z }` 欄位。`x` 向右增加，`z` 是地圖的第二個水平軸。例如 `Valley_4` 中發佈座標 `{ x: 3200, z: -4800 }` 對應標準化地圖 `{ x: 400, z: -600 }`，展示為 `Map (x 400, z -600)`。遊戲座標的 `y` 是高度，二維地圖位置不會推斷該值。
 
 `subregionId` 是可選的子地區識別，對應 Atlos `markTool` 匯出的 `subregId`（例如 `VL_1`）。轉換 markTool 結果時應保留它；它會選擇子地區專用的遊戲座標轉換參數。省略時會回退至地區級轉換參數，這只適用於該地區沒有子地區專用參數的情況。地圖點擊會在可能時根據目前選取的子地區或已發佈邊界推斷 `subregionId`。
 
@@ -100,6 +109,8 @@ interface OEMWidget {
   getState(): OEMWidgetState;
   setOptions(options: OEMWidgetConfig): Promise<void>;
   setCustomPoints(points: readonly OEMCustomPoint[]): void;
+  setClickPointMode(options: OEMClickPointOptions | null): void;
+  clearClickPoints(): void;
   loadCustomPoints(url: string): Promise<void>;
   clearCustomPoints(): void;
   getPoint(pointId: string): OEMPoint | undefined;
@@ -108,6 +119,8 @@ interface OEMWidget {
   destroy(): void;
 }
 ```
+
+`setClickPointMode()` 會開啟地圖點擊自動加點。`mode: 'multiple'` 會保留每次點擊建立的點，`mode: 'single'` 只保留最後一個點擊點；`style` 和 `icon` 分別指定點的組合樣式及圖示。傳入 `null` 可關閉模式；`clearClickPoints()` 只清除點擊建立的點，不會清除透過 `setCustomPoints()` 寫入的點。
 
 - `getState()` 傳回解析後狀態的防禦性副本。
 - `setOptions()` 按呼叫順序套用部分內容或視圖更新。
@@ -120,7 +133,9 @@ interface OEMWidget {
 
 Widget 銷毀後，除 `destroy()` 外的其他方法都會拋出錯誤。
 
-狀態包括 `regionId`、`subregionId`、`floorId`、`locale`、`markerTypes`、`labels`、`boundaries`、`markerClustering`、`zoom` 和 `center`。
+狀態包括 `regionId`、`subregionId`、`floorId`、`locale`、`markerTypes`、`labels`、`boundaries`、`boundarySource`、`markerClustering`、`zoom` 和 `center`。`center` 使用水平 `{ x, z }` 座標；Demo 設定清單將這兩個軸標為 `X` 和 `Z`。
+
+`boundarySource: 'oem'` 載入 Atlos 繪製的子地區邊界；`boundarySource: 'game'` 載入由 `AKEData` 生成的官方遊戲區塊邊界，渲染方式與前者相同。Game 邊界資料只在目前靜態 release 提供的區域中可用。
 
 ## 資源
 
@@ -149,11 +164,11 @@ const widget = await createOEMWidget('#map', {
 ```ts
 import { createOEMWidget, parseOEMUrlState } from '@opendfieldmap/sdk';
 
-const options = parseOEMUrlState('?r=VL&f=crate_i&s=VL_7&layer=M&z=2');
+const options = parseOEMUrlState('?r=VL&f=crate_i&s=VL_7&layer=M&z=2&cx=400&cz=-600');
 const widget = await createOEMWidget('#map', options);
 ```
 
-支援的鍵包括 `r`、`s`、`f`、`l`、`layer`、`labels`、`names`、`boundaries`、`boundary`、`cluster`、`z`、`x` 和 `y`。
+支援的鍵包括 `r`、`s`、`f`、`l`、`layer`、`labels`、`names`、`boundaries`、`boundary`、`boundarySource`、`cluster`、`z`、`cx` 和 `cz`。其中 `z` 是縮放級別，`cx` 和 `cz` 是地圖中心的水平座標。
 
 ## 底層渲染器
 
@@ -165,7 +180,7 @@ const widget = await createOEMWidget('#map', options);
 import { oemToGamePosition } from '@opendfieldmap/sdk';
 
 const horizontal = oemToGamePosition(
-  { regionId: 'Valley_4', x: 3200.0568, y: 4502.6376, floorId: 'M' },
+  { regionId: 'Valley_4', x: 3200.0568, z: -4502.6376, floorId: 'M' },
   manifest.regions.find((region) => region.id === 'Valley_4')!,
 );
 // { x: -255.3423, z: -176.8946 }
@@ -173,7 +188,7 @@ const horizontal = oemToGamePosition(
 
 `gameToOEMPosition()` 和 `oemToGamePosition()` 會先應用目前 Atlos 地區轉換參數，再在發佈像素和標準化地圖座標之間轉換。`gameXZToOEMPosition()` 返回標準化地圖座標，可以直接用於自訂點。`mapToGameXZPosition()` 接受標準化地圖座標。對於 `WL_2` 和 `WL_4`，應傳入 `subregionId` 以選擇對應的武陵轉換參數。二維地圖座標可以恢復遊戲 `x/z`，不會臆造遊戲高度 `y`。
 
-底層 renderer 的 `click` 事件會同時返回兩種座標：
+底層 renderer 的 `click` 事件會同時返回兩種座標，亦提供相同的點擊加點方法：
 
 ```ts
 map.on('click', ({ position, game }) => {

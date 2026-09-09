@@ -3,7 +3,7 @@ import { parseOEMUrlState } from '@opendfieldmap/sdk';
 
 describe('widget URL state', () => {
   it('uses Atlos-compatible routing keys plus widget view keys', () => {
-    expect(parseOEMUrlState('?r=WL&f=crate_i,aurylene&s=WL_1&l=zh-CN&layer=B2&z=2.5&x=3200&y=4100&labels=1&boundaries=1&cluster=0')).toEqual({
+    expect(parseOEMUrlState('?r=WL&f=crate_i,aurylene&s=WL_1&l=zh-CN&layer=B2&z=2.5&cx=3200&cz=4100&labels=1&boundaries=1&cluster=0')).toEqual({
       region: 'WL',
       floor: 'B2',
       locale: 'zh-CN',
@@ -13,7 +13,7 @@ describe('widget URL state', () => {
       boundaries: true,
       markerClustering: false,
       zoom: 2.5,
-      center: { x: 3200, y: 4100 },
+      center: { x: 3200, z: 4100 },
     });
   });
 

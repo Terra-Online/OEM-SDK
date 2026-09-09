@@ -12,7 +12,7 @@ const initialView: OEMView = {
   regionId: 'Valley_4',
   floorId: 'M',
   x: 4000,
-  y: 4000,
+  z: 4000,
   zoom: 2,
 };
 
@@ -27,7 +27,7 @@ const manifest: OEMManifest = {
     name: 'Valley IV',
     locales: { 'en-US': 'Valley IV' },
     dimensions: [8000, 8000],
-    boundsOffset: { x: 0, y: 0 },
+    boundsOffset: { x: 0, z: 0 },
     tileSize: 200,
     minZoom: 0,
     maxNativeZoom: 3,
@@ -68,6 +68,8 @@ const makeCore = () => {
     setFeatures: vi.fn(async (): Promise<void> => undefined),
     setPointFilter: vi.fn(),
     setCustomPoints: vi.fn(),
+    setClickPointMode: vi.fn(),
+    clearClickPoints: vi.fn(),
     loadCustomPoints: vi.fn(async (): Promise<void> => undefined),
     clearCustomPoints: vi.fn(),
     getPoint: vi.fn((): OEMPoint | undefined => undefined),
@@ -105,7 +107,7 @@ describe('widget creation options', () => {
       lockDrag: false,
       lockZoom: false,
       markerClustering: true,
-      features: { points: false, labels: false, boundaries: false },
+      features: { points: false, labels: false, boundaries: false, boundarySource: 'oem' },
     }));
     widget.destroy();
   });
@@ -156,7 +158,7 @@ describe('widget creation options', () => {
       type: 'crate_i',
       tier: 0,
       raw: { x: 1, y: 2, z: 3 },
-      position: { regionId: 'Valley_4', x: 8, y: -24, floorId: 'M' },
+      position: { regionId: 'Valley_4', x: 8, z: -24, floorId: 'M' },
     };
     core.getPoint.mockReturnValue(point);
     core.loadPoint.mockResolvedValue(point);
@@ -167,7 +169,7 @@ describe('widget creation options', () => {
     const { createOEMWidget } = await import('@opendfieldmap/sdk');
     const customPoints = [{
       id: 'route-start',
-      position: { regionId: 'Valley_4', x: 400, y: 600 },
+      position: { regionId: 'Valley_4', x: 400, z: -600 },
       style: 'framed' as const,
       icon: '/icons/route-start.webp',
     }];
@@ -218,7 +220,7 @@ describe('widget creation options', () => {
     const unsubscribe = widget.on('click', (payload) => received.push(payload));
     const coreClick = (core.on.mock.calls as unknown[][]).find(([event]) => event === 'click')?.[1] as unknown as ((payload: OEMMapClick) => void);
     const payload: OEMMapClick = {
-      position: { regionId: 'Valley_4', x: 400.0071, y: 562.8297, floorId: 'M' },
+      position: { regionId: 'Valley_4', x: 400.0071, z: -562.8297, floorId: 'M' },
       game: { x: 400.0071, z: -562.8297 },
     };
     coreClick(payload);
@@ -226,6 +228,21 @@ describe('widget creation options', () => {
     unsubscribe();
     coreClick(payload);
     expect(received).toHaveLength(1);
+    widget.destroy();
+  });
+
+  it('forwards click-point mode controls to the renderer', async () => {
+    const core = makeCore();
+    createOEM.mockResolvedValue(core);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const { createOEMWidget } = await import('@opendfieldmap/sdk');
+    const widget = await createOEMWidget(host, { manifest, labels: false });
+    const options = { mode: 'single' as const, style: 'no-frame' as const, icon: '/pin.webp' };
+    widget.setClickPointMode(options);
+    widget.clearClickPoints();
+    expect(core.setClickPointMode).toHaveBeenCalledWith(options);
+    expect(core.clearClickPoints).toHaveBeenCalledTimes(1);
     widget.destroy();
   });
 
@@ -253,11 +270,13 @@ describe('widget creation options', () => {
       points: false,
       labels: true,
       boundaries: false,
+      boundarySource: 'oem',
     });
     expect(core.setFeatures).toHaveBeenNthCalledWith(2, {
       points: false,
       labels: false,
       boundaries: false,
+      boundarySource: 'oem',
     });
     expect(widget.getState().labels).toBe(false);
     widget.destroy();
@@ -368,15 +387,34 @@ describe('widget creation options', () => {
 
     expect(createOEM).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
       markerClustering: false,
-      features: { points: false, labels: false, boundaries: true },
+      features: { points: false, labels: false, boundaries: true, boundarySource: 'oem' },
     }));
     expect(widget.getState()).toMatchObject({ boundaries: true, markerClustering: false });
 
     await widget.setOptions({ boundaries: false, markerClustering: true });
     expect(core.setMarkerClustering).toHaveBeenLastCalledWith(true);
-    expect(core.setFeatures).toHaveBeenLastCalledWith({ points: false, labels: false, boundaries: false });
+    expect(core.setFeatures).toHaveBeenLastCalledWith({ points: false, labels: false, boundaries: false, boundarySource: 'oem' });
     expect(core.setPointFilter).not.toHaveBeenCalled();
     expect(core.setView).not.toHaveBeenCalled();
+    widget.destroy();
+  });
+
+  it('passes the selected boundary source to the renderer', async () => {
+    const core = makeCore();
+    createOEM.mockResolvedValue(core);
+    const host = document.createElement('div');
+    document.body.append(host);
+
+    const { createOEMWidget } = await import('@opendfieldmap/sdk');
+    const widget = await createOEMWidget(host, { manifest, labels: false, boundaries: true, boundarySource: 'game' });
+    expect(createOEM).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
+      features: { points: false, labels: false, boundaries: true, boundarySource: 'game' },
+    }));
+    expect(widget.getState().boundarySource).toBe('game');
+
+    await widget.setOptions({ boundarySource: 'oem' });
+    expect(core.setFeatures).toHaveBeenLastCalledWith({ points: false, labels: false, boundaries: true, boundarySource: 'oem' });
+    expect(widget.getState().boundarySource).toBe('oem');
     widget.destroy();
   });
 
