@@ -21,6 +21,12 @@ const widget = await createOEMWidget('#map', {
   region: 'Valley_4',
   locale: 'en-US',
   markerTypes: ['crate_i'],
+  customPoints: [{
+    id: 'route-start',
+    position: { regionId: 'Valley_4', x: 400, y: 600, floorId: 'M' },
+    style: 'framed',
+    icon: '/icons/route-start.webp',
+  }],
 });
 ```
 
@@ -37,6 +43,8 @@ These options can be passed at creation and later to `widget.setOptions()`.
 | `floor` | Published floor ID: `M`, `L1`–`L4`, `B1`–`B4` | `M` |
 | `locale` | Locale published by the manifest | Browser locale, then manifest fallback |
 | `markerTypes` | Type-key array, `'*'`, or `false` | `false` |
+| `customPoints` | `OEMCustomPoint[]` | `[]` |
+| `customPointsUrl` | URL of an `OEMCustomPoint[]` JSON file | None |
 | `labels` | `boolean` | `true` |
 | `boundaries` | `boolean` | `false` |
 | `markerClustering` | `boolean` | `true` |
@@ -45,7 +53,24 @@ These options can be passed at creation and later to `widget.setOptions()`.
 
 `markerTypes: '*'` loads all published marker types. An empty array or `false` disables marker data. Marker type keys remain data-driven and are not restricted to a package-level union.
 
-Coordinates use the selected region's published pixel coordinate system, not longitude and latitude.
+Coordinates for view and published points use the selected region's published pixel coordinate system, not longitude and latitude. Atlos `markTool` exports `pos` as `[z, x]` in map coordinates. Custom-point positions and map-click results use normalized map coordinates: the published pixel values divided by `2 ** maxNativeZoom`.
+
+```ts
+interface OEMCustomPoint {
+  id: string;
+  position: OEMMapPosition;
+  style: 'framed' | 'no-frame';
+  icon: string;
+}
+```
+
+`OEMMapPosition` has the same orientation as the map: `x` increases to the right and `y` increases downward. For example, published `{ x: 3200, y: 4800 }` becomes `{ x: 400, y: 600 }` in `Valley_4`.
+
+`subregionId` is optional metadata that identifies the Atlos subregion containing the point. It corresponds to Atlos `markTool`'s `subregId` (for example, `VL_1`). Preserve it when converting a markTool result; it selects a subregion-specific game transform. If it is omitted, conversion falls back to the region transform, which is only correct where the region has no subregion-specific transform. Map clicks infer `subregionId` from the selected subregion or its published bounds when possible.
+
+`style` is limited to the two native Atlos marker compositions. `framed` uses a `32 × 32` pixel marker with anchor `[16, 32]`; `no-frame` uses a `50 × 50` pixel marker with anchor `[25, 25]`. `icon` is the image URL rendered by that composition. Custom marker size, color, and label fields are not supported.
+
+Use `customPointsUrl` for a large point set instead of embedding it in `createOEMWidget()`. The URL must return the same JSON array accepted by `customPoints`; relative icon URLs are resolved against the JSON URL. `customPoints` and `customPointsUrl` are mutually exclusive. Calling `setCustomPoints()` or `loadCustomPoints()` replaces the current custom-point set.
 
 ## Creation Options
 
@@ -74,6 +99,11 @@ interface OEMWidget {
   readonly destroyed: boolean;
   getState(): OEMWidgetState;
   setOptions(options: OEMWidgetConfig): Promise<void>;
+  setCustomPoints(points: readonly OEMCustomPoint[]): void;
+  loadCustomPoints(url: string): Promise<void>;
+  clearCustomPoints(): void;
+  getPoint(pointId: string): OEMPoint | undefined;
+  loadPoint(pointId: string): Promise<OEMPoint | undefined>;
   resize(): void;
   destroy(): void;
 }
@@ -83,6 +113,10 @@ interface OEMWidget {
 - `setOptions()` applies partial content or view updates in call order.
 - `resize()` refreshes map dimensions after a host layout change.
 - `destroy()` releases the Widget and is safe to call more than once.
+
+`customPoints` replaces the host-defined point set. Each point uses normalized map coordinates, with published pixel values divided by `2 ** maxNativeZoom`. `style` is limited to Atlos's `framed` and `no-frame` compositions, and `icon` is the image URL used by the selected composition. Custom points are not clustered and remain available when the region or floor changes. The top-level `labels` option controls the published place-name layer; it does not add labels to custom points. Use `loadCustomPoints(url)` when the point set is hosted separately.
+
+`getPoint()` reads a point already loaded by the marker layer. `loadPoint()` uses `point-index.json` to fetch only the point shard containing the requested published point ID, and returns `undefined` when the ID is not found. Both methods return the point's published map position and retained raw game position.
 
 Methods other than `destroy()` throw after the Widget has been destroyed.
 
@@ -123,6 +157,31 @@ Supported keys are `r`, `s`, `f`, `l`, `layer`, `labels`, `names`, `boundaries`,
 
 ## Lower-Level Renderer
 
-`@opendfieldmap/map` exports `createOEM()` and the framework-neutral `OEM` interface. It provides view, region, floor, locale, feature, filtering, clustering, resize, event, and lifecycle methods without mounting Widget controls.
+`@opendfieldmap/map` exports `createOEM()` and the framework-neutral `OEM` interface. It provides view, region, floor, locale, feature, filtering, custom points, point lookup, clustering, resize, event, and lifecycle methods without mounting Widget controls.
+
+## Coordinates
+
+```ts
+import { oemToGamePosition } from '@opendfieldmap/sdk';
+
+const horizontal = oemToGamePosition(
+  { regionId: 'Valley_4', x: 3200.0568, y: 4502.6376, floorId: 'M' },
+  manifest.regions.find((region) => region.id === 'Valley_4')!,
+);
+// { x: -255.3423, z: -176.8946 }
+```
+
+`gameToOEMPosition()` and `oemToGamePosition()` first apply the selected Atlos region transform, then convert between published pixels and normalized map coordinates. `gameXZToOEMPosition()` returns normalized map coordinates, so it can be used directly for a custom point. `mapToGameXZPosition()` accepts normalized map coordinates. For `WL_2` and `WL_4`, include `subregionId` so the corresponding Wuling transform is selected. A 2D map position can recover game `x/z`; game height `y` is intentionally not reconstructed.
+
+The lower-level renderer emits `click` with both coordinate forms:
+
+```ts
+map.on('click', ({ position, game }) => {
+  console.log(position); // normalized map coordinates
+  console.log(game); // { x, z } in game coordinates
+});
+```
+
+The Widget exposes the same event with `widget.on('click', handler)`.
 
 Use `@opendfieldmap/sdk` for the standard embeddable experience and `@opendfieldmap/map` when the host owns its control layer.

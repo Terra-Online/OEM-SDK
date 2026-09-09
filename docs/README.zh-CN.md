@@ -103,6 +103,7 @@ export function MapPanel() {
 ```bash
 pnpm install
 pnpm dev                 # 本地 HMR 演示：http://127.0.0.1:4173/demo/
+pnpm export:atlos:dev    # 刷新本地生成的地图数据
 pnpm build               # 构建各包发布产物
 pnpm pack:release        # 将 npm tarball 写入 artifacts/npm
 pnpm build:demo          # 构建 Pages 部署产物

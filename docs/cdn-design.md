@@ -54,6 +54,12 @@ Consumers should provide only `baseUrl` and `manifestPath`. They should not cons
 
 Published release directories are immutable. Tile objects are updated in place before the stable channel changes; per-tile `v` values prevent stale CDN reuse.
 
+## R2 Release Validation
+
+After `pnpm deploy:data -- --confirm-release <releaseId>`, the publisher runs `pnpm validate:r2`. It compares every local object with the R2 bucket by size, fetches all manifest-declared assets through the configured CDN, verifies their bytes and SHA-256 values, and checks `Content-Type`, `Cache-Control`, and representative tile headers. It does not open a browser or perform an online smoke test.
+
+R2 credentials may be supplied through `OEM_R2_ACCESS_KEY_ID`, `OEM_R2_ACCESS_KEY_SECRET`, and `OEM_R2_ENDPOINT`; environment variables take precedence over local configuration. Keep credentials out of the repository and CI logs.
+
 ## Custom Origins
 
 A custom origin must mirror the same channel and manifest contract:

@@ -47,6 +47,12 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 
 已经发布的 release 目录不可覆盖。瓦片对象会在 stable channel 切换前原位更新；单瓦片 `v` 值可避免 CDN 复用过期内容。
 
+## R2 发布校验
+
+执行 `pnpm deploy:data -- --confirm-release <releaseId>` 后，发布脚本会自动运行 `pnpm validate:r2`。该校验会用大小比较确认本地对象已全部进入 R2，通过配置的 CDN 获取 manifest 声明的全部资产，验证内容字节与 SHA-256，并检查 `Content-Type`、`Cache-Control` 和代表性瓦片的响应头。它不会打开浏览器，也不会执行线上烟测。
+
+R2 凭据可以通过 `OEM_R2_ACCESS_KEY_ID`、`OEM_R2_ACCESS_KEY_SECRET` 和 `OEM_R2_ENDPOINT` 提供；环境变量优先于本地配置。凭据不应提交到仓库，也不应出现在 CI 日志中。
+
 ## 自定义资源源
 
 自定义资源源必须实现相同的 channel 和 manifest 契约：

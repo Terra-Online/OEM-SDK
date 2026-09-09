@@ -21,6 +21,12 @@ const widget = await createOEMWidget('#map', {
   region: 'Valley_4',
   locale: 'zh-HK',
   markerTypes: ['crate_i'],
+  customPoints: [{
+    id: 'route-start',
+    position: { regionId: 'Valley_4', x: 400, y: 600, floorId: 'M' },
+    style: 'framed',
+    icon: '/icons/route-start.webp',
+  }],
 });
 ```
 
@@ -37,6 +43,8 @@ const widget = await createOEMWidget('#map', {
 | `floor` | 已發佈樓層：`M`、`L1`–`L4`、`B1`–`B4` | `M` |
 | `locale` | Manifest 中已發佈的語言 | 瀏覽器語言，其次為 manifest fallback |
 | `markerTypes` | 類型鍵陣列、`'*'` 或 `false` | `false` |
+| `customPoints` | `OEMCustomPoint[]` | `[]` |
+| `customPointsUrl` | 返回 `OEMCustomPoint[]` JSON 的 URL | 無 |
 | `labels` | `boolean` | `true` |
 | `boundaries` | `boolean` | `false` |
 | `markerClustering` | `boolean` | `true` |
@@ -45,7 +53,24 @@ const widget = await createOEMWidget('#map', {
 
 `markerTypes: '*'` 會載入所有已發佈點位類型。空陣列和 `false` 都會關閉點位資料。點位類型鍵由資料定義，不受 npm 套件內固定 union type 限制。
 
-座標使用目前地區發佈的像素座標系統，不是經緯度。
+視圖和已發佈點位使用目前地區發佈的像素座標系統，不是經緯度。Atlos `markTool` 匯出的 `pos` 是地圖座標 `[z, x]`；自訂點和地圖選點結果使用標準化地圖座標，即發佈像素除以 `2 ** maxNativeZoom`。
+
+```ts
+interface OEMCustomPoint {
+  id: string;
+  position: OEMMapPosition;
+  style: 'framed' | 'no-frame';
+  icon: string;
+}
+```
+
+`OEMMapPosition` 與地圖方向一致：`x` 向右增加，`y` 向下增加。例如 `Valley_4` 中發佈座標 `{ x: 3200, y: 4800 }` 對應 `{ x: 400, y: 600 }`。
+
+`subregionId` 是可選的子地區識別，對應 Atlos `markTool` 匯出的 `subregId`（例如 `VL_1`）。轉換 markTool 結果時應保留它；它會選擇子地區專用的遊戲座標轉換參數。省略時會回退至地區級轉換參數，這只適用於該地區沒有子地區專用參數的情況。地圖點擊會在可能時根據目前選取的子地區或已發佈邊界推斷 `subregionId`。
+
+`style` 僅限 Atlos 原生的兩種點位組合樣式。`framed` 使用 `32 × 32` 像素點位，錨點為 `[16, 32]`；`no-frame` 使用 `50 × 50` 像素點位，錨點為 `[25, 25]`。`icon` 是由相應樣式渲染的圖片 URL。自訂點不支援尺寸、顏色和標籤欄位。
+
+大量點位不應內嵌在 `createOEMWidget()` 設定中，應使用 `customPointsUrl`。該 URL 必須返回與 `customPoints` 相同的 JSON 陣列；相對圖示 URL 會以 JSON URL 為基準解析。`customPoints` 和 `customPointsUrl` 不能同時傳入。呼叫 `setCustomPoints()` 或 `loadCustomPoints()` 會取代目前的自訂點位集合。
 
 ## 建立參數
 
@@ -74,6 +99,11 @@ interface OEMWidget {
   readonly destroyed: boolean;
   getState(): OEMWidgetState;
   setOptions(options: OEMWidgetConfig): Promise<void>;
+  setCustomPoints(points: readonly OEMCustomPoint[]): void;
+  loadCustomPoints(url: string): Promise<void>;
+  clearCustomPoints(): void;
+  getPoint(pointId: string): OEMPoint | undefined;
+  loadPoint(pointId: string): Promise<OEMPoint | undefined>;
   resize(): void;
   destroy(): void;
 }
@@ -83,6 +113,10 @@ interface OEMWidget {
 - `setOptions()` 按呼叫順序套用部分內容或視圖更新。
 - `resize()` 在宿主版面變化後重新整理地圖尺寸。
 - `destroy()` 釋放 Widget，可安全重複呼叫。
+
+`customPoints` 會取代宿主定義的點位集合。每個點使用標準化地圖座標，即發佈像素除以 `2 ** maxNativeZoom`。`style` 僅限 Atlos 原生的 `framed` 和 `no-frame` 兩種組合樣式，`icon` 是相應樣式使用的圖片 URL。自訂點不會參與聚合，並會在切換地區或樓層時保留。頂層 `labels` 參數只控制地圖已有的地點名稱圖層，不會為自訂點新增標籤。點位集合較大時使用 `loadCustomPoints(url)`。
+
+`getPoint()` 只讀取目前已由點位圖層載入的發佈點位。`loadPoint()` 會優先使用 `point-index.json`，只請求目標點所在的點位分片；找不到點位時返回 `undefined`。兩者都返回點位的地圖座標和保留的原始遊戲座標。
 
 Widget 銷毀後，除 `destroy()` 外的其他方法都會拋出錯誤。
 
@@ -123,6 +157,31 @@ const widget = await createOEMWidget('#map', options);
 
 ## 底層渲染器
 
-`@opendfieldmap/map` 匯出 `createOEM()` 和框架無關的 `OEM` 介面。它提供視圖、地區、樓層、語言、功能層、篩選、聚合、尺寸、事件和生命週期方法，但不掛載 Widget 控制項。
+`@opendfieldmap/map` 匯出 `createOEM()` 和框架無關的 `OEM` 介面。它提供視圖、地區、樓層、語言、功能層、篩選、自訂點、點位讀取、聚合、尺寸、事件和生命週期方法，但不掛載 Widget 控制項。
+
+## 座標轉換
+
+```ts
+import { oemToGamePosition } from '@opendfieldmap/sdk';
+
+const horizontal = oemToGamePosition(
+  { regionId: 'Valley_4', x: 3200.0568, y: 4502.6376, floorId: 'M' },
+  manifest.regions.find((region) => region.id === 'Valley_4')!,
+);
+// { x: -255.3423, z: -176.8946 }
+```
+
+`gameToOEMPosition()` 和 `oemToGamePosition()` 會先應用目前 Atlos 地區轉換參數，再在發佈像素和標準化地圖座標之間轉換。`gameXZToOEMPosition()` 返回標準化地圖座標，可以直接用於自訂點。`mapToGameXZPosition()` 接受標準化地圖座標。對於 `WL_2` 和 `WL_4`，應傳入 `subregionId` 以選擇對應的武陵轉換參數。二維地圖座標可以恢復遊戲 `x/z`，不會臆造遊戲高度 `y`。
+
+底層 renderer 的 `click` 事件會同時返回兩種座標：
+
+```ts
+map.on('click', ({ position, game }) => {
+  console.log(position); // 標準化地圖座標
+  console.log(game); // 遊戲 { x, z }
+});
+```
+
+Widget 使用 `widget.on('click', handler)` 監聽同一事件。
 
 標準嵌入場景使用 `@opendfieldmap/sdk`；需要自行管理控制項層時使用 `@opendfieldmap/map`。

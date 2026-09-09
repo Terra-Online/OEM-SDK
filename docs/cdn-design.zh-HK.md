@@ -47,6 +47,12 @@ channel 是可更新的小型指標。schema v1 release manifest 選擇一套完
 
 已發佈的 release 目錄不可覆蓋。瓦片物件會在 stable channel 切換前原位更新；單一瓦片 `v` 值可避免 CDN 重用過期內容。
 
+## R2 發佈校驗
+
+執行 `pnpm deploy:data -- --confirm-release <releaseId>` 後，發佈腳本會自動執行 `pnpm validate:r2`。該校驗會用大小比較確認本地物件已全部進入 R2，透過設定的 CDN 取得 manifest 宣告的全部資產，驗證內容位元組與 SHA-256，並檢查 `Content-Type`、`Cache-Control` 和代表性瓦片的回應標頭。它不會開啟瀏覽器，也不會執行線上煙測。
+
+R2 憑證可以透過 `OEM_R2_ACCESS_KEY_ID`、`OEM_R2_ACCESS_KEY_SECRET` 和 `OEM_R2_ENDPOINT` 提供；環境變數優先於本地設定。憑證不應提交到倉庫，也不應出現在 CI 日誌中。
+
 ## 自訂資源源
 
 自訂資源源必須實作相同的 channel 和 manifest 契約：
