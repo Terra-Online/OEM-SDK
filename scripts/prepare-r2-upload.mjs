@@ -25,7 +25,7 @@ const groupDefinitions = {
   webp: { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' },
   woff2: { contentType: 'font/woff2', cacheControl: 'public, max-age=31536000, immutable' },
   text: { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=31536000, immutable' },
-  channel: { contentType: 'application/json; charset=utf-8', cacheControl: 'public, max-age=60, must-revalidate' },
+  channel: { contentType: 'application/json; charset=utf-8', cacheControl: 'public, no-cache, must-revalidate' },
 };
 const groups = Object.fromEntries(Object.keys(groupDefinitions).map((name) => [name, []]));
 const files = (await walk(publicRoot)).sort();

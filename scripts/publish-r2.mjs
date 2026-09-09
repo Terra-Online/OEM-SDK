@@ -75,6 +75,7 @@ const rcloneEnv = {
 const runRclone = (rcloneArgs, capture = false) => runCommand('rclone', rcloneArgs, capture, rcloneEnv);
 const commonRcloneArgs = [
   '--s3-no-check-bucket',
+  '--ignore-times',
   '--transfers', String(plan.concurrency), '--checkers', '32', '--fast-list',
   '--stats', '10s', '--stats-one-line',
 ];
@@ -86,7 +87,6 @@ await runRclone([
 ]);
 await runRclone([
   'copy', 'public/fonts', `${remoteRoot}/fonts`,
-  '--ignore-times',
   '--header-upload', 'Cache-Control: public, max-age=31536000, immutable',
   ...commonRcloneArgs,
 ]);
@@ -107,7 +107,7 @@ await runCommand(process.execPath, [path.join(root, 'scripts/validate-r2.mjs'), 
 await runRclone([
   'copyto', 'public/channels/stable.json', `${remoteRoot}/channels/stable.json`,
   '--s3-no-check-bucket',
-  '--header-upload', 'Cache-Control: public, max-age=60, must-revalidate',
+  '--header-upload', 'Cache-Control: public, no-cache, must-revalidate',
 ]);
 
 const localChannel = JSON.parse(await fs.readFile(path.join(root, 'public/channels/stable.json'), 'utf8'));

@@ -4,6 +4,7 @@ packages/*/dist/
 public/
 artifacts/
 .export-tmp/
+scripts/local/
 .DS_Store
 .history/
 .wrangler/

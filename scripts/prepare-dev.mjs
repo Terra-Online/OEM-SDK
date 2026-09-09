@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const publicRoot = path.join(root, 'public');
 const channelPath = path.join(root, 'public/channels/stable.json');
 
 const hasPreparedData = async () => {
@@ -11,10 +12,36 @@ const hasPreparedData = async () => {
     const channel = JSON.parse(await fs.readFile(channelPath, 'utf8'));
     const manifestPath = channel?.manifest?.path;
     if (typeof manifestPath !== 'string' || !manifestPath.startsWith('/')) return false;
-    const manifest = JSON.parse(await fs.readFile(path.join(root, 'public', manifestPath.slice(1)), 'utf8'));
-    return manifest.schemaVersion === 1 && manifest.regions?.every((region) =>
-      region.gameTransform && region.subregions?.every((subregion) =>
-        !subregion.gameTransform || subregion.gameTransform.scaleX !== 0 && subregion.gameTransform.scaleZ !== 0));
+    const manifest = JSON.parse(await fs.readFile(path.join(publicRoot, manifestPath.slice(1)), 'utf8'));
+    const hasPlane = (value) => value && Number.isFinite(value.x) && Number.isFinite(value.z) && !('y' in value);
+    const hasTransform = (value) => value && [value.scaleX, value.scaleZ, value.offsetX, value.offsetZ].every(Number.isFinite)
+      && value.scaleX !== 0 && value.scaleZ !== 0;
+    const references = [
+      manifest.types,
+      manifest.pointIndex,
+      manifest.fontLicense,
+      ...(manifest.fonts ?? []),
+      ...(manifest.fontLicenses ?? []),
+      ...Object.values(manifest.locales ?? {}),
+      ...(manifest.points ?? []),
+      ...(manifest.regions ?? []).flatMap((region) => [
+        ...(region.points ?? []), region.labels, region.boundaries, region.gameBoundaries,
+      ]),
+    ].filter((reference) => reference && typeof reference.path === 'string');
+    const resourcesExist = await Promise.all(references.map(async (reference) => {
+      if (!reference.path.startsWith('/') || reference.path.includes('{')) return true;
+      try {
+        await fs.access(path.join(publicRoot, reference.path.slice(1)));
+        return true;
+      } catch {
+        return false;
+      }
+    }));
+    return manifest.schemaVersion === 1 && Array.isArray(manifest.regions) && manifest.regions.length > 0
+      && manifest.regions.every((region) => hasPlane(region.boundsOffset) && hasPlane(region.initialView)
+        && hasTransform(region.gameTransform) && Array.isArray(region.subregions)
+        && region.subregions.every((subregion) => !subregion.gameTransform || hasTransform(subregion.gameTransform)))
+      && resourcesExist.every(Boolean);
   } catch {
     return false;
   }

@@ -97,7 +97,7 @@ const expectedContentType = (resourcePath) => {
   fail(`Unknown published resource type: ${resourcePath}`);
 };
 const expectedCacheControl = (resourcePath) => resourcePath === '/channels/stable.json'
-  ? ['max-age=60', 'must-revalidate']
+  ? ['no-cache', 'must-revalidate']
   : ['max-age=31536000', 'immutable'];
 const checkHeaders = (resourcePath, response) => {
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
@@ -151,6 +151,7 @@ for (const region of localManifest.regions ?? []) {
   for (const reference of region.points ?? []) addReference(reference);
   addReference(region.labels);
   addReference(region.boundaries);
+  addReference(region.gameBoundaries);
 }
 
 if (!preflight) await getObject('/channels/stable.json', localChannelBytes.byteLength, hash(localChannelBytes));

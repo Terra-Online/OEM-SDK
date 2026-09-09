@@ -15,7 +15,7 @@
     "deploy:pages": "pnpm build:demo && wrangler pages deploy dist --project-name oem-sdk --branch main --commit-dirty=true",
     "prepare:data": "pnpm validate:export && node scripts/prepare-r2-upload.mjs",
     "deploy:data": "node scripts/publish-r2.mjs --apply",
-    "export:atlos": "node scripts/export-atlos.mjs",
+    "export:atlos": "node scripts/export-atlos.mjs --include-licensed-novecento",
     "export:atlos:dev": "node scripts/export-atlos.mjs --include-licensed-novecento",
     "check": "pnpm validate:export && pnpm typecheck && pnpm test && pnpm build:demo",
     "pack:release": "pnpm build && node scripts/pack-release.mjs",

@@ -159,9 +159,9 @@ if (includeLicensedNovecento) {
   // intentionally retain Atlos' separate family names so browser fallback can
   // select the glyph-complete face for each script.
   const novecentoFiles = [
-    { filename: 'Novecento-WideBold.woff2', family: 'Novecento Bold', weight: 700 },
-    { filename: 'Novecento-WideDemiBold.woff2', family: 'Novecento DemiBold', weight: 600 },
-    { filename: 'Novecento-WideMedium.woff2', family: 'Novecento Medium', weight: 500 },
+    { filename: 'Novecento-WideBold.woff2', family: 'Novecento Wide Bold', weight: 700 },
+    { filename: 'Novecento-WideDemiBold.woff2', family: 'Novecento Wide DemiBold', weight: 600 },
+    { filename: 'Novecento-WideMedium.woff2', family: 'Novecento Wide Medium', weight: 500 },
     { filename: 'NWDemiBold+Grek+Cyrl.woff2', family: 'Novecento Cyrillic DemiBold', weight: 600 },
     { filename: 'NWMed+Grek+Cyrl.woff2', family: 'Novecento Cyrillic Medium', weight: 500 },
     { filename: 'NWBold+Viet.woff2', family: 'Novecento Vietnamese DemiBold', weight: 600 },
@@ -237,14 +237,16 @@ const pointIndex = {};
 const regions = [];
 for (const [id, config] of Object.entries(regionSource)) {
   const scale = 2 ** config.maxZoom;
-  const boundsOffset = config.boundsOffset ?? { x: 0, y: 0 };
+  const boundsOffset = config.boundsOffset
+    ? { x: config.boundsOffset.x, z: -(config.boundsOffset.y + config.dimensions[1]) }
+    : { x: 0, z: -config.dimensions[1] };
   const region = {
     id, name: regionNames[id] ?? id, locales: {}, dimensions: config.dimensions, boundsOffset,
     gameTransform: gameTransforms[id],
     tileSize: config.tileSize, minZoom: 0, maxNativeZoom: config.maxZoom,
     maxZoom: config.maxZoom + (['Valley_4', 'Wuling'].includes(id) ? 1.5 : 1),
     initialView: { regionId: id, floorId: 'M', x: boundsOffset.x + config.dimensions[0] / 2 + config.initialOffset.x,
-      y: boundsOffset.y + config.dimensions[1] / 2 + config.initialOffset.y, zoom: config.initialZoom },
+      z: -(config.boundsOffset?.y ?? 0) - config.dimensions[1] / 2 - config.initialOffset.y, zoom: config.initialZoom },
     floors: ['M', ...config.layers ?? []].map((floorId) => ({
       id: floorId,
       tileTemplate: `/tiles/${gameVersion}/${id}/{z}/{x}/{y}${floorId === 'M' ? '' : `_${floorId.toLowerCase()}`}.webp`,
@@ -252,7 +254,10 @@ for (const [id, config] of Object.entries(regionSource)) {
     })),
     subregions: config.subregions.map((subregionId) => {
       const subregion = subregionsById.get(subregionId);
-      return { id: subregionId, key: subregion?.name ?? subregionId, bounds: subregion?.bounds,
+      const bounds = subregion?.bounds?.length >= 2
+        ? [[subregion.bounds[0][0], -subregion.bounds[1][1]], [subregion.bounds[1][0], -subregion.bounds[0][1]]]
+        : undefined;
+      return { id: subregionId, key: subregion?.name ?? subregionId, bounds,
         gameTransform: subregionGameTransforms[subregionId] };
     }),
     points: [], coverage: coverage[id] ?? {},
@@ -280,7 +285,7 @@ for (const [id, config] of Object.entries(regionSource)) {
       const floorId = point.tier === 0 ? 'M' : `${point.tier < 0 ? 'B' : 'L'}${Math.abs(point.tier)}`;
       return [{ id: point.id, regionId: id, subregionId: point.subregId, type, tier: point.tier,
         raw: mapMarkerToGame(point, id), position: { regionId: id, subregionId: point.subregId,
-          x: point.x * scale, y: -point.z * scale, floorId } }];
+        x: point.x * scale, z: point.z * scale, floorId } }];
     });
     const ref = await versionedObject('marker', `points/${subregionId}.json`, points);
     region.points.push(ref);
@@ -290,7 +295,7 @@ for (const [id, config] of Object.entries(regionSource)) {
   const code = regionCodes[id];
   const regionLabels = Object.values(labels.regions[code]?.labels ?? {}).map((label) => ({
     id: label.id, type: label.type,
-    position: { regionId: id, x: label.point[0], y: label.point[1] },
+    position: { regionId: id, x: label.point[0], z: -label.point[1] },
     textKey: `${code}.sub.${label.sub === '__root__' ? '' : `${label.sub}.`}${label.type === 'sub' ? 'name' : `site.${label.site}`}`,
   }));
   region.labels = await versionedObject('map', `labels/${id}.json`, regionLabels);
@@ -305,7 +310,7 @@ for (const [id, config] of Object.entries(regionSource)) {
             [subregion.bounds[0][0], subregion.bounds[1][1]],
           ]]
         : [];
-    return { id: subregion.id, rings: rings.map((ring) => ring.map(([pixelX, pixelY]) => ({ regionId: id, x: pixelX, y: pixelY }))) };
+    return { id: subregion.id, rings: rings.map((ring) => ring.map(([pixelX, pixelZ]) => ({ regionId: id, x: pixelX, z: -pixelZ }))) };
   }).filter((boundary) => boundary.rings.length);
   region.boundaries = await versionedObject('map', `boundaries/${id}.json`, boundaries);
   regions.push(region);

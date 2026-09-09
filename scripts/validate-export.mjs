@@ -60,9 +60,9 @@ if (manifest.fontLicense) await validateFileRef(manifest.fontLicense);
 await Promise.all((manifest.fontLicenses ?? []).map((license) => validateFileRef(license)));
 const expectedFontFiles = new Map([
   ['HMSans_EN', 'HMSans.woff2'],
-  ['Novecento Bold', 'Novecento-WideBold.woff2'],
-  ['Novecento DemiBold', 'Novecento-WideDemiBold.woff2'],
-  ['Novecento Medium', 'Novecento-WideMedium.woff2'],
+  ['Novecento Wide Bold', 'Novecento-WideBold.woff2'],
+  ['Novecento Wide DemiBold', 'Novecento-WideDemiBold.woff2'],
+  ['Novecento Wide Medium', 'Novecento-WideMedium.woff2'],
   ['Novecento Cyrillic DemiBold', 'NWDemiBold+Grek+Cyrl.woff2'],
   ['Novecento Cyrillic Medium', 'NWMed+Grek+Cyrl.woff2'],
   ['Novecento Vietnamese DemiBold', 'NWBold+Viet.woff2'],
@@ -138,6 +138,15 @@ for (const region of manifest.regions) {
     requirePath(region.boundaries.path, `${mapRoot}/boundaries/${region.id}.json`);
     await readRef(region.boundaries);
   }
+  if (region.gameBoundaries) {
+    requirePath(region.gameBoundaries.path, `${mapRoot}/boundaries/${region.id}.game.json`);
+    const gameBoundaries = await readRef(region.gameBoundaries);
+    if (!Array.isArray(gameBoundaries) || gameBoundaries.some((boundary) =>
+      !boundary?.id || !Array.isArray(boundary.rings) || boundary.rings.some((ring) =>
+        !Array.isArray(ring) || ring.length < 3 || ring.some((position) =>
+          position?.regionId !== region.id || !Number.isFinite(position.x) || !Number.isFinite(position.z))))
+    ) fail(`Invalid game boundary data: ${region.id}`);
+  }
   for (const ref of region.points) {
     requirePrefix(ref.path, `${markerRoot}/points`);
     const points = await readRef(ref);
@@ -150,11 +159,11 @@ for (const region of manifest.regions) {
       if (!subregionIds.has(point.subregionId)) fail(`Point subregion missing: ${point.id}/${point.subregionId}`);
       if (!types[point.type]) fail(`Point type missing: ${point.type}`);
       if (!floorIds.has(point.position.floorId)) fail(`Point floor missing: ${point.id}/${point.position.floorId}`);
-      if (![point.raw.x, point.raw.y, point.raw.z, point.position.x, point.position.y].every(Number.isFinite)) fail(`Point coordinates invalid: ${point.id}`);
+      if (![point.raw.x, point.raw.y, point.raw.z, point.position.x, point.position.z].every(Number.isFinite)) fail(`Point coordinates invalid: ${point.id}`);
       const transform = region.subregions.find((subregion) => subregion.id === point.subregionId)?.gameTransform ?? region.gameTransform;
       const scale = 2 ** region.maxNativeZoom;
       if (Math.abs(point.position.x / scale - (point.raw.x * transform.scaleX + transform.offsetX)) > 1e-5 ||
-        Math.abs(-point.position.y / scale - (point.raw.z * transform.scaleZ + transform.offsetZ)) > 1e-5) {
+        Math.abs(point.position.z / scale - (point.raw.z * transform.scaleZ + transform.offsetZ)) > 1e-5) {
         fail(`Point coordinate transform mismatch: ${point.id}`);
       }
       if (pointIndex[point.id] !== ref.path) fail(`Point index mismatch: ${point.id}`);
