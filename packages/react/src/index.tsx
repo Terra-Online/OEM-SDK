@@ -17,6 +17,7 @@ const getConfig = (options: OEMWidgetOptions): OEMWidgetConfig => ({
   markerTypes: options.markerTypes,
   labels: options.labels,
   boundaries: options.boundaries,
+  boundarySource: options.boundarySource,
   markerClustering: options.markerClustering,
   customPoints: options.customPoints,
   customPointsUrl: options.customPointsUrl,
@@ -70,7 +71,7 @@ export function OEMWidget({ options = {}, className, style }: OEMWidgetProps) {
       latestOptions.current.onError?.(toError(error));
     });
   }, [options.region, options.subregion, options.floor, options.locale, options.markerTypes, options.labels,
-    options.boundaries, options.markerClustering, options.customPoints, options.customPointsUrl, options.zoom, options.center]);
+    options.boundaries, options.boundarySource, options.markerClustering, options.customPoints, options.customPointsUrl, options.zoom, options.center]);
 
   return <div ref={container} className={className} style={{ height: 480, ...style }} />;
 }

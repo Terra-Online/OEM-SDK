@@ -14,6 +14,7 @@ import {
 import type {
   OEMAsset,
   OEMBoundary,
+  OEMBoundarySource,
   OEMFloor,
   OEMLabel,
   OEMLocaleMessages,
@@ -26,7 +27,7 @@ import type {
   OEMRegion,
   OEMView,
 } from '@opendfieldmap/core';
-import type { OEM as OEMContract, OEMCustomPoint, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions } from './types';
+import type { OEM as OEMContract, OEMClickPointOptions, OEMCustomPoint, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions } from './types';
 import { SmoothTileLayer } from './atlos/smoothTileLayer';
 import { enableSmoothWheelZoom } from './atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from './atlos/mapOverdrag';
@@ -36,6 +37,7 @@ import GithubIcon from './assets/ghicon.svg';
 const mounted = new WeakSet<HTMLElement>();
 const CLUSTER_SUBCATEGORIES = new Set(['boss', 'collection', 'mob', 'natural', 'valuable', 'exploration']);
 const FEATURE_NAMES = ['points', 'labels', 'boundaries'] as const;
+type OEMFeatureName = typeof FEATURE_NAMES[number];
 const BRAND_URL = 'https://oem.re/';
 const GITHUB_URL = 'https://github.com/Terra-Online/OEM-SDK';
 const TERMS_URL = 'https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright';
@@ -65,6 +67,47 @@ const cloneCustomPoint = (point: OEMCustomPoint): OEMCustomPoint => ({
   ...point,
   position: { ...point.position },
 });
+
+type GeometryPoint = { x: number; z: number };
+
+const pointOnSegment = (point: GeometryPoint, start: GeometryPoint, end: GeometryPoint): boolean => {
+  const cross = (point.x - start.x) * (end.z - start.z) - (point.z - start.z) * (end.x - start.x);
+  if (Math.abs(cross) > 1e-7) return false;
+  return point.x >= Math.min(start.x, end.x) - 1e-7 && point.x <= Math.max(start.x, end.x) + 1e-7 &&
+    point.z >= Math.min(start.z, end.z) - 1e-7 && point.z <= Math.max(start.z, end.z) + 1e-7;
+};
+
+const pointInRing = (point: GeometryPoint, ring: readonly GeometryPoint[]): boolean => {
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const current = ring[index];
+    const prior = ring[previous];
+    if (pointOnSegment(point, prior, current)) return true;
+    const crosses = (current.z > point.z) !== (prior.z > point.z);
+    if (crosses && point.x < (prior.x - current.x) * (point.z - current.z) / (prior.z - current.z) + current.x) inside = !inside;
+  }
+  return inside;
+};
+
+const distanceSquaredToSegment = (point: GeometryPoint, start: GeometryPoint, end: GeometryPoint): number => {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const lengthSquared = dx * dx + dz * dz;
+  if (!lengthSquared) return (point.x - start.x) ** 2 + (point.z - start.z) ** 2;
+  const projection = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared));
+  const nearestX = start.x + projection * dx;
+  const nearestZ = start.z + projection * dz;
+  return (point.x - nearestX) ** 2 + (point.z - nearestZ) ** 2;
+};
+
+const boundaryScore = (boundary: OEMBoundary, point: GeometryPoint): { id: string; inside: boolean; distance: number } => {
+  const rings = boundary.rings.map((ring) => ring as readonly GeometryPoint[]);
+  const distances = rings.flatMap((ring) => ring.map((start, index) =>
+    distanceSquaredToSegment(point, start, ring[(index + 1) % ring.length])));
+  const insideOuter = rings.length > 0 && pointInRing(point, rings[0]);
+  const insideHole = rings.slice(1).some((ring) => pointInRing(point, ring));
+  return { id: boundary.id, inside: insideOuter && !insideHole, distance: Math.min(...distances, Infinity) };
+};
 
 /** Leaflet marker with the subpixel positioning used by Atlos. */
 class OEMMarker extends L.Marker {
@@ -109,8 +152,9 @@ export class OEM implements OEMContract {
   private region: OEMRegion;
   private floorId = 'M';
   private features: OEMFeatures = {};
+  private boundarySource: OEMBoundarySource = 'oem';
   private listeners = new Map<keyof OEMEvents, Set<(payload: never) => void>>();
-  private requests = new Map<keyof OEMFeatures, AbortController>();
+  private requests = new Map<OEMFeatureName, AbortController>();
   private baseTiles?: L.TileLayer;
   private floorTiles?: L.TileLayer;
   private pointsLayer = L.layerGroup();
@@ -120,10 +164,15 @@ export class OEM implements OEMContract {
   private boundariesLayer = L.layerGroup();
   private points: OEMPoint[] = [];
   private customPoints: OEMCustomPoint[] = [];
+  private clickPoints: OEMCustomPoint[] = [];
+  private clickPointOptions?: OEMClickPointOptions;
+  private clickPointSequence = 0;
   private customPointsRequest?: { controller: AbortController; promise: Promise<void> };
   private pointIndex?: Record<string, string>;
   private pointIndexRequest?: Promise<Record<string, string>>;
   private pointShardRequests = new Map<string, Promise<OEMPoint[]>>();
+  private boundaryData = new Map<string, OEMBoundary[]>();
+  private boundaryDataRequests = new Map<string, Promise<OEMBoundary[]>>();
   private types: Record<string, OEMPointType> = {};
   private labels: OEMLabel[] = [];
   private visibleLabelType?: OEMLabel['type'];
@@ -145,6 +194,7 @@ export class OEM implements OEMContract {
     if (mounted.has(container)) throw new Error('This container already hosts an OEM instance');
     this.region = getOEMRegion(manifest, options.view?.regionId ?? options.regionId ?? manifest.defaultRegionId);
     this.filter = cloneFilter(options.pointFilter ?? {});
+    this.boundarySource = options.features?.boundarySource ?? 'oem';
     this.customPoints = this.normalizeCustomPoints(options.customPoints ?? []);
     this.markerClustering = options.markerClustering ?? true;
     const initialFloor = options.view?.floorId ?? options.floorId ?? 'M';
@@ -234,56 +284,135 @@ export class OEM implements OEMContract {
       if (!point.position || typeof point.position.regionId !== 'string') {
         throw new Error(`Invalid custom point position: ${id}`);
       }
+      const position = point.position;
       if (point.style !== 'framed' && point.style !== 'no-frame') {
         throw new Error(`Invalid custom point style: ${id}`);
       }
       if (typeof point.icon !== 'string' || !point.icon) {
         throw new Error(`Custom point icon must be a non-empty URL: ${id}`);
       }
-      const pointRegion = getOEMRegion(this.manifest, point.position.regionId);
-      toOEMLeafletMapPosition(point.position);
-      if (point.position.subregionId && !pointRegion.subregions.some((subregion) => subregion.id === point.position.subregionId)) {
-        throw new Error(`Unknown custom point subregion ${point.position.subregionId} in ${point.position.regionId}`);
+      const pointRegion = getOEMRegion(this.manifest, position.regionId);
+      toOEMLeafletMapPosition(position);
+      if (position.subregionId && !pointRegion.subregions.some((subregion) => subregion.id === position.subregionId)) {
+        throw new Error(`Unknown custom point subregion ${position.subregionId} in ${position.regionId}`);
       }
-      if (point.position.floorId && !pointRegion.floors.some((floor) => floor.id === point.position.floorId)) {
-        throw new Error(`Unknown custom point floor ${point.position.floorId} in ${point.position.regionId}`);
+      if (position.floorId && !pointRegion.floors.some((floor) => floor.id === position.floorId)) {
+        throw new Error(`Unknown custom point floor ${position.floorId} in ${position.regionId}`);
       }
-      return { ...cloneCustomPoint(point), id };
+      return { ...cloneCustomPoint({ ...point, position }), id };
     });
+  }
+  private normalizeClickPointOptions(options: OEMClickPointOptions): OEMClickPointOptions {
+    const probe: OEMCustomPoint = {
+      id: 'click-point-option',
+      position: { regionId: this.region.id, x: 0, z: 0 },
+      style: options?.style,
+      icon: options?.icon,
+    };
+    this.normalizeCustomPoints([probe]);
+    if (options.mode !== 'multiple' && options.mode !== 'single') {
+      throw new Error(`Invalid click point mode: ${options.mode}`);
+    }
+    return { mode: options.mode, style: options.style, icon: options.icon };
   }
   private position(latlng: L.LatLng): OEMPosition {
     return fromOEMLeafletPosition(latlng.lat, latlng.lng, this.region, this.floorId);
   }
-  private inferSubregionId(x: number, y: number): string | undefined {
+  private loadOEMBoundaryData(reference: OEMAsset): Promise<OEMBoundary[]> {
+    const cached = this.boundaryData.get(reference.path);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.boundaryDataRequests.get(reference.path);
+    if (pending) return pending;
+    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, reference.path), this.options.signal).then((value) => {
+      if (!Array.isArray(value)) throw new Error(`Invalid OEM boundary data: ${reference.path}`);
+      const boundaries = value as OEMBoundary[];
+      this.boundaryData.set(reference.path, boundaries);
+      return boundaries;
+    }).finally(() => {
+      if (this.boundaryDataRequests.get(reference.path) === request) this.boundaryDataRequests.delete(reference.path);
+    });
+    this.boundaryDataRequests.set(reference.path, request);
+    return request;
+  }
+  /** Preloads OEM subregion geometry so map clicks can resolve an exact subregion. */
+  async prepareSubregionBoundaries(): Promise<void> {
+    if (!this.region.boundaries) return;
+    try { await this.loadOEMBoundaryData(this.region.boundaries); } catch { /* Click metadata has a bounds fallback. */ }
+  }
+  private inferSubregionId(x: number, z: number): string | undefined {
     const selected = this.filter.subregions?.filter((id) => this.region.subregions.some((subregion) => subregion.id === id));
-    if (selected?.length === 1) {
-      const subregion = this.region.subregions.find((entry) => entry.id === selected[0]);
-      if (!subregion?.bounds) return subregion?.id;
-      const scale = 2 ** this.region.maxNativeZoom;
-      const [[minX, minY], [maxX, maxY]] = subregion.bounds;
-      const pixelX = x * scale;
-      const pixelY = y * scale;
-      if (pixelX >= minX && pixelX <= maxX && pixelY >= minY && pixelY <= maxY) return subregion.id;
-    }
     const scale = 2 ** this.region.maxNativeZoom;
-    const pixelX = x * scale;
-    const pixelY = y * scale;
-    return this.region.subregions.find((subregion) => {
-      if (!subregion.bounds) return false;
-      const [[minX, minY], [maxX, maxY]] = subregion.bounds;
-      return pixelX >= minX && pixelX <= maxX && pixelY >= minY && pixelY <= maxY;
-    })?.id;
+    const point = { x: x * scale, z: z * scale };
+    const allowed = selected?.length ? new Set(selected) : undefined;
+    const geometries = this.region.boundaries ? this.boundaryData.get(this.region.boundaries.path) ?? [] : [];
+    const scores = geometries
+      .filter((boundary) => this.region.subregions.some((subregion) => subregion.id === boundary.id) && (!allowed || allowed.has(boundary.id)))
+      .map((boundary) => boundaryScore(boundary, point));
+    const inside = scores.filter((score) => score.inside);
+    if (inside.length) {
+      // Shared OEM polygons can overlap at block boundaries.  A point that is
+      // close to a candidate's own boundary is close to that region's edge,
+      // not deep inside its overall structure.  Resolve ambiguity by comparing
+      // candidates pairwise and preferring the one with the greater boundary
+      // clearance (the inverse of the old nearest-boundary rule).
+      const ranked = inside.map((score) => ({ ...score, wins: 0, margin: 0 }));
+      for (let leftIndex = 0; leftIndex < ranked.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < ranked.length; rightIndex += 1) {
+          const left = ranked[leftIndex];
+          const right = ranked[rightIndex];
+          const delta = left.distance - right.distance;
+          if (Math.abs(delta) <= 1e-9) continue;
+          if (delta > 0) {
+            left.wins += 1;
+            left.margin += delta;
+            right.margin -= delta;
+          } else {
+            right.wins += 1;
+            right.margin -= delta;
+            left.margin += delta;
+          }
+        }
+      }
+      ranked.sort((left, right) => right.wins - left.wins || right.margin - left.margin ||
+        right.distance - left.distance || left.id.localeCompare(right.id));
+      return ranked[0].id;
+    }
+
+    const bounds = this.region.subregions
+      .filter((subregion) => subregion.bounds && (!allowed || allowed.has(subregion.id)))
+      .map((subregion) => {
+        const [[minX, minZ], [maxX, maxZ]] = subregion.bounds!;
+        const insideX = point.x >= minX && point.x <= maxX;
+        const insideZ = point.z >= minZ && point.z <= maxZ;
+        const dx = insideX ? Math.min(point.x - minX, maxX - point.x) : Math.min(Math.abs(point.x - minX), Math.abs(point.x - maxX));
+        const dz = insideZ ? Math.min(point.z - minZ, maxZ - point.z) : Math.min(Math.abs(point.z - minZ), Math.abs(point.z - maxZ));
+        return { id: subregion.id, inside: insideX && insideZ, distance: dx * dx + dz * dz };
+      })
+      .sort((left, right) => Number(right.inside) - Number(left.inside) || left.distance - right.distance || left.id.localeCompare(right.id));
+    if (bounds.length) return bounds[0].id;
+    return scores.sort((left, right) => left.distance - right.distance || left.id.localeCompare(right.id))[0]?.id;
   }
   private emitMapClick = (event: L.LeafletMouseEvent): void => {
     if (this.destroyed) return;
-    const subregionId = this.inferSubregionId(event.latlng.lng, -event.latlng.lat);
+    const subregionId = this.inferSubregionId(event.latlng.lng, event.latlng.lat);
     const position: OEMMapPosition = {
       regionId: this.region.id,
       x: event.latlng.lng,
-      y: -event.latlng.lat,
+      z: event.latlng.lat,
       floorId: this.floorId,
       ...(subregionId ? { subregionId } : {}),
     };
+    if (this.clickPointOptions) {
+      const point: OEMCustomPoint = {
+        id: `oem-click-point-${++this.clickPointSequence}`,
+        position,
+        style: this.clickPointOptions.style,
+        icon: this.clickPointOptions.icon,
+      };
+      if (this.clickPointOptions.mode === 'single') this.clickPoints = [point];
+      else this.clickPoints.push(point);
+      this.renderCustomPoints();
+    }
     this.emit('click', { position, game: mapToGameXZPosition(position, this.region) });
   };
   private emit<Event extends keyof OEMEvents>(event: Event, payload: OEMEvents[Event]): void {
@@ -314,7 +443,7 @@ export class OEM implements OEMContract {
     const view = this.getView();
     if (this.emittedView && view.regionId === this.emittedView.regionId &&
       view.floorId === this.emittedView.floorId && view.x === this.emittedView.x &&
-      view.y === this.emittedView.y && view.zoom === this.emittedView.zoom) return;
+      view.z === this.emittedView.z && view.zoom === this.emittedView.zoom) return;
     this.emittedView = view;
     this.emit('viewchange', view);
     this.renderLabels();
@@ -351,10 +480,10 @@ export class OEM implements OEMContract {
   }
   /** Converts the region's published pixel extent to Simple CRS bounds. */
   private regionBounds(): L.LatLngBounds {
-    const { x, y } = this.region.boundsOffset;
+    const { x, z } = this.region.boundsOffset;
     return L.latLngBounds(
-      toOEMLeafletPosition({ regionId: this.region.id, x, y }, this.region),
-      toOEMLeafletPosition({ regionId: this.region.id, x: x + this.region.dimensions[0], y: y + this.region.dimensions[1] }, this.region),
+      toOEMLeafletPosition({ regionId: this.region.id, x, z }, this.region),
+      toOEMLeafletPosition({ regionId: this.region.id, x: x + this.region.dimensions[0], z: z + this.region.dimensions[1] }, this.region),
     );
   }
   /** Creates a coverage-aware layer for one region floor. */
@@ -412,6 +541,7 @@ export class OEM implements OEMContract {
     this.emit('regionchange', { regionId });
     this.emit('floorchange', { floorId: 'M' });
     this.emitView();
+    await this.prepareSubregionBoundaries();
     await this.loadFeatures();
   }
   /** Switches the rendered floor while retaining the current region view. */
@@ -451,6 +581,16 @@ export class OEM implements OEMContract {
   async setFeatures(features: OEMFeatures): Promise<void> {
     this.assertAlive();
     const loads: Promise<void>[] = [];
+    if (features.boundarySource !== undefined) {
+      if (features.boundarySource !== 'oem' && features.boundarySource !== 'game') {
+        throw new Error(`Unknown OEM boundary source: ${features.boundarySource}`);
+      }
+      if (features.boundarySource !== this.boundarySource) {
+        this.boundarySource = features.boundarySource;
+        this.cancelRequest('boundaries');
+        if (this.features.boundaries) loads.push(this.loadFeature('boundaries'));
+      }
+    }
     for (const feature of FEATURE_NAMES) {
       if (features[feature] === undefined || features[feature] === this.features[feature]) continue;
       this.features[feature] = features[feature];
@@ -469,6 +609,24 @@ export class OEM implements OEMContract {
     this.customPointsRequest?.controller.abort();
     this.customPointsRequest = undefined;
     this.customPoints = this.normalizeCustomPoints(points);
+    this.renderCustomPoints();
+  }
+
+  /** Enables or disables automatic custom-point creation from map clicks. */
+  setClickPointMode(options?: OEMClickPointOptions | null): void {
+    this.assertAlive();
+    this.clickPointOptions = options == null ? undefined : this.normalizeClickPointOptions(options);
+    if (this.clickPointOptions?.mode === 'single' && this.clickPoints.length > 1) {
+      this.clickPoints = [this.clickPoints.at(-1)!];
+      this.renderCustomPoints();
+    }
+  }
+
+  /** Removes only points created by the click-point mode. */
+  clearClickPoints(): void {
+    this.assertAlive();
+    if (!this.clickPoints.length) return;
+    this.clickPoints = [];
     this.renderCustomPoints();
   }
 
@@ -513,7 +671,7 @@ export class OEM implements OEMContract {
     this.customPointsRequest?.controller.abort();
     this.customPointsRequest = undefined;
     this.customPoints = [];
-    this.customPointsLayer.clearLayers();
+    this.renderCustomPoints();
   }
 
   /** Returns a loaded published point from the current region, if available. */
@@ -587,7 +745,7 @@ export class OEM implements OEMContract {
     return request;
   }
 
-  private cancelRequest(feature: keyof OEMFeatures): void {
+  private cancelRequest(feature: OEMFeatureName): void {
     if (!this.requests.has(feature)) return;
     this.requests.get(feature)!.abort();
     this.requests.delete(feature);
@@ -598,7 +756,7 @@ export class OEM implements OEMContract {
     await Promise.all(FEATURE_NAMES.filter((feature) => this.features[feature]).map((feature) => this.loadFeature(feature)));
   }
   /** Loads one feature with a request token so stale responses are ignored. */
-  private async loadFeature(feature: keyof OEMFeatures): Promise<void> {
+  private async loadFeature(feature: OEMFeatureName): Promise<void> {
     this.cancelRequest(feature);
     const request = new AbortController();
     this.requests.set(feature, request);
@@ -624,7 +782,12 @@ export class OEM implements OEMContract {
         this.messages = messages;
         this.renderLabels(true);
       } else {
-        const boundaries = this.region.boundaries ? await read<OEMBoundary[]>(this.region.boundaries) : [];
+        const reference = this.boundarySource === 'game' ? this.region.gameBoundaries : this.region.boundaries;
+        const boundaries = reference
+          ? this.boundarySource === 'oem'
+            ? await this.loadOEMBoundaryData(reference)
+            : await read<OEMBoundary[]>(reference)
+          : [];
         if (request.signal.aborted) return;
         this.renderBoundaries(boundaries);
       }
@@ -690,7 +853,7 @@ export class OEM implements OEMContract {
 
   private renderCustomPoints(): void {
     this.customPointsLayer.clearLayers();
-    for (const point of this.customPoints) {
+    for (const point of [...this.customPoints, ...this.clickPoints]) {
       if (point.position.regionId !== this.region.id) continue;
       const marker = new OEMMarker(toOEMLeafletMapPosition(point.position), {
         interactive: false,
@@ -849,6 +1012,8 @@ export class OEM implements OEMContract {
     this.root.remove();
     this.points = [];
     this.customPoints = [];
+    this.clickPoints = [];
+    this.clickPointOptions = undefined;
     this.customPointsLayer.clearLayers();
     this.pointShardRequests.clear();
     mounted.delete(this.container);

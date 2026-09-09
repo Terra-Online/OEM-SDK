@@ -1,10 +1,11 @@
-import type { OEMGameXZPosition, OEMManifest, OEMMapPosition, OEMPoint, OEMPointFilter, OEMPosition, OEMResources, OEMView } from '@opendfieldmap/core';
+import type { OEMBoundarySource, OEMGameXZPosition, OEMManifest, OEMMapPosition, OEMPoint, OEMPointFilter, OEMPosition, OEMResources, OEMView } from '@opendfieldmap/core';
 
 /** Optional static layers controlled independently by the host. */
 export interface OEMFeatures {
   points?: boolean;
   labels?: boolean;
   boundaries?: boolean;
+  boundarySource?: OEMBoundarySource;
 }
 
 /** Low-level rendering options used by the public Widget package. */
@@ -39,6 +40,14 @@ export interface OEMCustomPoint {
   /** The only supported custom marker compositions, matching Atlos. */
   style: 'framed' | 'no-frame';
   /** Image URL used by the Atlos marker composition. */
+  icon: string;
+}
+
+/** Visual configuration for points created from map clicks. */
+export interface OEMClickPointOptions {
+  /** Keeps every clicked point, or replaces the previous clicked point. */
+  mode: 'multiple' | 'single';
+  style: OEMCustomPoint['style'];
   icon: string;
 }
 /** Coordinates reported when the host selects a location on the map. */
@@ -79,6 +88,10 @@ export interface OEM {
   setFeatures(features: OEMFeatures): Promise<void>;
   setPointFilter(filter: OEMPointFilter): void;
   setCustomPoints(points: readonly OEMCustomPoint[]): void;
+  /** Enables automatic custom-point creation when the map is clicked. */
+  setClickPointMode(options?: OEMClickPointOptions | null): void;
+  /** Removes points that were created by map clicks, while keeping host points. */
+  clearClickPoints(): void;
   loadCustomPoints(url: string): Promise<void>;
   clearCustomPoints(): void;
   getPoint(pointId: string): OEMPoint | undefined;

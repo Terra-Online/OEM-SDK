@@ -2,7 +2,7 @@ import { loadOEMManifest, validateOEMManifest } from '@opendfieldmap/core';
 import type { OEM, OEMOptions } from './types';
 export type * from './types';
 export { gameToOEMPosition, gameXZToOEMPosition, mapToGameXZPosition, oemToGamePosition, toOEMMapPosition, fromOEMMapPosition, toOEMLeafletMapPosition } from '@opendfieldmap/core';
-export type { OEMGamePosition, OEMGameTransform, OEMGameXZPosition, OEMMapPosition } from '@opendfieldmap/core';
+export type { OEMGamePosition, OEMGameTransform, OEMGameXZPosition, OEMMapOffset, OEMMapPosition } from '@opendfieldmap/core';
 
 type OEMRuntime = typeof import('./runtime');
 let runtimePromise: Promise<OEMRuntime> | undefined;
@@ -27,6 +27,7 @@ export async function createOEM(container: string | HTMLElement, options: OEMOpt
   const instance = new OEMClass(element, manifest, options);
   try {
     await instance.setFeatures(options.features ?? {});
+    await instance.prepareSubregionBoundaries();
     if (options.customPointsUrl !== undefined) await instance.loadCustomPoints(options.customPointsUrl);
     options.signal?.throwIfAborted();
     return instance;
