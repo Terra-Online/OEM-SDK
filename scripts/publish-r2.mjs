@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -9,6 +10,7 @@ const require = createRequire(import.meta.url);
 const wrangler = require.resolve('wrangler');
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
+const refreshPlan = args.includes('--refresh-plan');
 const confirmationIndex = args.indexOf('--confirm-release');
 const confirmedRelease = confirmationIndex >= 0 ? args[confirmationIndex + 1] : undefined;
 const localBuildConfig = JSON.parse(await fs.readFile(path.join(root, 'config/config.r2.json'), 'utf8'))?.web?.build;
@@ -42,8 +44,18 @@ const runWrangler = (wranglerArgs, capture = false) =>
   runCommand(process.execPath, [wrangler, ...wranglerArgs], capture);
 
 await runWrangler(['r2', 'bucket', 'info', localR2Config.bucket], true);
-await runCommand(process.execPath, [path.join(root, 'scripts/prepare-r2-upload.mjs')]);
+if (refreshPlan) await runCommand(process.execPath, [path.join(root, 'scripts/prepare-r2-upload.mjs')]);
 const plan = JSON.parse(await fs.readFile(path.join(root, 'artifacts/r2/plan.json'), 'utf8'));
+
+const channelBytes = await fs.readFile(path.join(root, 'public/channels/stable.json'));
+const channel = JSON.parse(channelBytes.toString());
+const manifestPath = channel.manifest?.path?.replace(/^\//, '');
+if (!manifestPath) throw new Error('Stable channel manifest path is missing');
+const manifestBytes = await fs.readFile(path.join(root, 'public', manifestPath));
+const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
+if (plan.channelSha256 !== digest(channelBytes) || plan.manifestSha256 !== digest(manifestBytes)) {
+  throw new Error('Prepared release plan is stale; run pnpm update:local before publishing');
+}
 
 if (!apply) {
   console.log(`Prepared ${plan.objects} objects (${plan.bytes} bytes) for ${plan.domain}.`);
@@ -110,7 +122,7 @@ await runRclone([
   '--header-upload', 'Cache-Control: public, no-cache, must-revalidate',
 ]);
 
-const localChannel = JSON.parse(await fs.readFile(path.join(root, 'public/channels/stable.json'), 'utf8'));
+const localChannel = channel;
 const remoteChannel = await runRclone(['cat', `${remoteRoot}/channels/stable.json`, '--s3-no-check-bucket'], true);
 const published = JSON.parse(remoteChannel.stdout);
 if (published.manifest?.path !== localChannel.manifest?.path) throw new Error('Published stable channel verification failed');

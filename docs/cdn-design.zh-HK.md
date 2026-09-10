@@ -24,7 +24,7 @@ channel 是可更新的小型指標。schema v1 release manifest 選擇一套完
 /marker/{gameVersion}/{releaseId}/locales/{locale}/places.json
 /marker/{gameVersion}/{releaseId}/type.json
 /marker/{gameVersion}/{releaseId}/point-index.json
-/marker/{gameVersion}/{releaseId}/assets/{assetPath}.webp
+/marker/assets/{sha256}/{assetPath}.webp
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}

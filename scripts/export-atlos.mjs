@@ -70,15 +70,6 @@ const subregionGameTransforms = {
   WL_2: { scaleX: 0.3821317314759548, scaleZ: 0.3886861967050555, offsetX: 939.0266106648364, offsetZ: -961.708480136474 },
   WL_4: { scaleX: 0.35366404675795343, scaleZ: 0.3343953142019082, offsetX: 229.24501263356927, offsetZ: -1439.4211280688035 },
 };
-const getGameTransform = (regionId, subregionId) => subregionGameTransforms[subregionId] ?? gameTransforms[regionId];
-const mapMarkerToGame = (marker, regionId) => {
-  const transform = getGameTransform(regionId, marker.subregId);
-  return {
-    x: (marker.x - transform.offsetX) / transform.scaleX,
-    y: marker.y,
-    z: (marker.z - transform.offsetZ) / transform.scaleZ,
-  };
-};
 const regionNames = { Valley_4: '四号谷地', Wuling: '武陵', Dijiang: '帝江号', Weekraid_1: 'Etchspace Salvage' };
 const labels = await read('src/data/map/label/labels.json');
 const subregions = [...await read('src/data/map/subregionData/VL.json'), ...await read('src/data/map/subregionData/WL.json')];
@@ -197,7 +188,13 @@ const icon = async (key, sub = false) => {
     const content = await fs.readFile(path.join(source, relative));
     sourceFiles[relative] = sha256(content);
     if (resolved !== requested) aliasedIcons.push({ requested, source: resolved });
-    return (await versionedObject('marker', `assets/${requested}.webp`, content)).path;
+    // Marker images are additive shared assets, not release data. Content
+    // addressing keeps immutable historical manifests valid while allowing
+    // unchanged icons to be reused by every release.
+    const assetHash = sha256(content);
+    const assetPath = `/marker/assets/${assetHash}/${requested}.webp`;
+    await write(assetPath.slice(1), content);
+    return assetPath;
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
     missingIcons.push(relative);
@@ -236,7 +233,6 @@ const stats = {};
 const pointIndex = {};
 const regions = [];
 for (const [id, config] of Object.entries(regionSource)) {
-  const scale = 2 ** config.maxZoom;
   const boundsOffset = config.boundsOffset
     ? { x: config.boundsOffset.x, z: -(config.boundsOffset.y + config.dimensions[1]) }
     : { x: 0, z: -config.dimensions[1] };
@@ -283,13 +279,18 @@ for (const [id, config] of Object.entries(regionSource)) {
       if (!types[type]) throw new Error(`Normalized marker type is unavailable: ${point.type} -> ${type}`);
       pointIds.add(point.id);
       const floorId = point.tier === 0 ? 'M' : `${point.tier < 0 ? 'B' : 'L'}${Math.abs(point.tier)}`;
-      return [{ id: point.id, regionId: id, subregionId: point.subregId, type, tier: point.tier,
-        raw: mapMarkerToGame(point, id), position: { regionId: id, subregionId: point.subregId,
-        x: point.x * scale, z: point.z * scale, floorId } }];
+      // Preserve Atlos' compact tuple representation. The runtime decodes
+      // tuples using the same fallback-subregion rules as Atlos' interpreter.
+      if (point.subregId === subregionId) return [[point.id, point.z, point.x, point.y, point.tier, type]];
+      return [{ id: point.id, z: point.z, x: point.x, y: point.y, tier: point.tier,
+        subregId: point.subregId, type }];
     });
     const ref = await versionedObject('marker', `points/${subregionId}.json`, points);
     region.points.push(ref);
-    for (const point of points) pointIndex[point.id] = ref.path;
+    for (const point of points) {
+      const pointId = Array.isArray(point) ? point[0] : point.id;
+      pointIndex[String(pointId)] = ref.path;
+    }
     stats[subregionId] = { source: raw.length, afterOverrides: corrected.length, exported: points.length };
   }
   const code = regionCodes[id];

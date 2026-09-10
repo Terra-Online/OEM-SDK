@@ -12,7 +12,8 @@ if (!r2?.bucket || !r2.zoneId || !localConfig.cdn) throw new Error('Incomplete R
 const domain = new URL(localConfig.cdn).hostname;
 
 const walk = async (directory) => {
-  const entries = await fs.readdir(directory, { withFileTypes: true });
+  const entries = (await fs.readdir(directory, { withFileTypes: true }))
+    .sort((left, right) => left.name.localeCompare(right.name));
   const files = await Promise.all(entries.map(async (entry) => {
     const filename = path.join(directory, entry.name);
     return entry.isDirectory() ? walk(filename) : [filename];
@@ -28,7 +29,7 @@ const groupDefinitions = {
   channel: { contentType: 'application/json; charset=utf-8', cacheControl: 'public, no-cache, must-revalidate' },
 };
 const groups = Object.fromEntries(Object.keys(groupDefinitions).map((name) => [name, []]));
-const files = (await walk(publicRoot)).sort();
+const files = (await walk(publicRoot)).sort((left, right) => left.localeCompare(right));
 let totalBytes = 0;
 
 for (const filename of files) {
@@ -44,7 +45,9 @@ for (const filename of files) {
 const channel = JSON.parse(await fs.readFile(path.join(publicRoot, 'channels/stable.json'), 'utf8'));
 const manifestKey = channel.manifest?.path?.replace(/^\//, '');
 if (!manifestKey) throw new Error('Stable channel does not contain a manifest path');
-const manifest = JSON.parse(await fs.readFile(path.join(publicRoot, manifestKey), 'utf8'));
+const channelBytes = await fs.readFile(path.join(publicRoot, 'channels/stable.json'));
+const manifestBytes = await fs.readFile(path.join(publicRoot, manifestKey));
+const manifest = JSON.parse(manifestBytes.toString());
 
 await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(outputRoot, { recursive: true });
@@ -70,6 +73,8 @@ const plan = {
   zoneId: r2.zoneId,
   releaseId: manifest.releaseId,
   gameVersion: manifest.gameVersion,
+  channelSha256: createHash('sha256').update(channelBytes).digest('hex'),
+  manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
   objects: files.length,
   bytes: totalBytes,
   concurrency: r2.transfers ?? 96,

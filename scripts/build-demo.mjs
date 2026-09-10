@@ -6,6 +6,7 @@ import { build } from 'vite';
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 await build({ root, publicDir: false });
+await fs.mkdir(path.join(root, 'dist'), { recursive: true });
 const demoIcons = [
   'favicon.svg',
   'favicon_dark.svg',
@@ -20,6 +21,7 @@ await Promise.all(demoIcons.map((filename) =>
 await Promise.all(['_headers'].map((filename) =>
   fs.copyFile(path.join(root, 'deploy', filename), path.join(root, 'dist', filename)),
 ));
+await fs.mkdir(path.join(root, 'dist', 'demo', 'assets'), { recursive: true });
 await fs.copyFile(path.join(root, 'examples', 'basic', 'custom-points.json'), path.join(root, 'dist', 'demo', 'assets', 'custom-points.json'));
 await fs.copyFile(path.join(root, 'examples', 'assets', 'instance.webp'), path.join(root, 'dist', 'demo', 'assets', 'instance.webp'));
 await fs.mkdir(path.join(root, 'dist', 'assets'), { recursive: true });

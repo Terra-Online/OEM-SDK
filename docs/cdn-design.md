@@ -24,7 +24,7 @@ The channel is a small updateable pointer. The schema v1 release manifest select
 /marker/{gameVersion}/{releaseId}/locales/{locale}/places.json
 /marker/{gameVersion}/{releaseId}/type.json
 /marker/{gameVersion}/{releaseId}/point-index.json
-/marker/{gameVersion}/{releaseId}/assets/{assetPath}.webp
+/marker/assets/{sha256}/{assetPath}.webp
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
@@ -35,6 +35,7 @@ The channel is a small updateable pointer. The schema v1 release manifest select
 
 `gameVersion` uses the path-safe form of the game version, such as `1_5_3`.
 `releaseId` makes the manifest, marker data, labels, and boundaries immutable.
+Marker images are shared content-addressed assets under `/marker/assets/{sha256}/`; releases reference them without duplicating them.
 `type.json` preserves regular marker types and exposes all source NPC and archive entries as the aggregate `npc` and `files` types respectively.
 Tile object paths remain stable within a game version. The SDK adds a short
 content-derived `v` value for each tile, so unchanged tiles retain their CDN
@@ -56,7 +57,7 @@ Published release directories are immutable. Tile objects are updated in place b
 
 ## R2 Release Validation
 
-After `pnpm deploy:data -- --confirm-release <releaseId>`, the publisher runs `pnpm validate:r2`. It compares every local object with the R2 bucket by size, fetches all manifest-declared assets through the configured CDN, verifies their bytes and SHA-256 values, and checks `Content-Type`, `Cache-Control`, and representative tile headers. It does not open a browser or perform an online smoke test.
+Run `pnpm update:local` to export and validate data, build the demo, and prepare one deterministic R2 plan. The generated plan records channel and manifest hashes, so `pnpm deploy:data -- --confirm-release <releaseId>` refuses stale or mixed batches. `pnpm update:demo` is the only standalone demo path; it never changes the manifest or channel. After publication, the publisher runs `pnpm validate:r2`. It compares every local object with the R2 bucket by size, fetches all manifest-declared assets through the configured CDN, verifies their bytes and SHA-256 values, and checks `Content-Type`, `Cache-Control`, and representative tile headers. It does not open a browser or perform an online smoke test.
 
 R2 credentials may be supplied through `OEM_R2_ACCESS_KEY_ID`, `OEM_R2_ACCESS_KEY_SECRET`, and `OEM_R2_ENDPOINT`; environment variables take precedence over local configuration. Keep credentials out of the repository and CI logs.
 

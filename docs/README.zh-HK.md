@@ -107,6 +107,9 @@ pnpm dev                 # 本機 HMR 示範：http://127.0.0.1:4173/demo/
 pnpm build               # 建置各套件發佈產物
 pnpm pack:release        # 將 npm tarball 寫入 artifacts/npm
 pnpm build:demo          # 建置 Pages 部署產物
+pnpm update:local        # 本地匯出、校驗、建置 demo 並產生確定性 R2 計劃
+pnpm update:demo         # 僅更新 demo，不修改 manifest/channel
+pnpm update:release      # 使用同一批次發佈資料並部署匹配的 Pages 產物
 ```
 
 Demo 建置僅包含應用程式本身，不會打包地圖瓦片或資料。

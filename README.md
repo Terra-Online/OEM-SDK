@@ -110,6 +110,9 @@ pnpm dev            # local HMR demo at http://127.0.0.1:4173/demo/
 pnpm build          # build package distributions
 pnpm pack:release   # write npm tarballs to artifacts/npm
 pnpm build:demo     # build the Pages artifact
+pnpm update:local   # export + validate data, build demo, and prepare one R2 plan (local only)
+pnpm update:demo    # rebuild only the demo; never changes manifest/channel
+pnpm update:release # same batch, then publish data and deploy the matching Pages artifact
 ```
 The demo build is application-only; it does not bundle map tiles or data.
 

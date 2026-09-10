@@ -24,7 +24,7 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 /marker/{gameVersion}/{releaseId}/locales/{locale}/places.json
 /marker/{gameVersion}/{releaseId}/type.json
 /marker/{gameVersion}/{releaseId}/point-index.json
-/marker/{gameVersion}/{releaseId}/assets/{assetPath}.webp
+/marker/assets/{sha256}/{assetPath}.webp
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
@@ -49,7 +49,7 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 
 ## R2 发布校验
 
-执行 `pnpm deploy:data -- --confirm-release <releaseId>` 后，发布脚本会自动运行 `pnpm validate:r2`。该校验会用大小比较确认本地对象已全部进入 R2，通过配置的 CDN 获取 manifest 声明的全部资产，验证内容字节与 SHA-256，并检查 `Content-Type`、`Cache-Control` 和代表性瓦片的响应头。它不会打开浏览器，也不会执行线上烟测。
+执行 `pnpm update:local` 会在本地以一个确定性批次完成数据导出、校验、demo 构建和 R2 计划生成。计划会记录 channel 与 manifest 哈希；`pnpm deploy:data -- --confirm-release <releaseId>` 遇到过期或混用批次会拒绝发布。`pnpm update:demo` 是唯一可单独更新 demo 的入口，不会修改 manifest 或 channel。发布后脚本会自动运行 `pnpm validate:r2`：用大小比较确认本地对象已全部进入 R2，通过配置的 CDN 获取 manifest 声明的全部资产，验证内容字节与 SHA-256，并检查 `Content-Type`、`Cache-Control` 和代表性瓦片的响应头。它不会打开浏览器，也不会执行线上烟测。
 
 R2 凭据可以通过 `OEM_R2_ACCESS_KEY_ID`、`OEM_R2_ACCESS_KEY_SECRET` 和 `OEM_R2_ENDPOINT` 提供；环境变量优先于本地配置。凭据不应提交到仓库，也不应出现在 CI 日志中。
 
