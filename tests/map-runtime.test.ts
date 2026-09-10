@@ -16,7 +16,7 @@ const region: OEMRegion = {
   maxZoom: 4,
   initialView: { regionId: 'test', x: 4000, z: 4000, zoom: 2 },
   floors: [{ id: 'M', tileTemplate: '/tiles/1_5_3/test/{z}/{x}/{y}.webp', tileVersions: {} }],
-  subregions: [],
+  subregions: [{ id: 'test', key: 'test' }],
   points: [{ path: '/marker/1_5_3/test-release/points/all.json', sha256: 'unused', bytes: 1 }],
   gameBoundaries: { path: '/map/1_5_3/test-release/boundaries/test.game.json', sha256: 'unused', bytes: 1 },
   coverage: {},
@@ -100,6 +100,22 @@ describe('OEM runtime points', () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain('/point-index.json');
     expect(String(fetchMock.mock.calls[1][0])).toContain('/points/all.json');
     expect(core.getPoint(point.id)).toBeUndefined();
+  });
+
+  it('decodes Atlos compact marker tuples with the shard subregion fallback', () => {
+    const decode = (core as unknown as {
+      decodePointShard: (value: unknown[], path: string) => OEMPoint[];
+    }).decodePointShard;
+    const decoded = decode.call(core, [[point.id, 10, -30, 20, 0, 'crate_i']], '/marker/1_5_3/test-release/points/test.json');
+    expect(decoded[0]).toMatchObject({
+      id: point.id,
+      regionId: 'test',
+      subregionId: 'test',
+      type: 'crate_i',
+      tier: 0,
+      position: { x: -240, z: 80, floorId: 'M' },
+      raw: { y: 20 },
+    });
   });
 
   it('renders and replaces custom points independently of static points', () => {
@@ -241,5 +257,14 @@ describe('OEM runtime points', () => {
     expect(loaded).toEqual(point);
     loaded!.raw.x = 999;
     expect(core.getPoint(point.id)?.raw.x).toBe(point.raw.x);
+  });
+
+  it('keeps the map alive when an optional feature payload is unavailable', async () => {
+    const errors: Error[] = [];
+    core.on('error', (error) => errors.push(error));
+    fetchMock.mockRejectedValueOnce(new Error('temporary CDN failure'));
+    await expect(core.setFeatures({ points: true })).resolves.toBeUndefined();
+    expect(errors[0]?.message).toBe('temporary CDN failure');
+    expect(core.destroyed).toBe(false);
   });
 });
