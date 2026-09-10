@@ -12,6 +12,9 @@
     "validate:r2": "node scripts/validate-r2.mjs",
     "dev": "node scripts/prepare-dev.mjs && vite --host 127.0.0.1",
     "build:demo": "pnpm build && node scripts/build-demo.mjs",
+    "update:local": "node scripts/update-local.mjs",
+    "update:demo": "node scripts/update-local.mjs --demo-only",
+    "update:release": "node scripts/update-local.mjs --publish",
     "deploy:pages": "pnpm build:demo && wrangler pages deploy dist --project-name oem-sdk --branch main --commit-dirty=true",
     "prepare:data": "pnpm validate:export && node scripts/prepare-r2-upload.mjs",
     "deploy:data": "node scripts/publish-r2.mjs --apply",
@@ -19,6 +22,7 @@
     "export:atlos:dev": "node scripts/export-atlos.mjs --include-licensed-novecento",
     "check": "pnpm validate:export && pnpm typecheck && pnpm test && pnpm build:demo",
     "pack:release": "pnpm build && node scripts/pack-release.mjs",
+    "release:npm": "node scripts/release-npm.mjs",
     "release:check": "pnpm export:atlos && pnpm check && node scripts/pack-release.mjs"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@
 
 Languages: English · [简体中文](npm-release.zh-CN.md) · [繁體中文（香港）](npm-release.zh-HK.md)
 
-The repository produces ESM npm packages with TypeScript declarations. Registry publication is manual.
+The repository produces ESM npm packages with TypeScript declarations. Versioning and registry publication use one workspace command.
 
 ## Package Graph
 
@@ -46,6 +46,15 @@ Package versions use SemVer. They are independent from:
 - `releaseId`, which identifies one manifest and its immutable data objects within that game version.
 
 A package release may support multiple game-data releases through the same schema. Tiles use stable object paths with per-tile content versions so unchanged cache keys survive a data release.
+
+Use the release helper to update all four public packages, run `pnpm check`, create tarballs, and (when requested) publish them in dependency order:
+
+```bash
+pnpm release:npm --version=0.2.2-beta
+pnpm release:npm --version=0.2.2-beta --publish --tag=beta
+```
+
+The first command only prepares the release locally. The second requires npm authentication and publishes `core`, `map`, `sdk`, then `react` with one command. `--dry-run` can be added to the publish command to validate the registry operation without uploading.
 
 ## Publish Order
 

@@ -8,4 +8,5 @@ scripts/local/
 .DS_Store
 .history/
 .wrangler/
+pnpm-publish-summary.json
 /config/config.r2.json

@@ -1,6 +1,6 @@
 {
   "name": "@opendfieldmap/map",
-  "version": "0.2.1-beta",
+  "version": "0.2.2-beta",
   "description": "Rendering kernel for Open Endfield Map widgets",
   "type": "module",
   "license": "AGPL-3.0-only",
