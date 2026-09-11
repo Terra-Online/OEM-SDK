@@ -11,5 +11,5 @@ export default defineConfig({
       '@opendfieldmap/react': fileURLToPath(new URL('./packages/react/src/index.tsx', import.meta.url)),
     },
   },
-  test: { environment: 'node', include: ['tests/**/*.test.ts', 'tests/**/*.test.mjs'] },
+  test: { environment: 'node', setupFiles: ['./tests/setup-canvas.ts'], include: ['tests/**/*.test.ts', 'tests/**/*.test.mjs'] },
 });

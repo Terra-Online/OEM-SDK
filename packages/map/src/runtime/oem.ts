@@ -1,5 +1,4 @@
 import L from 'leaflet';
-import 'leaflet.markercluster';
 import {
   createOEMPointUrl,
   createOEMCoordinateSnapshot,
@@ -42,6 +41,8 @@ import { isMapOverdragged, toMapBounds } from '../atlos/mapOverdrag';
 import GithubIcon from '../assets/ghicon.svg';
 import { boundaryScore, parseBoundaryCollection } from './geometry';
 import { ViewportMarker } from '../atlos/markerViewport';
+import { createCanvasAwareClusterGroup } from '../atlos/canvasMarkerCluster';
+import type { CanvasClusterGroup } from '../atlos/clusterGroup';
 import { CoveredTileLayer, OEMMarker } from './layers';
 import {
   BRAND_URL,
@@ -107,7 +108,7 @@ export class OEM implements OEMContract {
   private pointsLayer = L.layerGroup();
   private customPointsLayer = L.layerGroup();
   private pointMarkers = new Map<string, { marker: ViewportMarker; inner: HTMLElement; point: OEMPoint; group?: string }>();
-  private pointClusters = new Map<string, L.MarkerClusterGroup>();
+  private pointClusters = new Map<string, CanvasClusterGroup>();
   private labelsLayer = L.layerGroup();
   private boundariesLayer = L.layerGroup();
   private points: OEMPoint[] = [];
@@ -966,11 +967,9 @@ export class OEM implements OEMContract {
     });
   }
 
-  private createPointCluster(type: OEMPointType): L.MarkerClusterGroup {
-    return L.markerClusterGroup({
-      showCoverageOnHover: false,
-      zoomToBoundsOnClick: !this.options.lockZoom,
-      spiderfyOnMaxZoom: !this.options.lockZoom,
+  private createPointCluster(type: OEMPointType): CanvasClusterGroup {
+    return createCanvasAwareClusterGroup(this.map, {
+      expandOnClick: !this.options.lockZoom,
       disableClusteringAtZoom: 2,
       maxClusterRadius: 60,
       iconCreateFunction: (cluster) => L.divIcon({
@@ -1149,8 +1148,7 @@ export class OEM implements OEMContract {
     this.wheel.dispose();
     this.wheel = enableSmoothWheelZoom(this.map, { enableInertia: true, panEnabled: !lockDrag, zoomEnabled: !lockZoom });
     for (const group of this.pointClusters.values()) {
-      const options = group.options as L.MarkerClusterGroupOptions;
-      options.zoomToBoundsOnClick = !lockZoom; options.spiderfyOnMaxZoom = !lockZoom;
+      group.options.expandOnClick = !lockZoom;
     }
   }
   setRegion(region: string): Promise<void> { return this.update({ region }); }
