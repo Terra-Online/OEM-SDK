@@ -41,6 +41,7 @@ import { enableSmoothWheelZoom } from '../atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from '../atlos/mapOverdrag';
 import GithubIcon from '../assets/ghicon.svg';
 import { boundaryScore, parseBoundaryCollection } from './geometry';
+import { ViewportMarker } from '../atlos/markerViewport';
 import { CoveredTileLayer, OEMMarker } from './layers';
 import {
   BRAND_URL,
@@ -105,13 +106,14 @@ export class OEM implements OEMContract {
   private floorTiles?: L.TileLayer;
   private pointsLayer = L.layerGroup();
   private customPointsLayer = L.layerGroup();
+  private pointMarkers = new Map<string, { marker: ViewportMarker; inner: HTMLElement; point: OEMPoint; group?: string }>();
   private pointClusters = new Map<string, L.MarkerClusterGroup>();
   private labelsLayer = L.layerGroup();
   private boundariesLayer = L.layerGroup();
   private points: OEMPoint[] = [];
   private customPoints = new Map<string, OEMCustomPoint>();
   private customInteractionEnabled = false;
-  private customMarkers = new Map<string, { marker: OEMMarker; point: OEMCustomPoint; inner: HTMLElement }>();
+  private customMarkers = new Map<string, { marker: ViewportMarker; point: OEMCustomPoint; inner: HTMLElement }>();
   private updates: Promise<unknown> = Promise.resolve();
   private coordinating = 0;
   private emittedState?: OEMMapState;
@@ -838,6 +840,7 @@ export class OEM implements OEMContract {
 
   private clearPointLayers(): void {
     this.pointsLayer.clearLayers();
+    this.pointMarkers.clear();
     for (const group of this.pointClusters.values()) {
       group.clearLayers();
       group.remove();
@@ -895,7 +898,7 @@ export class OEM implements OEMContract {
       }
     }
     const inner = this.createCustomPointVisual(point);
-    const marker = new OEMMarker(toOEMLeafletMapPosition(point.position), {
+    const marker = new ViewportMarker(toOEMLeafletMapPosition(point.position), {
       interactive: false, keyboard: false, bubblingMouseEvents: false,
       icon: L.divIcon({ html: inner,
         className: `${point.style === 'no-frame' ? 'noFrameMarkerIcon' : 'frameMarkerIcon'} incompleteMarker${this.customInteractionEnabled ? ' leaflet-interactive' : ''}`,
@@ -954,8 +957,8 @@ export class OEM implements OEMContract {
     return inner;
   }
 
-  private createPointMarker(point: OEMPoint, type: OEMPointType): OEMMarker {
-    return new OEMMarker(toOEMLeafletPosition(point.position, this.region), {
+  private createPointMarker(point: OEMPoint, type: OEMPointType): ViewportMarker {
+    return new ViewportMarker(toOEMLeafletPosition(point.position, this.region), {
       interactive: true, keyboard: false, bubblingMouseEvents: false,
       icon: L.divIcon({ html: this.createMarkerVisual(type, point),
         className: `${type.noFrame ? 'noFrameMarkerIcon' : 'frameMarkerIcon'} incompleteMarker`,
@@ -979,28 +982,54 @@ export class OEM implements OEMContract {
     });
   }
 
-  /** Rebuilds visible markers and groups eligible types with Atlos clustering rules. */
+  /** Keep stable markers and batch only changes in cluster membership. */
   private renderPoints(): void {
-    this.clearPointLayers();
     const types = this.filter.types ? new Set(this.filter.types) : undefined;
     const subregions = this.filter.subregions ? new Set(this.filter.subregions) : undefined;
+    const desired = new Set<string>();
+    const remove = new Map<string, ViewportMarker[]>();
+    const add = new Map<string, ViewportMarker[]>();
+    const addPlain: ViewportMarker[] = [];
+    const detach = (entry: { marker: ViewportMarker; group?: string }) => {
+      if (entry.group) { const batch = remove.get(entry.group) ?? []; batch.push(entry.marker); remove.set(entry.group, batch); }
+      else this.pointsLayer.removeLayer(entry.marker);
+    };
     for (const point of this.points) {
       if (types && !types.has(point.type)) continue;
       if (subregions && !subregions.has(point.subregionId)) continue;
       if (this.filter.floorOnly && point.position.floorId !== this.floorId) continue;
       const type = Object.hasOwn(this.types, point.type) ? this.types[point.type] : undefined;
       if (!type) continue;
-      const marker = this.createPointMarker(point, type);
-      if (this.markerClustering && CLUSTER_SUBCATEGORIES.has(type.category.sub)) {
-        let group = this.pointClusters.get(type.key);
-        if (!group) {
-          group = this.createPointCluster(type);
-          this.pointClusters.set(type.key, group);
-        }
-        group.addLayer(marker);
-      } else marker.addTo(this.pointsLayer);
+      desired.add(point.id);
+      const group = this.markerClustering && CLUSTER_SUBCATEGORIES.has(type.category.sub) ? type.key : undefined;
+      let entry = this.pointMarkers.get(point.id);
+      const fresh = !entry || entry.point !== point;
+      const previousGroup = entry?.group;
+      if (entry && (fresh || previousGroup !== group)) detach(entry);
+      if (fresh) {
+        const marker = this.createPointMarker(point, type);
+        const inner = (marker.options.icon as L.DivIcon).options.html as HTMLElement;
+        entry = { marker, inner, point, group };
+        this.pointMarkers.set(point.id, entry);
+      }
+      entry!.inner.classList.toggle('offLayer', point.position.floorId !== this.floorId);
+      if (fresh || previousGroup !== group) {
+        entry!.group = group;
+        if (group) {
+          if (!this.pointClusters.has(group)) this.pointClusters.set(group, this.createPointCluster(type));
+          const batch = add.get(group) ?? []; batch.push(entry!.marker); add.set(group, batch);
+        } else addPlain.push(entry!.marker);
+      }
     }
-    for (const group of this.pointClusters.values()) if (group.getLayers().length) group.addTo(this.map);
+    for (const [id, entry] of this.pointMarkers) if (!desired.has(id)) { detach(entry); this.pointMarkers.delete(id); }
+    for (const [key, markers] of remove) this.pointClusters.get(key)?.removeLayers(markers);
+    // Detach old cluster membership before adding markers to their new group.
+    for (const marker of addPlain) marker.addTo(this.pointsLayer);
+    for (const [key, markers] of add) this.pointClusters.get(key)!.addLayers(markers);
+    for (const [key, group] of this.pointClusters) {
+      if (group.getLayers().length) { if (!this.map.hasLayer(group)) group.addTo(this.map); }
+      else { group.remove(); this.pointClusters.delete(key); }
+    }
   }
 
   /** Renders Atlos-style fill and dashed stroke layers for published subregions. */

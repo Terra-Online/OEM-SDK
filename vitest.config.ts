@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   resolve: {
     alias: {
+      leaflet: fileURLToPath(new URL('./packages/map/node_modules/leaflet/dist/leaflet-src.js', import.meta.url)),
       '@opendfieldmap/core': fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
       '@opendfieldmap/map': fileURLToPath(new URL('./packages/map/src/index.ts', import.meta.url)),
       '@opendfieldmap/sdk': fileURLToPath(new URL('./packages/sdk/src/index.ts', import.meta.url)),
