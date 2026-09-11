@@ -158,3 +158,9 @@ export async function loadOEMManifest(resources: OEMResources, signal?: AbortSig
     ? await fetchOEMJson<OEMManifest>(resolveOEMAsset(resources.baseUrl, value.manifest?.path), signal)
     : value);
 }
+
+export { createOEMCoordinateSnapshot } from './snapshot';
+export const pixelToMapPosition = toOEMMapPosition;
+export const mapToPixelPosition = fromOEMMapPosition;
+export const gameXZToMapPosition = gameXZToOEMPosition;
+export const pixelToGameXZPosition = oemToGamePosition;

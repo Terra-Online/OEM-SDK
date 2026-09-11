@@ -23,7 +23,8 @@
     "check": "pnpm validate:export && pnpm typecheck && pnpm test && pnpm build:demo",
     "pack:release": "pnpm build && node scripts/pack-release.mjs",
     "release:npm": "node scripts/release-npm.mjs",
-    "release:check": "pnpm export:atlos && pnpm check && node scripts/pack-release.mjs"
+    "release:check": "pnpm export:atlos && pnpm check && node scripts/pack-release.mjs",
+    "test:browser": "node scripts/verify-browser.mjs"
   },
   "devDependencies": {
     "@opendfieldmap/core": "workspace:*",

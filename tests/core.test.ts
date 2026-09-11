@@ -50,7 +50,7 @@ describe('core protocol', () => {
     const mapPosition = gameXZToOEMPosition({ x: -255.34226179053363, z: -176.89459252157732 }, valleyRegion);
     expect(mapPosition.x).toBeCloseTo(400.0071, 8);
     expect(mapPosition.z).toBeCloseTo(-562.8297, 8);
-    expect(oemToGamePosition({ ...mapPosition, x: mapPosition.x * 8, z: mapPosition.z * 8 }, valleyRegion)).toEqual({
+    expect(oemToGamePosition({ ...mapPosition, space: 'pixel', x: mapPosition.x * 8, z: mapPosition.z * 8 }, valleyRegion)).toEqual({
       x: expect.closeTo(-255.34226179053363, 8),
       z: expect.closeTo(-176.89459252157732, 8),
     });

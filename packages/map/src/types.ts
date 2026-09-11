@@ -1,4 +1,4 @@
-import type { OEMBoundarySource, OEMGameXZPosition, OEMManifest, OEMMapPosition, OEMPoint, OEMPointFilter, OEMPosition, OEMResources, OEMView } from '@opendfieldmap/core';
+import type { OEMCoordinateSnapshot, OEMScreenPosition, OEMBoundarySource, OEMGameXZPosition, OEMManifest, OEMMapPosition, OEMPoint, OEMPointFilter, OEMPosition, OEMResources, OEMView } from '@opendfieldmap/core';
 
 /** Optional static layers controlled independently by the host. */
 export interface OEMFeatures {
@@ -14,6 +14,7 @@ export interface OEMOptions {
   manifest?: OEMManifest;
   regionId?: string;
   floorId?: string;
+  subregionId?: string | null;
   locale?: string;
   theme?: 'light' | 'dark';
   view?: OEMView;
@@ -50,10 +51,56 @@ export interface OEMClickPointOptions {
   style: OEMCustomPoint['style'];
   icon: string;
 }
-/** Coordinates reported when the host selects a location on the map. */
-export interface OEMMapClick {
-  position: OEMMapPosition;
-  game: OEMGameXZPosition;
+/** Clicks carry reusable coordinates; subscribing never changes the point collection. */
+export interface OEMMapClick extends OEMCoordinateSnapshot {
+  /** Compatibility name for mapPosition. */
+  readonly position: Readonly<OEMMapPosition>;
+  /** Compatibility name for gamePosition; null when conversion is not reliable. */
+  readonly game: Readonly<OEMGameXZPosition> | null;
+}
+export type OEMPointTarget = { source: 'published'; point: OEMPoint } | { source: 'custom'; point: OEMCustomPoint };
+export type OEMPointInteraction = OEMPointTarget & {
+  coordinates: OEMCoordinateSnapshot;
+  trigger: 'pointer' | 'keyboard';
+};
+export type OEMPointActivation = OEMPointInteraction & {
+  readonly defaultPrevented: boolean;
+  preventDefault(): void;
+};
+export interface OEMCommandOptions { signal?: AbortSignal }
+export interface OEMInteractionLocks { lockDrag?: boolean; lockZoom?: boolean }
+/** Flat configuration remains supported; grouping is a separate migration. */
+export interface OEMMapConfig extends OEMInteractionLocks {
+  region?: string;
+  subregion?: string | null;
+  floor?: string;
+  locale?: string;
+  markerTypes?: readonly string[] | '*' | false;
+  labels?: boolean;
+  boundaries?: boolean;
+  boundarySource?: OEMBoundarySource;
+  markerClustering?: boolean;
+  customPoints?: readonly OEMCustomPoint[];
+  customPointsUrl?: string;
+  zoom?: number;
+  center?: { x: number; z: number };
+  theme?: 'light' | 'dark';
+}
+export interface OEMMapState {
+  regionId: string;
+  subregionId: string | null;
+  floorId: string;
+  locale: string;
+  markerTypes: string[] | '*';
+  labels: boolean;
+  boundaries: boolean;
+  boundarySource: OEMBoundarySource;
+  markerClustering: boolean;
+  zoom: number;
+  center: { x: number; z: number };
+  theme: 'light' | 'dark';
+  lockDrag: boolean;
+  lockZoom: boolean;
 }
 /** Requested visibility is independent of a layer's resource status. */
 export type OEMFeatureName = 'points' | 'labels' | 'boundaries';
@@ -67,6 +114,12 @@ export type OEMResourceStates = Record<OEMFeatureName, OEMResourceState>;
 /** Lifecycle events emitted by a low-level OEM map instance. */
 export interface OEMEvents {
   click: OEMMapClick;
+  statechange: OEMMapState;
+  pointclick: OEMPointActivation;
+  pointenter: OEMPointInteraction;
+  pointleave: OEMPointInteraction;
+  custompointschange: { added: string[]; updated: string[]; removed: string[] };
+  destroy: undefined;
   viewchange: OEMView;
   regionchange: { regionId: string };
   floorchange: { floorId: string };
@@ -80,37 +133,47 @@ export interface OEMZoomOptions { animate?: boolean }
 /**
  * The framework-agnostic OEM rendering kernel.
  *
- * The embeddable Widget exposes a smaller surface and does not pass through
- * Leaflet or map-layer objects.
+ * The Widget exposes this same surface through widget.map. Leaflet and
+ * renderer objects remain internal.
  */
-export interface OEM {
+export interface OEMMapAPI {
+  getState(): OEMMapState;
+  update(config: OEMMapConfig): Promise<void>;
+  setSubregion(subregionId: string | null): Promise<void>;
+  setInteractionLocks(locks: OEMInteractionLocks): Promise<void>;
+  project(position: OEMMapPosition): OEMScreenPosition;
+  unproject(position: OEMScreenPosition): OEMMapClick;
+  getCustomPoints(): OEMCustomPoint[];
+  getCustomPoint(id: string): OEMCustomPoint | undefined;
+  upsertCustomPoints(points: readonly OEMCustomPoint[], options?: OEMCommandOptions): Promise<void>;
+  removeCustomPoints(ids: readonly string[], options?: OEMCommandOptions): Promise<void>;
   readonly manifest: OEMManifest;
   readonly destroyed: boolean;
   getView(): OEMView;
-  setView(view: OEMView): void;
-  setZoom(zoom: number, options?: OEMZoomOptions): void;
-  fitBounds(bounds: [OEMPosition, OEMPosition]): void;
+  setView(view: OEMView): Promise<void>;
+  setZoom(zoom: number, options?: OEMZoomOptions): Promise<void>;
+  fitBounds(bounds: [OEMPosition, OEMPosition]): Promise<void>;
   setRegion(regionId: string): Promise<void>;
-  setFloor(floorId: string): void;
+  setFloor(floorId: string): Promise<void>;
   setLocale(locale: string): Promise<void>;
   getLocale(): { requested: string; resolved: string };
-  setTheme(theme: 'light' | 'dark'): void;
+  setTheme(theme: 'light' | 'dark'): Promise<void>;
   setFeatures(features: OEMFeatures): Promise<void>;
   getResourceState(): OEMResourceStates;
   /** Retry requested layers whose last load failed. */
   retry(feature?: OEMFeatureName): Promise<void>;
-  setPointFilter(filter: OEMPointFilter): void;
-  setCustomPoints(points: readonly OEMCustomPoint[]): void;
-  /** Enables automatic custom-point creation when the map is clicked. */
-  setClickPointMode(options?: OEMClickPointOptions | null): void;
-  /** Removes points that were created by map clicks, while keeping host points. */
-  clearClickPoints(): void;
-  loadCustomPoints(url: string): Promise<void>;
-  clearCustomPoints(): void;
+  getPointFilter(): OEMPointFilter;
+  setPointFilter(filter: OEMPointFilter): Promise<void>;
+  setCustomPoints(points: readonly OEMCustomPoint[], options?: OEMCommandOptions): Promise<void>;
+  loadCustomPoints(url: string, options?: OEMCommandOptions): Promise<void>;
+  clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
-  setMarkerClustering(enabled: boolean): void;
+  setMarkerClustering(enabled: boolean): Promise<void>;
   resize(): void;
   on<Event extends keyof OEMEvents>(event: Event, handler: (payload: OEMEvents[Event]) => void): () => void;
   destroy(): void;
 }
+
+/** Compatibility type name for the shared public map API. */
+export type OEM = OEMMapAPI;

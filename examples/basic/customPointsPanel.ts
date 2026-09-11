@@ -182,7 +182,7 @@ export function createDemoCustomPointsPanel(
         return;
       }
       const { position, game } = value;
-      setStatus(`Map (x ${position.x.toFixed(4)}, z ${position.z.toFixed(4)}) ${formatMapContext(value)}\nGame (x ${game.x.toFixed(4)}, z ${game.z.toFixed(4)})`);
+      setStatus(`Map (x ${position.x.toFixed(4)}, z ${position.z.toFixed(4)}) ${formatMapContext(value)}\nGame (x ${game ? game.x.toFixed(4) : '—'}, z ${game ? game.z.toFixed(4) : '—'})`);
     },
     destroy() {
       panelAnimation?.cancel();

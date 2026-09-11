@@ -5,3 +5,8 @@ export type { OEMBoundarySource, OEMGamePosition, OEMGameTransform, OEMGameXZPos
 export type { OEMClickPointOptions, OEMCustomPoint, OEMMapClick, OEMFeatureName, OEMResourceState, OEMResourceStates } from '@opendfieldmap/map';
 export type * from './types';
 export { OEMError } from '@opendfieldmap/core';
+export { createClickPointTool } from './tools/clickPoints';
+export type { OEMClickPointTool } from './tools/clickPoints';
+export type { OEMMapAPI, OEMMapState, OEMMapConfig, OEMCommandOptions, OEMInteractionLocks, OEMPointInteraction, OEMPointActivation } from '@opendfieldmap/map';
+export { createOEMCoordinateSnapshot, pixelToMapPosition, mapToPixelPosition, gameXZToMapPosition, pixelToGameXZPosition } from '@opendfieldmap/core';
+export type { OEMCoordinateSnapshot, OEMPixelPosition, OEMScreenPosition } from '@opendfieldmap/core';

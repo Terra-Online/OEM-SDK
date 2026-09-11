@@ -1,6 +1,6 @@
 import type { OEMBoundarySource, OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
 export type { OEMBoundarySource } from '@opendfieldmap/core';
-import type { OEMClickPointOptions, OEMCustomPoint, OEMMapClick, OEMFeatureName, OEMResourceStates, OEMEvents } from '@opendfieldmap/map';
+import type { OEMCustomPoint, OEMFeatureName, OEMResourceStates, OEMEvents, OEMMapAPI, OEMMapState, OEMMapConfig } from '@opendfieldmap/map';
 
 /** Stable top-level region identifiers published by OEM. */
 export type OEMRegionId = 'Valley_4' | 'Wuling' | 'Dijiang' | 'Weekraid_1';
@@ -37,39 +37,8 @@ export interface OEMWidgetCenter {
   z: number;
 }
 
-/**
- * Declarative content and initial-view configuration.
- *
- * Omitted values use the defaults documented on each property.
- */
-export interface OEMWidgetConfig {
-  /** Initial region. Defaults to the manifest's default region. */
-  region?: OEMRegionSelector;
-  /** Initial subregion ID. Defaults to the complete region (null). */
-  subregion?: string | null;
-  /** Initial floor. Defaults to M. */
-  floor?: OEMFloorId;
-  /** Place-name locale. Defaults to the closest supported browser locale. */
-  locale?: OEMLocale;
-  /** Marker type keys to show, * for all, or false for none. Defaults to false. */
-  markerTypes?: readonly string[] | '*' | false;
-  /** Whether place names are loaded and displayed. Defaults to true. */
-  labels?: boolean;
-  /** Whether subregion boundaries are loaded and displayed. Defaults to false. */
-  boundaries?: boolean;
-  /** Boundary data source. Defaults to Atlos/OEM boundaries. */
-  boundarySource?: OEMBoundarySource;
-  /** Whether nearby markers are grouped by point type. Defaults to true. */
-  markerClustering?: boolean;
-  /** Host-defined points rendered above the static map data. */
-  customPoints?: readonly OEMCustomPoint[];
-  /** URL of a JSON array of host-defined points. It replaces customPoints. */
-  customPointsUrl?: string;
-  /** Initial zoom, clamped to the selected region's supported range. Defaults to the region preset. */
-  zoom?: number;
-  /** Initial map center. Defaults to the selected region or subregion preset. */
-  center?: OEMWidgetCenter;
-}
+/** Widget content uses the same configuration contract as the map API. */
+export interface OEMWidgetConfig extends OEMMapConfig {}
 
 /** Complete creation options for an embeddable OEM Widget. */
 export interface OEMWidgetOptions extends OEMWidgetConfig {
@@ -100,43 +69,23 @@ export interface OEMWidgetOptions extends OEMWidgetConfig {
   onError?: (error: Error) => void;
 }
 
-/** Fully resolved runtime state emitted by an OEM Widget. */
-export interface OEMWidgetState {
-  regionId: OEMRegionId;
-  subregionId: string | null;
-  floorId: OEMFloorId;
-  locale: OEMLocale;
-  markerTypes: string[] | '*';
-  labels: boolean;
-  boundaries: boolean;
-  boundarySource: OEMBoundarySource;
-  markerClustering: boolean;
-  zoom: number;
-  center: OEMWidgetCenter;
-}
-
-/** Events exposed by the embeddable Widget. */
-export interface OEMWidgetEvents {
-  click: OEMMapClick;
-  resourcechange: OEMEvents['resourcechange'];
-}
+export type OEMWidgetState = OEMMapState;
+export type OEMWidgetEvents = OEMEvents;
 
 /**
- * Restricted Widget handle exposed to host applications.
- *
- * It intentionally does not expose Leaflet, custom point interaction, or drawing.
+ * Official Widget plus its shared, framework-independent behavior API.
+ * Leaflet and visual customization are not exposed.
  */
 export interface OEMWidget {
   readonly destroyed: boolean;
+  readonly map: OEMMapAPI;
   getState(): OEMWidgetState;
   getResourceState(): OEMResourceStates;
   retry(feature?: OEMFeatureName): Promise<void>;
   setOptions(options: OEMWidgetConfig): Promise<void>;
-  setCustomPoints(points: readonly OEMCustomPoint[]): void;
-  setClickPointMode(options?: OEMClickPointOptions | null): void;
-  clearClickPoints(): void;
+  setCustomPoints(points: readonly OEMCustomPoint[]): Promise<void>;
   loadCustomPoints(url: string): Promise<void>;
-  clearCustomPoints(): void;
+  clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
   on<Event extends keyof OEMWidgetEvents>(event: Event, handler: (payload: OEMWidgetEvents[Event]) => void): () => void;

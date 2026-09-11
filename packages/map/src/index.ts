@@ -1,4 +1,5 @@
 import { loadOEMManifest, checkOEMManifestVersion, withOEMAbort, invalid, resolveOEMAsset } from '@opendfieldmap/core';
+import { createMapAPI } from './api';
 import type { OEM, OEMOptions } from './types';
 export type * from './types';
 export { gameToOEMPosition, gameXZToOEMPosition, mapToGameXZPosition, oemToGamePosition, toOEMMapPosition, fromOEMMapPosition, toOEMLeafletMapPosition } from '@opendfieldmap/core';
@@ -35,10 +36,14 @@ export async function createOEM(container: string | HTMLElement, options: OEMOpt
     await instance.setFeatures(options.features ?? {});
     if (options.customPointsUrl !== undefined) await instance.loadCustomPoints(options.customPointsUrl);
     options.signal?.throwIfAborted();
-    return instance;
+    return createMapAPI(instance);
   } catch (error) {
     instance.destroy();
     throw error;
   }
 }
 export { OEMError } from '@opendfieldmap/core';
+
+export { normalizeState as resolveOEMMapConfig } from './config';
+export { createOEMCoordinateSnapshot, pixelToMapPosition, mapToPixelPosition, gameXZToMapPosition, pixelToGameXZPosition } from '@opendfieldmap/core';
+export type { OEMCoordinateSnapshot, OEMPixelPosition, OEMScreenPosition } from '@opendfieldmap/core';

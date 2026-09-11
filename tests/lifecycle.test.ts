@@ -207,11 +207,11 @@ describe('configuration failure isolation', () => {
     await widget.setOptions({ zoom: 3 }); expect(widget.getState().zoom).toBe(3);
   });
 
-  it('does not cancel valid in-flight data when a synchronous replacement is invalid', async () => {
+  it('does not cancel valid in-flight data when a replacement is invalid', async () => {
     const map = keep(await createOEM(host, { resources, manifest: createManifest() }));
     const pending = deferred<Response>(); fetchMock.mockReturnValue(pending.promise);
     const operation = map.loadCustomPoints('/custom.json');
-    expect(() => map.setCustomPoints([null as never])).toThrow();
+    await expect(map.setCustomPoints([null as never])).rejects.toThrow();
     expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(false);
     pending.resolve(json([{ id: 'valid', style: 'framed', icon: '/icon', position: { regionId: 'Valley_4', x: 1, z: 2 } }]));
     await operation; expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(1);
