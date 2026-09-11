@@ -1,13 +1,15 @@
 import {
   defaultOEMResources,
+  invalid,
+  OEMError,
   getOEMRegion,
   loadOEMManifest,
   normalizeOEMLocale,
-  validateOEMManifest,
+  checkOEMManifestVersion,
 } from '@opendfieldmap/core';
 import type { OEMManifest, OEMRegion, OEMResources, OEMSubregion } from '@opendfieldmap/core';
 import { createOEM } from '@opendfieldmap/map';
-import type { OEM, OEMClickPointOptions, OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
+import type { OEM, OEMClickPointOptions, OEMCustomPoint, OEMMapClick, OEMFeatureName, OEMResourceStates } from '@opendfieldmap/map';
 import { mountControls } from './components';
 import type { Control } from './components/types';
 import { installFonts } from './fonts';
@@ -29,13 +31,32 @@ const REGION_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   ES: 'Weekraid_1',
 });
 
-const mounted = new WeakSet<HTMLElement>();
+const mounted = new WeakMap<HTMLElement, symbol>();
 
 const cloneState = (state: OEMWidgetState): OEMWidgetState => ({
   ...state,
   markerTypes: state.markerTypes === '*' ? '*' : [...state.markerTypes],
   center: { ...state.center },
 });
+
+/** Validate the entire patch before cloning it or touching a live instance. */
+const validateConfig = (config: OEMWidgetConfig): void => {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) invalid('options', 'Expected an object');
+  for (const key of ['region', 'floor', 'locale', 'customPointsUrl'] as const) {
+    if (config[key] !== undefined && (typeof config[key] !== 'string' || !config[key]!.trim())) invalid(`options.${key}`, 'Expected a non-empty string');
+  }
+  if (config.subregion !== undefined && config.subregion !== null && typeof config.subregion !== 'string') invalid('options.subregion', 'Expected a string or null');
+  for (const key of ['labels', 'boundaries', 'markerClustering'] as const) {
+    if (config[key] !== undefined && typeof config[key] !== 'boolean') invalid(`options.${key}`, 'Expected boolean');
+  }
+  if (config.zoom !== undefined && !Number.isFinite(config.zoom)) invalid('options.zoom', 'Zoom must be finite');
+  if (config.center !== undefined && (!config.center || !Number.isFinite(config.center.x) || !Number.isFinite(config.center.z))) invalid('options.center', 'Center coordinates must be finite');
+  if (config.markerTypes !== undefined && config.markerTypes !== false && config.markerTypes !== '*' &&
+    (!Array.isArray(config.markerTypes) || config.markerTypes.some(value => typeof value !== 'string'))) invalid('options.markerTypes', 'Expected type keys, * or false');
+  if (config.customPoints !== undefined && !Array.isArray(config.customPoints)) invalid('options.customPoints', 'Expected an array');
+  config.customPoints?.forEach((point, index) => { if (!point || typeof point !== 'object' || !point.position || typeof point.position !== 'object') invalid(`options.customPoints[${index}]`, 'Expected a point with a position'); });
+  if (config.customPoints !== undefined && config.customPointsUrl !== undefined) invalid('options.customPoints', 'Pass either customPoints or customPointsUrl, not both');
+};
 
 const cloneConfig = (config: OEMWidgetConfig): OEMWidgetConfig => ({
   ...config,
@@ -84,6 +105,7 @@ const getPreset = (region: OEMRegion, subregion?: OEMSubregion) => {
 };
 
 const normalizeState = (input: OEMWidgetConfig, manifest: OEMManifest): OEMWidgetState => {
+  validateConfig(input);
   let regionId = resolveRegionId(manifest, input.region);
   const subregionId = input.subregion?.trim() || null;
   if (subregionId) {
@@ -172,6 +194,7 @@ class Widget implements OEMWidget {
   private controls: Control;
   private unsubscribeView: () => void;
   private unsubscribeClick: () => void;
+  private unsubscribeResource: () => void;
   private listeners = new Map<keyof OEMWidgetEvents, Set<(payload: never) => void>>();
 
   constructor(
@@ -181,6 +204,7 @@ class Widget implements OEMWidget {
     private manifest: OEMManifest,
     private options: OEMWidgetOptions,
     private state: OEMWidgetState,
+    private releaseHost: () => void,
   ) {
     this.customPointsUrl = options.customPointsUrl;
     this.controls = mountControls(root, {
@@ -199,6 +223,7 @@ class Widget implements OEMWidget {
     this.controls.sync(state);
     this.unsubscribeView = core.on('viewchange', this.syncView);
     this.unsubscribeClick = core.on('click', this.forwardClick);
+    this.unsubscribeResource = core.on('resourcechange', payload => { if (!this.destroyed) this.emit('resourcechange', payload); });
     options.signal?.addEventListener('abort', this.destroy, { once: true });
   }
 
@@ -207,15 +232,16 @@ class Widget implements OEMWidget {
   }
 
   private report(error: unknown): void {
-    this.options.onError?.(error instanceof Error ? error : new Error(String(error)));
+    try { this.options.onError?.(error instanceof Error ? error : new Error(String(error))); } catch (cause) { console.error(new OEMError('CALLBACK_FAILED', 'onError', 'OEM error handler failed', undefined, { cause })); }
   }
 
   private notify(): void {
-    this.options.onStateChange?.(cloneState(this.state));
+    if (this.destroyed) return;
+    try { this.options.onStateChange?.(cloneState(this.state)); } catch (cause) { this.report(new OEMError('CALLBACK_FAILED', 'onStateChange', 'OEM state handler failed', undefined, { cause })); }
   }
 
   private emit<Event extends keyof OEMWidgetEvents>(event: Event, payload: OEMWidgetEvents[Event]): void {
-    this.listeners.get(event)?.forEach((handler) => handler(payload as never));
+    this.listeners.get(event)?.forEach(handler => { try { handler(payload as never); } catch (cause) { this.report(new OEMError('CALLBACK_FAILED', event, 'OEM event handler failed', undefined, { cause })); } });
   }
 
   private forwardClick = (payload: OEMMapClick): void => {
@@ -242,6 +268,22 @@ class Widget implements OEMWidget {
     return cloneState(this.state);
   }
 
+  getResourceState(): OEMResourceStates {
+    this.assertAlive();
+    return this.core.getResourceState();
+  }
+
+  retry(feature?: OEMFeatureName): Promise<void> {
+    this.assertAlive();
+    const operation = this.updates.then(async () => {
+      this.assertAlive();
+      await this.core.retry(feature);
+      this.assertAlive();
+    });
+    this.updates = operation.catch(() => undefined);
+    return operation;
+  }
+
   setCustomPoints(points: readonly OEMCustomPoint[]): void {
     this.assertAlive();
     this.core.setCustomPoints(points);
@@ -258,10 +300,8 @@ class Widget implements OEMWidget {
     this.core.clearClickPoints();
   }
 
-  async loadCustomPoints(url: string): Promise<void> {
-    this.assertAlive();
-    await this.core.loadCustomPoints(url);
-    this.customPointsUrl = url;
+  loadCustomPoints(url: string): Promise<void> {
+    return this.setOptions({ customPointsUrl: url });
   }
 
   clearCustomPoints(): void {
@@ -287,8 +327,9 @@ class Widget implements OEMWidget {
     return () => { handlers.delete(handler as (payload: never) => void); };
   }
 
-  setOptions(update: OEMWidgetConfig): Promise<void> {
+  async setOptions(update: OEMWidgetConfig): Promise<void> {
     this.assertAlive();
+    validateConfig(update);
     const snapshot = cloneConfig(update);
     const operation = this.updates.then(() => this.applyOptions(snapshot));
     this.updates = operation.catch(() => undefined);
@@ -327,7 +368,13 @@ class Widget implements OEMWidget {
       throw new Error('Pass either customPoints or customPointsUrl, not both');
     }
     const customPointsChanged = changes.customPoints !== undefined || changes.customPointsUrl !== undefined;
-    if (sameState(previous, next) && !customPointsChanged) return;
+    if (sameState(previous, next) && !customPointsChanged) {
+      const resourceState = this.core.getResourceState();
+      const requested = { points: changes.markerTypes !== undefined && hasMarkers(next), labels: changes.labels === true, boundaries: changes.boundaries === true };
+      await Promise.all((Object.keys(requested) as OEMFeatureName[]).filter(feature => requested[feature] && resourceState[feature].status === 'error').map(feature => this.core.retry(feature)));
+      this.assertAlive();
+      return;
+    }
 
     const regionChanged = next.regionId !== previous.regionId;
     const filterChanged = next.subregionId !== previous.subregionId ||
@@ -348,6 +395,7 @@ class Widget implements OEMWidget {
         this.customPointsUrl = undefined;
       } else if (changes.customPointsUrl !== undefined) {
         await this.core.loadCustomPoints(changes.customPointsUrl);
+        this.assertAlive();
         this.customPointsUrl = changes.customPointsUrl;
       }
       if (previousMarkers && !nextMarkers) await this.core.setFeatures({ points: false });
@@ -383,6 +431,7 @@ class Widget implements OEMWidget {
           zoom: next.zoom,
         });
       }
+      this.assertAlive();
       const view = this.core.getView();
       this.state = {
         ...next,
@@ -408,12 +457,13 @@ class Widget implements OEMWidget {
     this.destroyed = true;
     this.unsubscribeView();
     this.unsubscribeClick();
+    this.unsubscribeResource();
     this.listeners.clear();
     this.controls.destroy?.();
     this.options.signal?.removeEventListener('abort', this.destroy);
     this.core.destroy();
     this.root.remove();
-    mounted.delete(this.host);
+    this.releaseHost();
   };
 }
 
@@ -423,6 +473,7 @@ export async function createOEMWidget(
   options: OEMWidgetOptions = {},
 ): Promise<OEMWidget> {
   if (typeof document === 'undefined') throw new Error('createOEMWidget must run in a browser');
+  validateConfig(options);
   if (options.customPoints !== undefined && options.customPointsUrl !== undefined) {
     throw new Error('Pass either customPoints or customPointsUrl, not both');
   }
@@ -438,15 +489,36 @@ export async function createOEMWidget(
   mapHost.className = 'mapHost';
   root.append(mapHost);
   host.append(root);
-  mounted.add(host);
+  const token = Symbol('OEM Widget creation');
+  mounted.set(host, token);
 
   let core: OEM | undefined;
   let widget: Widget | undefined;
+  const controller = new AbortController();
+  const abort = () => controller.abort(options.signal?.reason);
+  const releaseHost = () => {
+    options.signal?.removeEventListener('abort', abort);
+    controller.signal.removeEventListener('abort', cancel);
+    root.remove();
+    if (mounted.get(host) === token) mounted.delete(host);
+  };
+  const cancel = () => {
+    if (widget) widget.destroy();
+    else {
+      core?.destroy();
+      releaseHost();
+    }
+  };
+  controller.signal.addEventListener('abort', cancel, { once: true });
+  options.signal?.addEventListener('abort', abort, { once: true });
+  if (options.signal?.aborted) abort();
   try {
+    controller.signal.throwIfAborted();
     const resources: OEMResources = options.resources ?? defaultOEMResources;
-    const manifest = options.manifest
-      ? validateOEMManifest(options.manifest)
-      : await loadOEMManifest(resources, options.signal);
+    const manifest = options.manifest !== undefined
+      ? checkOEMManifestVersion(options.manifest)
+      : await loadOEMManifest(resources, controller.signal);
+    controller.signal.throwIfAborted();
     installFonts(root, manifest, resources);
     const state = normalizeState(options, manifest);
     core = await createOEM(mapHost, {
@@ -478,10 +550,11 @@ export async function createOEMWidget(
       },
       lockDrag: options.lockDrag ?? false,
       lockZoom: options.lockZoom ?? false,
-      signal: options.signal,
+      signal: controller.signal,
       onError: options.onError,
     });
-    widget = new Widget(host, root, core, manifest, options, state);
+    controller.signal.throwIfAborted();
+    widget = new Widget(host, root, core, manifest, { ...options, signal: controller.signal }, state, releaseHost);
     root.classList.remove('loading');
     options.onReady?.(widget);
     return widget;
@@ -489,8 +562,8 @@ export async function createOEMWidget(
     if (widget) widget.destroy();
     else {
       core?.destroy();
-      root.remove();
-      mounted.delete(host);
+      controller.abort();
+      releaseHost();
     }
     throw error;
   }

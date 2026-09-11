@@ -201,3 +201,23 @@ map.on('click', ({ position, game }) => {
 The Widget exposes the same event with `widget.on('click', handler)`.
 
 Use `@opendfieldmap/sdk` for the standard embeddable experience and `@opendfieldmap/map` when the host owns its control layer.
+
+## Loading state and recovery
+
+Visibility options describe requested configuration. Read `widget.getResourceState()` (also available on the low-level instance) for the actual state of `points`, `labels`, and `boundaries`. Each entry contains `requested`, `status` (`idle`, `loading`, `ready`, or `error`), and an optional `error`.
+
+```ts
+const unsubscribe = widget.on('resourcechange', ({ feature, state }) => {
+  console.log(feature, state.status);
+});
+await widget.retry('labels'); // Only retries a failed, still-requested layer.
+await widget.retry();         // Retries all failed, still-requested layers.
+console.log(widget.getResourceState());
+unsubscribe();
+```
+
+Optional layer failures notify `onError` but keep the map alive and do not reject the entire configuration update. Explicitly enabling the same failed layer also retries it. A resolved `retry()` means the attempt has finished; inspect resource state to determine success. Read state after creation too: events emitted during creation are not replayed.
+
+Invalid configuration and required custom-point loading failures reject the update without committing that configuration. `loadCustomPoints()` shares the `setOptions()` queue. Synchronous `setCustomPoints()` and `clearCustomPoints()` cancel an active custom-point request. Destroying or cancelling creation stops pending SDK waits and prevents late responses from updating the instance. Cancellation uses `AbortError` unless the caller supplies a different reason.
+
+Static resources are consumed as trusted exports. Initialization performs only a constant-time schema-version check, without scanning manifest contents or validating individual points, labels, dictionaries, or polygon vertices. Full schema, hashes, byte counts, and tile-index consistency remain the export validator's responsibility. Call the core package's `validateOEMManifest()` explicitly when diagnosing an external manifest; host configuration and custom points still receive necessary input checks. Subregion geometry preloads in the background without delaying creation; clicks use the existing bounds fallback until it is available. `OEMError`, exported by the SDK, map, and core packages, includes `code`, `operation`, and a field `path` when available.

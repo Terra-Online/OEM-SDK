@@ -201,3 +201,26 @@ map.on('click', ({ position, game }) => {
 Widget 使用 `widget.on('click', handler)` 监听同一事件。
 
 标准嵌入场景使用 `@opendfieldmap/sdk`；需要自行管理控件层时使用 `@opendfieldmap/map`。
+
+## 加载状态与失败恢复
+
+`labels`、`boundaries` 和点位筛选表示请求的显示配置，不代表资源已经加载成功。通过 `widget.getResourceState()`（底层实例也提供此方法）读取三个可选图层的实际状态：
+
+```ts
+const { labels } = widget.getResourceState();
+// { requested: true, status: 'idle' | 'loading' | 'ready' | 'error', error?: Error }
+
+const unsubscribe = widget.on('resourcechange', ({ feature, state }) => {
+  console.log(feature, state.status);
+});
+
+await widget.retry('labels'); // 只重试仍被请求开启、且上次失败的标签图层
+await widget.retry();         // 重试所有满足上述条件的可选图层
+unsubscribe();
+```
+
+可选图层加载失败会通知 `onError`，但不会销毁底图或拒绝整个配置更新。再次明确设置同一已失败图层为开启也会重试。`retry()` 完成表示本轮请求已结束；是否成功应读取 `getResourceState()`。首次创建后同样应读取该状态，创建期间的事件不会重放。
+
+非法配置和必需的自定义点数据加载失败会拒绝更新，不提交该次配置。`loadCustomPoints()` 与 `setOptions()` 按调用顺序执行；同步的 `setCustomPoints()`／`clearCustomPoints()` 会取消正在进行的自定义点请求。销毁或取消创建会终止 SDK 等待的请求，迟到响应不会更新实例。正常取消使用 `AbortError`，显式传入的取消原因予以保留。
+
+静态资源按可信的导出数据读取，初始化只做常数时间的 schema 版本检查，不扫描 Manifest 内容或逐条校验点位、标签、字典和边界。完整数据格式、哈希、字节数和瓦片索引的一致性由导出校验负责；排查外部 Manifest 时可主动调用 core 包的 `validateOEMManifest()`。宿主配置和自定义点继续进行必要的输入检查。用于点击子地区推断的边界预加载在后台进行，不阻塞创建；完成前使用现有的包围盒回退。`OEMError` 提供 `code`、`operation` 及可用时的字段 `path`，可从 SDK、map 或 core 包导入。

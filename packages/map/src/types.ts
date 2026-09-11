@@ -55,6 +55,15 @@ export interface OEMMapClick {
   position: OEMMapPosition;
   game: OEMGameXZPosition;
 }
+/** Requested visibility is independent of a layer's resource status. */
+export type OEMFeatureName = 'points' | 'labels' | 'boundaries';
+export interface OEMResourceState {
+  requested: boolean;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  error?: Error;
+}
+export type OEMResourceStates = Record<OEMFeatureName, OEMResourceState>;
+
 /** Lifecycle events emitted by a low-level OEM map instance. */
 export interface OEMEvents {
   click: OEMMapClick;
@@ -63,6 +72,7 @@ export interface OEMEvents {
   floorchange: { floorId: string };
   loading: { feature: 'points' | 'labels' | 'boundaries'; loading: boolean };
   load: { regionId: string; floorId: string };
+  resourcechange: { feature: OEMFeatureName; state: OEMResourceState };
   error: Error;
 }
 /** Controls whether a programmatic zoom uses Leaflet's native transition. */
@@ -86,6 +96,9 @@ export interface OEM {
   getLocale(): { requested: string; resolved: string };
   setTheme(theme: 'light' | 'dark'): void;
   setFeatures(features: OEMFeatures): Promise<void>;
+  getResourceState(): OEMResourceStates;
+  /** Retry requested layers whose last load failed. */
+  retry(feature?: OEMFeatureName): Promise<void>;
   setPointFilter(filter: OEMPointFilter): void;
   setCustomPoints(points: readonly OEMCustomPoint[]): void;
   /** Enables automatic custom-point creation when the map is clicked. */

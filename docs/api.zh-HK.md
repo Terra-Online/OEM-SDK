@@ -201,3 +201,23 @@ map.on('click', ({ position, game }) => {
 Widget 使用 `widget.on('click', handler)` 監聽同一事件。
 
 標準嵌入場景使用 `@opendfieldmap/sdk`；需要自行管理控制項層時使用 `@opendfieldmap/map`。
+
+## 載入狀態與失敗恢復
+
+顯示選項表示請求的配置。`widget.getResourceState()`（底層實例亦提供）傳回 `points`、`labels`、`boundaries` 的實際狀態，各項包含 `requested`、`status`（`idle`、`loading`、`ready`、`error`）及可選的 `error`。
+
+```ts
+const unsubscribe = widget.on('resourcechange', ({ feature, state }) => {
+  console.log(feature, state.status);
+});
+await widget.retry('labels'); // 只重試仍請求開啟、且上次失敗的圖層
+await widget.retry();         // 重試所有符合條件的圖層
+console.log(widget.getResourceState());
+unsubscribe();
+```
+
+可選圖層失敗會通知 `onError`，但會保留底圖，也不會拒絕整個配置更新。再次明確開啟同一失敗圖層亦會重試。`retry()` 完成表示本輪請求已結束，是否成功須讀取資源狀態。建立期間的事件不會重播，建立後亦應讀取狀態。
+
+無效配置或必要自訂點資料載入失敗會拒絕更新，不提交該次配置。`loadCustomPoints()` 與 `setOptions()` 共用順序佇列；同步的 `setCustomPoints()`／`clearCustomPoints()` 會取消進行中的自訂點請求。銷毀或取消建立會停止 SDK 等待的請求，遲到回應不會更新實例。取消使用 `AbortError`，呼叫方明確提供的取消原因則予以保留。
+
+靜態資源按可信的匯出資料讀取，初始化只做常數時間的 schema 版本檢查，不掃描 Manifest 內容或逐筆校驗點位、標籤、字典和邊界。完整資料格式、雜湊、位元組數及瓦片索引一致性由匯出校驗負責；排查外部 Manifest 時可主動呼叫 core 套件的 `validateOEMManifest()`。宿主配置與自訂點仍進行必要的輸入檢查。子地區邊界在背景預載，不阻塞建立；完成前點擊採用既有的包圍盒回退。`OEMError` 可從 SDK、map 或 core 匯入，包含 `code`、`operation` 及可用時的欄位 `path`。

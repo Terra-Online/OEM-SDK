@@ -43,39 +43,47 @@ export const mountControls = (
   });
   observer?.observe(root);
 
-  if (hasSwitches) {
-    const switchArea = document.createElement('div');
-    switchArea.className = 'switchArea';
-    switchArea.classList.toggle('horizontalSelectors', visibility.horizontalSelectors);
-    if (visibility.regionSelector) {
-      const region = createRegionControl(controlContext);
-      components.push(region);
-      switchArea.append(region.element);
-    }
-    if (visibility.floorSelector) {
-      const layer = createLayerControl(controlContext);
-      components.push(layer);
-      switchArea.append(layer.element);
-    }
-    overlay.append(switchArea);
-  }
-
-  if (visibility.scaleBar) {
-    const scale = createScaleControl(controlContext);
-    components.push(scale);
-    overlay.append(scale.element);
-  }
-
-  return {
-    sync(state: OEMWidgetState) {
-      currentState = state;
-      for (const component of components) component.sync(state);
-    },
-    destroy() {
-      if (hasSwitches) document.removeEventListener('pointerdown', handleOutsidePointer, true);
-      observer?.disconnect();
-      panels.collapseAll();
-      for (const component of components) component.destroy?.();
-    },
+  const destroy = () => {
+    if (hasSwitches) document.removeEventListener('pointerdown', handleOutsidePointer, true);
+    observer?.disconnect();
+    panels.collapseAll();
+    for (const component of components) component.destroy?.();
+    overlay.remove();
   };
+
+  try {
+    if (hasSwitches) {
+      const switchArea = document.createElement('div');
+      switchArea.className = 'switchArea';
+      switchArea.classList.toggle('horizontalSelectors', visibility.horizontalSelectors);
+      if (visibility.regionSelector) {
+        const region = createRegionControl(controlContext);
+        components.push(region);
+        switchArea.append(region.element);
+      }
+      if (visibility.floorSelector) {
+        const layer = createLayerControl(controlContext);
+        components.push(layer);
+        switchArea.append(layer.element);
+      }
+      overlay.append(switchArea);
+    }
+
+    if (visibility.scaleBar) {
+      const scale = createScaleControl(controlContext);
+      components.push(scale);
+      overlay.append(scale.element);
+    }
+
+    return {
+      sync(state: OEMWidgetState) {
+        currentState = state;
+        for (const component of components) component.sync(state);
+      },
+      destroy,
+    };
+  } catch (error) {
+    destroy();
+    throw error;
+  }
 };

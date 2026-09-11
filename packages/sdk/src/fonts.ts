@@ -1,4 +1,4 @@
-import { resolveOEMAsset } from '@opendfieldmap/core';
+import { resolveOEMAsset, invalid } from '@opendfieldmap/core';
 import type { OEMManifest, OEMResources } from '@opendfieldmap/core';
 
 const FONT_FAMILIES = new Set([
@@ -14,7 +14,8 @@ const FONT_FAMILIES = new Set([
 
 export const installFonts = (root: HTMLElement, manifest: OEMManifest, resources: OEMResources): void => {
   if (!manifest.fonts?.length) return;
-  const rules = manifest.fonts.map((font) => {
+  const rules = manifest.fonts.map((font, index) => {
+    if (!font || typeof font !== 'object') invalid(`manifest.fonts[${index}]`, 'Expected a font resource');
     if (!FONT_FAMILIES.has(font.family) || !Number.isFinite(font.weight) ||
       (font.weightRange && (!Number.isFinite(font.weightRange[0]) || !Number.isFinite(font.weightRange[1]) ||
         font.weightRange[0] > font.weightRange[1]))) {

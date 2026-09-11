@@ -66,6 +66,8 @@ const makeCore = () => {
     getLocale: vi.fn(() => ({ requested: 'en-US', resolved: 'en-US' })),
     setTheme: vi.fn(),
     setFeatures: vi.fn(async (): Promise<void> => undefined),
+    getResourceState: vi.fn(() => ({ points: { requested: false, status: 'idle' }, labels: { requested: false, status: 'idle' }, boundaries: { requested: false, status: 'idle' } })),
+    retry: vi.fn(async (): Promise<void> => undefined),
     setPointFilter: vi.fn(),
     setCustomPoints: vi.fn(),
     setClickPointMode: vi.fn(),

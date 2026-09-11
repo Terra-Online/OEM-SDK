@@ -1,8 +1,9 @@
-import type { OEMBoundary, OEMBoundaryCollection, OEMBoundaryPoint } from '@opendfieldmap/core';
+import { invalid } from '@opendfieldmap/core';
+import type { OEMBoundary, OEMBoundaryCollection } from '@opendfieldmap/core';
 
 export type GeometryPoint = { x: number; z: number };
 
-/** Validates the readable boundary collection format used by both data sources. */
+/** Unwraps the trusted boundary collection without scanning polygon vertices. */
 export const parseBoundaryCollection = (value: unknown, path: string): OEMBoundary[] => {
   // Immutable releases predating the collection wrapper remain readable.
   const collection = Array.isArray(value)
@@ -10,14 +11,7 @@ export const parseBoundaryCollection = (value: unknown, path: string): OEMBounda
     : value as Partial<OEMBoundaryCollection> | null;
   if (!collection || !Number.isInteger(collection.count) || !Array.isArray(collection.boundaries) ||
     collection.count !== collection.boundaries.length) {
-    throw new Error(`Invalid OEM boundary data: ${path}`);
-  }
-  for (const boundary of collection.boundaries as OEMBoundary[]) {
-    if (!boundary || typeof boundary.id !== 'string' || !boundary.id || !Array.isArray(boundary.rings) ||
-      boundary.rings.some((ring: OEMBoundaryPoint[]) => !Array.isArray(ring) || ring.length < 3 ||
-        ring.some((point: OEMBoundaryPoint) => !point || !Number.isFinite(point.x) || !Number.isFinite(point.z)))) {
-      throw new Error(`Invalid OEM boundary data: ${path}`);
-    }
+    invalid(path, 'Invalid OEM boundary data');
   }
   return collection.boundaries as OEMBoundary[];
 };

@@ -1,6 +1,6 @@
 import type { OEMBoundarySource, OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
 export type { OEMBoundarySource } from '@opendfieldmap/core';
-import type { OEMClickPointOptions, OEMCustomPoint, OEMMapClick } from '@opendfieldmap/map';
+import type { OEMClickPointOptions, OEMCustomPoint, OEMMapClick, OEMFeatureName, OEMResourceStates, OEMEvents } from '@opendfieldmap/map';
 
 /** Stable top-level region identifiers published by OEM. */
 export type OEMRegionId = 'Valley_4' | 'Wuling' | 'Dijiang' | 'Weekraid_1';
@@ -118,6 +118,7 @@ export interface OEMWidgetState {
 /** Events exposed by the embeddable Widget. */
 export interface OEMWidgetEvents {
   click: OEMMapClick;
+  resourcechange: OEMEvents['resourcechange'];
 }
 
 /**
@@ -128,6 +129,8 @@ export interface OEMWidgetEvents {
 export interface OEMWidget {
   readonly destroyed: boolean;
   getState(): OEMWidgetState;
+  getResourceState(): OEMResourceStates;
+  retry(feature?: OEMFeatureName): Promise<void>;
   setOptions(options: OEMWidgetConfig): Promise<void>;
   setCustomPoints(points: readonly OEMCustomPoint[]): void;
   setClickPointMode(options?: OEMClickPointOptions | null): void;

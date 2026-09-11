@@ -2,6 +2,10 @@ import L from 'leaflet';
 import 'leaflet.markercluster';
 import {
   createOEMPointUrl,
+  invalid,
+  OEMError,
+  resourceError,
+  withOEMAbort,
   fetchOEMJson,
   fromOEMLeafletPosition,
   getOEMRegion,
@@ -27,7 +31,7 @@ import type {
   OEMRegion,
   OEMView,
 } from '@opendfieldmap/core';
-import type { OEM as OEMContract, OEMClickPointOptions, OEMCustomPoint, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions } from '../types';
+import type { OEM as OEMContract, OEMClickPointOptions, OEMCustomPoint, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions, OEMResourceStates, OEMResourceState } from '../types';
 import { enableSmoothWheelZoom } from '../atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from '../atlos/mapOverdrag';
 import GithubIcon from '../assets/ghicon.svg';
@@ -58,11 +62,11 @@ const decodeAtlosPoint = (raw: AtlosPointTuple | AtlosPointObject, region: OEMRe
     ? { id: raw[0], z: raw[1], x: raw[2], y: raw[3], tier: raw[4], type: raw[5] }
     : raw;
   if (value?.id == null) return undefined;
-  const x = value.x ?? value.pos?.[1] ?? 0;
-  const z = value.z ?? value.pos?.[0] ?? 0;
+  const x = value.x ?? value.pos?.[1];
+  const z = value.z ?? value.pos?.[0];
   const y = value.y ?? value.pos?.[2] ?? 0;
   const tier = value.tier ?? 0;
-  if (![x, y, z, tier].every(Number.isFinite)) return undefined;
+  if (typeof x !== 'number' || typeof z !== 'number' || ![x, y, z, tier].every(Number.isFinite)) return undefined;
   const subregionId = value.subregId ?? fallbackSubregionId;
   const floorId = tier === 0 ? 'M' : `${tier < 0 ? 'B' : 'L'}${Math.abs(Math.trunc(tier))}`;
   const mapPosition: OEMMapPosition = { regionId: region.id, subregionId, x, z, floorId };
@@ -78,7 +82,13 @@ const decodeAtlosPoint = (raw: AtlosPointTuple | AtlosPointObject, region: OEMRe
 /** Leaflet-backed implementation of the public OEM interface. */
 export class OEM implements OEMContract {
   destroyed = false;
-  private map: L.Map;
+  private map!: L.Map;
+  private lifetime = new AbortController();
+  private resourceStates: OEMResourceStates = {
+    points: { requested: false, status: 'idle' },
+    labels: { requested: false, status: 'idle' },
+    boundaries: { requested: false, status: 'idle' },
+  };
   private root: HTMLDivElement;
   private region: OEMRegion;
   private floorId = 'M';
@@ -112,16 +122,17 @@ export class OEM implements OEMContract {
   private markerClustering: boolean;
   private locale: string;
   private resolvedLocale: string;
-  private attributionBrand: HTMLAnchorElement;
-  private attributionLink: HTMLAnchorElement;
+  private attributionBrand!: HTMLAnchorElement;
+  private attributionLink!: HTMLAnchorElement;
   private observer?: ResizeObserver;
   private updatingView = false;
   private emittedView?: OEMView;
   private overdragFrame?: number;
   private overdragged = false;
-  private wheel: ReturnType<typeof enableSmoothWheelZoom>;
+  private wheel!: ReturnType<typeof enableSmoothWheelZoom>;
 
   constructor(private container: HTMLElement, readonly manifest: OEMManifest, private options: OEMOptions) {
+    options.signal?.throwIfAborted();
     if (mounted.has(container)) throw new Error('This container already hosts an OEM instance');
     this.region = getOEMRegion(manifest, options.view?.regionId ?? options.regionId ?? manifest.defaultRegionId);
     this.filter = cloneFilter(options.pointFilter ?? {});
@@ -138,97 +149,105 @@ export class OEM implements OEMContract {
     this.root.dataset.theme = options.theme ?? 'light';
     container.append(this.root);
     mounted.add(container);
-    this.map = L.map(this.root, {
-      crs: L.CRS.Simple, minZoom: 0, maxZoom: 3, zoomControl: false, attributionControl: false,
-      dragging: !options.lockDrag, touchZoom: !options.lockZoom, boxZoom: !options.lockZoom,
-      keyboard: !options.lockZoom, doubleClickZoom: false, scrollWheelZoom: false, zoomAnimation: true,
-      markerZoomAnimation: true, fadeAnimation: true, zoomSnap: 0, zoomDelta: 0.25,
-    });
-    this.wheel = enableSmoothWheelZoom(this.map, {
-      enableInertia: true,
-      panEnabled: !options.lockDrag,
-      zoomEnabled: !options.lockZoom,
-    });
-    const pane = this.map.createPane('placeLabels');
-    pane.style.zIndex = '650';
-    pane.style.pointerEvents = 'none';
-    this.pointsLayer.addTo(this.map);
-    this.customPointsLayer.addTo(this.map);
-    this.labelsLayer.addTo(this.map);
-    this.boundariesLayer.addTo(this.map);
-    const credit = document.createElement('div');
-    credit.className = 'attribution';
-    const github = document.createElement('a');
-    github.className = 'attributionGithub';
-    github.href = GITHUB_URL;
-    github.target = '_blank';
-    github.rel = 'noopener noreferrer';
-    github.setAttribute('aria-label', 'GitHub');
-    github.innerHTML = GithubIcon;
-    const githubSvg = github.querySelector('svg');
-    githubSvg?.setAttribute('aria-hidden', 'true');
-    githubSvg?.setAttribute('focusable', 'false');
-    this.attributionBrand = document.createElement('a');
-    this.attributionBrand.className = 'attributionBrand';
-    this.attributionBrand.href = BRAND_URL;
-    const separator = document.createElement('span');
-    separator.className = 'attributionSeparator';
-    separator.textContent = '·';
-    separator.setAttribute('aria-hidden', 'true');
-    this.attributionLink = document.createElement('a');
-    this.attributionLink.className = 'attributionLink';
-    this.attributionLink.href = TERMS_URL;
-    this.attributionLink.target = '_blank';
-    this.attributionLink.rel = 'noopener noreferrer';
-    credit.append(github, this.attributionBrand, separator, this.attributionLink);
-    this.updateAttribution();
-    this.root.append(credit);
-    this.applyRegion(options.view);
-    this.setFloor(initialFloor);
-    this.renderCustomPoints();
-    this.map.on('click', this.emitMapClick);
-    this.map.on('moveend zoomend', this.emitView);
-    this.map.on('move drag', this.scheduleOverdragUpdate);
-    this.map.on('moveend dragend movestart zoomstart', this.clearOverdrag);
-    if (typeof ResizeObserver !== 'undefined') {
-      this.observer = new ResizeObserver(() => this.resize());
-      this.observer.observe(container);
+    try {
+      this.map = L.map(this.root, {
+        crs: L.CRS.Simple, minZoom: 0, maxZoom: 3, zoomControl: false, attributionControl: false,
+        dragging: !options.lockDrag, touchZoom: !options.lockZoom, boxZoom: !options.lockZoom,
+        keyboard: !options.lockZoom, doubleClickZoom: false, scrollWheelZoom: false, zoomAnimation: true,
+        markerZoomAnimation: true, fadeAnimation: true, zoomSnap: 0, zoomDelta: 0.25,
+      });
+      this.wheel = enableSmoothWheelZoom(this.map, {
+        enableInertia: true,
+        panEnabled: !options.lockDrag,
+        zoomEnabled: !options.lockZoom,
+      });
+      const pane = this.map.createPane('placeLabels');
+      pane.style.zIndex = '650';
+      pane.style.pointerEvents = 'none';
+      this.pointsLayer.addTo(this.map);
+      this.customPointsLayer.addTo(this.map);
+      this.labelsLayer.addTo(this.map);
+      this.boundariesLayer.addTo(this.map);
+      const credit = document.createElement('div');
+      credit.className = 'attribution';
+      const github = document.createElement('a');
+      github.className = 'attributionGithub';
+      github.href = GITHUB_URL;
+      github.target = '_blank';
+      github.rel = 'noopener noreferrer';
+      github.setAttribute('aria-label', 'GitHub');
+      github.innerHTML = GithubIcon;
+      const githubSvg = github.querySelector('svg');
+      githubSvg?.setAttribute('aria-hidden', 'true');
+      githubSvg?.setAttribute('focusable', 'false');
+      this.attributionBrand = document.createElement('a');
+      this.attributionBrand.className = 'attributionBrand';
+      this.attributionBrand.href = BRAND_URL;
+      const separator = document.createElement('span');
+      separator.className = 'attributionSeparator';
+      separator.textContent = '·';
+      separator.setAttribute('aria-hidden', 'true');
+      this.attributionLink = document.createElement('a');
+      this.attributionLink.className = 'attributionLink';
+      this.attributionLink.href = TERMS_URL;
+      this.attributionLink.target = '_blank';
+      this.attributionLink.rel = 'noopener noreferrer';
+      credit.append(github, this.attributionBrand, separator, this.attributionLink);
+      this.updateAttribution();
+      this.root.append(credit);
+      this.applyRegion(options.view);
+      this.setFloor(initialFloor);
+      this.renderCustomPoints();
+      this.map.on('click', this.emitMapClick);
+      this.map.on('moveend zoomend', this.emitView);
+      this.map.on('move drag', this.scheduleOverdragUpdate);
+      this.map.on('moveend dragend movestart zoomstart', this.clearOverdrag);
+      if (typeof ResizeObserver !== 'undefined') {
+        this.observer = new ResizeObserver(() => this.resize());
+        this.observer.observe(container);
+      }
+      options.signal?.addEventListener('abort', this.destroy, { once: true });
+    } catch (error) {
+      this.destroy();
+      throw error;
     }
-    options.signal?.addEventListener('abort', this.destroy, { once: true });
   }
 
   /** Prevents calls against a released map instance. */
-  private assertAlive(): void { if (this.destroyed) throw new Error('OEM instance has been destroyed'); }
+  private assertAlive(): void { if (this.destroyed) throw new OEMError('DESTROYED', 'map', 'OEM instance has been destroyed'); }
   private validateFloor(id: string): void {
     if (!this.region.floors.some((floor) => floor.id === id)) throw new Error(`Unknown floor ${id} in ${this.region.id}`);
   }
   private validatePosition(position: OEMPosition): void { toOEMLeafletPosition(position, this.region); }
   private normalizeCustomPoints(points: readonly OEMCustomPoint[]): OEMCustomPoint[] {
+    if (!Array.isArray(points)) invalid('customPoints', 'Expected an array');
     const ids = new Set<string>();
-    return points.map((point) => {
+    return points.map((point, index) => {
+      const path = `customPoints[${index}]`;
       if (!point || typeof point.id !== 'string' || !point.id.trim()) {
-        throw new Error(`Custom point IDs must be non-empty and unique: ${point?.id}`);
+        invalid(`${path}.id`, 'Custom point IDs must be non-empty and unique');
       }
       const id = point.id.trim();
-      if (ids.has(id)) throw new Error(`Custom point IDs must be non-empty and unique: ${id}`);
+      if (ids.has(id)) invalid(`${path}.id`, 'Custom point IDs must be non-empty and unique');
       ids.add(id);
       if (!point.position || typeof point.position.regionId !== 'string') {
-        throw new Error(`Invalid custom point position: ${id}`);
+        invalid(`${path}.position`, 'Invalid custom point position');
       }
       const position = point.position;
       if (point.style !== 'framed' && point.style !== 'no-frame') {
-        throw new Error(`Invalid custom point style: ${id}`);
+        invalid(`${path}.style`, 'Invalid custom point style');
       }
       if (typeof point.icon !== 'string' || !point.icon) {
-        throw new Error(`Custom point icon must be a non-empty URL: ${id}`);
+        invalid(`${path}.icon`, 'Custom point icon must be a non-empty URL');
       }
-      const pointRegion = getOEMRegion(this.manifest, position.regionId);
-      toOEMLeafletMapPosition(position);
+      const pointRegion = this.manifest.regions.find(region => region.id === position.regionId);
+      if (!pointRegion) invalid(`${path}.position.regionId`, 'Unknown custom point region');
+      if (!Number.isFinite(position.x) || !Number.isFinite(position.z)) invalid(`${path}.position`, 'Invalid OEM map position');
       if (position.subregionId && !pointRegion.subregions.some((subregion) => subregion.id === position.subregionId)) {
-        throw new Error(`Unknown custom point subregion ${position.subregionId} in ${position.regionId}`);
+        invalid(`${path}.position.subregionId`, 'Unknown custom point subregion');
       }
       if (position.floorId && !pointRegion.floors.some((floor) => floor.id === position.floorId)) {
-        throw new Error(`Unknown custom point floor ${position.floorId} in ${position.regionId}`);
+        invalid(`${path}.position.floorId`, 'Unknown custom point floor');
       }
       return { ...cloneCustomPoint({ ...point, position }), id };
     });
@@ -254,7 +273,8 @@ export class OEM implements OEMContract {
     if (cached) return Promise.resolve(cached);
     const pending = this.boundaryDataRequests.get(reference.path);
     if (pending) return pending;
-    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, reference.path), this.options.signal).then((value) => {
+    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, reference.path), this.lifetime.signal).then((value) => {
+      this.lifetime.signal.throwIfAborted();
       const boundaries = parseBoundaryCollection(value, reference.path);
       this.boundaryData.set(reference.path, boundaries);
       return boundaries;
@@ -267,7 +287,7 @@ export class OEM implements OEMContract {
   /** Preloads OEM subregion geometry so map clicks can resolve an exact subregion. */
   async prepareSubregionBoundaries(): Promise<void> {
     if (!this.region.boundaries) return;
-    try { await this.loadBoundaryData(this.region.boundaries); } catch { /* Click metadata has a bounds fallback. */ }
+    try { await this.loadBoundaryData(this.region.boundaries); } catch { this.lifetime.signal.throwIfAborted(); /* Click metadata has a bounds fallback. */ }
   }
   private inferSubregionId(x: number, z: number): string | undefined {
     const selected = this.filter.subregions?.filter((id) => this.region.subregions.some((subregion) => subregion.id === id));
@@ -347,8 +367,16 @@ export class OEM implements OEMContract {
     this.emit('click', { position, game: mapToGameXZPosition(position, this.region) });
   };
   private emit<Event extends keyof OEMEvents>(event: Event, payload: OEMEvents[Event]): void {
-    this.listeners.get(event)?.forEach((handler) => handler(payload as never));
-    if (event === 'error') this.options.onError?.(payload as Error);
+    if (this.destroyed) return;
+    const deliver = (handler: (payload: never) => void) => {
+      try { handler(payload as never); } catch (cause) {
+        const error = new OEMError('CALLBACK_FAILED', event, 'OEM event handler failed', undefined, { cause });
+        if (event !== 'error') this.emit('error', error);
+        else console.error(error);
+      }
+    };
+    this.listeners.get(event)?.forEach(deliver);
+    if (event === 'error' && this.options.onError) deliver(this.options.onError as (payload: never) => void);
   }
   private scheduleOverdragUpdate = (): void => {
     if (this.overdragFrame !== undefined) return;
@@ -426,7 +454,7 @@ export class OEM implements OEMContract {
       maxNativeZoom: this.region.maxNativeZoom, maxZoom: Math.ceil(this.region.maxZoom),
     }, this.region.coverage, floor);
     layer.on('load', () => { if (!this.destroyed && this.region.id === regionId) this.emit('load', { regionId, floorId }); });
-    layer.on('tileerror', () => this.emit('error', new Error(`Tile load failed: ${regionId}/${floorId}`)));
+    layer.on('tileerror', () => { if (this.region.id === regionId && this.floorId === floorId) this.emit('error', resourceError('tiles', new Error(`Tile load failed: ${regionId}/${floorId}`))); });
     return layer;
   }
   private clampZoom(zoom: number): number {
@@ -472,8 +500,9 @@ export class OEM implements OEMContract {
     this.emit('regionchange', { regionId });
     this.emit('floorchange', { floorId: 'M' });
     this.emitView();
-    await this.prepareSubregionBoundaries();
+    void this.prepareSubregionBoundaries().catch(() => undefined);
     await this.loadFeatures();
+    this.lifetime.signal.throwIfAborted();
   }
   /** Switches the rendered floor while retaining the current region view. */
   setFloor(floorId: string): void {
@@ -500,49 +529,79 @@ export class OEM implements OEMContract {
     if (!changed) return;
     this.resolvedLocale = resolved;
     this.updateAttribution();
-    if (this.features.labels) await this.loadFeature('labels');
+    if (this.features.labels) await Promise.allSettled([this.loadFeature('labels')]);
+    this.lifetime.signal.throwIfAborted();
   }
   /** Returns both the requested and resolved locale values. */
-  getLocale(): { requested: string; resolved: string } { return { requested: this.locale, resolved: this.resolvedLocale }; }
+  getLocale(): { requested: string; resolved: string } { this.assertAlive(); return { requested: this.locale, resolved: this.resolvedLocale }; }
 
   /** Changes only this instance's theme attribute. */
   setTheme(theme: 'light' | 'dark'): void { this.assertAlive(); this.root.dataset.theme = theme; }
 
-  /** Enables or disables static layers and cancels disabled layer requests. */
+  private setResourceStatus(feature: OEMFeatureName, status: OEMResourceState['status'], error?: Error): void {
+    if (this.destroyed) return;
+    this.resourceStates[feature] = { requested: !!this.features[feature], status, ...(error ? { error } : {}) };
+    this.emit('resourcechange', { feature, state: this.getResourceState()[feature] });
+  }
+
+  getResourceState(): OEMResourceStates {
+    this.assertAlive();
+    return Object.fromEntries(FEATURE_NAMES.map(feature => {
+      const state = this.resourceStates[feature];
+      const error = state.error;
+      return [feature, { ...state, ...(error ? { error: error instanceof OEMError
+        ? new OEMError(error.code, error.operation, error.message)
+        : new Error(error.message) } : {}) }];
+    })) as OEMResourceStates;
+  }
+
+  /** Retry failed, still-requested optional layers without toggling their configuration. */
+  async retry(feature?: OEMFeatureName): Promise<void> {
+    this.assertAlive();
+    if (feature !== undefined && !FEATURE_NAMES.includes(feature)) invalid('retry.feature', 'Unknown feature');
+    await Promise.allSettled(FEATURE_NAMES.filter(name => (!feature || name === feature) &&
+      this.features[name] && this.resourceStates[name].status === 'error').map(name => this.loadFeature(name)));
+    this.lifetime.signal.throwIfAborted();
+  }
+
+  private clearFeature(feature: OEMFeatureName): void {
+    if (feature === 'points') { this.points = []; this.clearPointLayers(); }
+    else if (feature === 'labels') { this.labels = []; this.visibleLabelType = undefined; this.labelsLayer.clearLayers(); }
+    else this.boundariesLayer.clearLayers();
+  }
+
+  /** Optional layer failures are reported separately from their requested visibility. */
   async setFeatures(features: OEMFeatures): Promise<void> {
     this.assertAlive();
+    if (!features || typeof features !== 'object' || Array.isArray(features)) invalid('features', 'Expected an object');
+    for (const feature of FEATURE_NAMES) if (features[feature] !== undefined && typeof features[feature] !== 'boolean') invalid(`features.${feature}`, 'Expected boolean');
+    if (features.boundarySource !== undefined && features.boundarySource !== 'oem' && features.boundarySource !== 'game') invalid('features.boundarySource', 'Unknown OEM boundary source');
+    const boundaryChanged = features.boundarySource !== undefined && features.boundarySource !== this.boundarySource;
+    if (features.boundarySource !== undefined) this.boundarySource = features.boundarySource;
     const loads: Promise<void>[] = [];
-    if (features.boundarySource !== undefined) {
-      if (features.boundarySource !== 'oem' && features.boundarySource !== 'game') {
-        throw new Error(`Unknown OEM boundary source: ${features.boundarySource}`);
-      }
-      if (features.boundarySource !== this.boundarySource) {
-        this.boundarySource = features.boundarySource;
-        this.cancelRequest('boundaries');
-        if (this.features.boundaries) loads.push(this.loadFeature('boundaries'));
-      }
-    }
     for (const feature of FEATURE_NAMES) {
-      if (features[feature] === undefined || features[feature] === this.features[feature]) continue;
-      this.features[feature] = features[feature];
-      this.cancelRequest(feature);
-      if (features[feature]) loads.push(this.loadFeature(feature));
-      else if (feature === 'points') { this.points = []; this.clearPointLayers(); }
-      else if (feature === 'labels') { this.labels = []; this.visibleLabelType = undefined; this.labelsLayer.clearLayers(); }
-      else this.boundariesLayer.clearLayers();
+      const previous = this.features[feature];
+      const requested = features[feature] ?? previous ?? false;
+      this.features[feature] = requested;
+      if (requested && (requested !== previous || (feature === 'boundaries' && boundaryChanged) || this.resourceStates[feature].status === 'error')) {
+        loads.push(this.loadFeature(feature));
+      } else if (!requested && (previous || this.resourceStates[feature].status !== 'idle')) {
+        this.cancelRequest(feature);
+        this.clearFeature(feature);
+        this.setResourceStatus(feature, 'idle');
+      }
     }
-    // Feature payloads are optional runtime data. A CDN or host-side outage
-    // should disable only the affected layer; loadFeature already emits the
-    // structured error event and clears its loading state.
     await Promise.allSettled(loads);
+    this.lifetime.signal.throwIfAborted();
   }
 
   /** Replaces host-defined points without reloading static map data. */
   setCustomPoints(points: readonly OEMCustomPoint[]): void {
     this.assertAlive();
+    const normalized = this.normalizeCustomPoints(points);
     this.customPointsRequest?.controller.abort();
     this.customPointsRequest = undefined;
-    this.customPoints = this.normalizeCustomPoints(points);
+    this.customPoints = normalized;
     this.renderCustomPoints();
   }
 
@@ -566,6 +625,7 @@ export class OEM implements OEMContract {
 
   loadCustomPoints(url: string): Promise<void> {
     this.assertAlive();
+    if (typeof url !== 'string') invalid('customPointsUrl', 'Expected a URL string');
     const value = url.trim();
     if (!value) throw new Error('Custom points URL must be a non-empty URL');
     let resolvedUrl: string;
@@ -577,22 +637,22 @@ export class OEM implements OEMContract {
     this.customPointsRequest?.controller.abort();
     const controller = new AbortController();
     const abort = () => controller.abort();
-    this.options.signal?.addEventListener('abort', abort, { once: true });
+    this.lifetime.signal.addEventListener('abort', abort, { once: true });
     const request: { controller: AbortController; promise: Promise<void> } = { controller, promise: Promise.resolve() };
     request.promise = fetchOEMJson<unknown>(resolvedUrl, controller.signal).then((value) => {
-      if (!Array.isArray(value)) throw new Error('Custom points JSON must be an array');
-      const points = value.map((point) => {
+      if (!Array.isArray(value)) invalid(resolvedUrl, 'Custom points JSON must be an array');
+      const points = value.map((point, index) => {
         if (!point || typeof point !== 'object' || typeof (point as { icon?: unknown }).icon !== 'string') return point as OEMCustomPoint;
-        return {
-          ...(point as OEMCustomPoint),
-          icon: new URL((point as OEMCustomPoint).icon, resolvedUrl).toString(),
-        };
+        let icon: string;
+        try { icon = new URL((point as OEMCustomPoint).icon, resolvedUrl).toString(); } catch { return invalid(`${resolvedUrl}[${index}].icon`, 'Invalid custom point icon URL'); }
+        return { ...(point as OEMCustomPoint), icon };
       });
-      if (controller.signal.aborted || this.destroyed) return;
+      controller.signal.throwIfAborted();
+      this.lifetime.signal.throwIfAborted();
       this.customPoints = this.normalizeCustomPoints(points);
       this.renderCustomPoints();
     }).finally(() => {
-      this.options.signal?.removeEventListener('abort', abort);
+      this.lifetime.signal.removeEventListener('abort', abort);
       if (this.customPointsRequest === request) this.customPointsRequest = undefined;
     });
     this.customPointsRequest = request;
@@ -631,9 +691,10 @@ export class OEM implements OEMContract {
       ? [pointIndex[id]]
       : this.manifest.pointIndex
         ? []
-        : this.manifest.regions.flatMap((region) => region.points.map((ref) => ref.path));
+        : this.manifest.regions.flatMap((region) => region.points.map((ref) => ref?.path));
     for (const path of paths) {
       const points = await this.loadPointShard(path);
+      this.lifetime.signal.throwIfAborted();
       const point = points.find((entry) => entry.id === id);
       if (point) return clonePoint(point);
     }
@@ -646,13 +707,15 @@ export class OEM implements OEMContract {
     if (!this.pointIndexRequest) {
       this.pointIndexRequest = fetchOEMJson<unknown>(
         resolveOEMAsset(this.options.resources.baseUrl, this.manifest.pointIndex.path),
-        this.options.signal,
+        this.lifetime.signal,
       ).then((value) => {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid OEM point index');
-        const index: Record<string, string> = {};
+        this.lifetime.signal.throwIfAborted();
+        if (!value || typeof value !== 'object' || Array.isArray(value)) invalid('pointIndex', 'Invalid OEM point index');
+        const index: Record<string, string> = Object.create(null) as Record<string, string>;
         for (const [id, path] of Object.entries(value)) {
-          if (!id || typeof path !== 'string' || !path) throw new Error(`Invalid OEM point index entry: ${id}`);
+          if (!id || typeof path !== 'string' || !path) invalid(`pointIndex.${id}`, 'Invalid OEM point index entry');
           resolveOEMAsset(this.options.resources.baseUrl, path);
+          if (!this.manifest.regions.some(region => region.points.some(ref => ref?.path === path))) invalid(`pointIndex.${id}`, 'Unknown point shard');
           index[id] = path;
         }
         this.pointIndex = index;
@@ -668,9 +731,10 @@ export class OEM implements OEMContract {
   private loadPointShard(path: string): Promise<OEMPoint[]> {
     const cached = this.pointShardRequests.get(path);
     if (cached) return cached;
-    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, path), this.options.signal).then((value) => {
+    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, path), this.lifetime.signal).then((value) => {
+      this.lifetime.signal.throwIfAborted();
       const region = this.manifest.regions.find((entry) => entry.points.some((ref) => ref.path === path));
-      if (!region || !Array.isArray(value)) throw new Error(`Invalid OEM point shard: ${path}`);
+      if (!region || !Array.isArray(value)) invalid(path, 'Invalid OEM point shard');
       return this.decodePointShard(value, path, region);
     }).catch((error) => {
       if (this.pointShardRequests.get(path) === request) this.pointShardRequests.delete(path);
@@ -683,7 +747,7 @@ export class OEM implements OEMContract {
   private decodePointShard(value: unknown[], shardPath: string, region: OEMRegion = this.region): OEMPoint[] {
     const fallbackSubregionId = shardPath.split('/').at(-1)?.replace(/\.json$/, '') ?? '';
     return value
-      .map((entry) => decodeAtlosPoint(entry as AtlosPointTuple | AtlosPointObject, region, fallbackSubregionId))
+      .map(entry => decodeAtlosPoint(entry as AtlosPointTuple | AtlosPointObject, region, fallbackSubregionId))
       .filter((entry): entry is OEMPoint => !!entry);
   }
 
@@ -691,6 +755,7 @@ export class OEM implements OEMContract {
     if (!this.requests.has(feature)) return;
     this.requests.get(feature)!.abort();
     this.requests.delete(feature);
+    this.setResourceStatus(feature, 'idle');
     this.emit('loading', { feature, loading: false });
   }
   private cancelRequests(): void { for (const feature of this.requests.keys()) this.cancelRequest(feature); }
@@ -702,25 +767,28 @@ export class OEM implements OEMContract {
     this.cancelRequest(feature);
     const request = new AbortController();
     this.requests.set(feature, request);
+    const region = this.region;
+    this.setResourceStatus(feature, 'loading');
     this.emit('loading', { feature, loading: true });
-    const read = <Data>(ref: OEMAsset) => fetchOEMJson<Data>(resolveOEMAsset(this.options.resources.baseUrl, ref.path), request.signal);
+    const read = <Data>(ref: OEMAsset) => fetchOEMJson<Data>(resolveOEMAsset(this.options.resources.baseUrl, ref?.path), request.signal);
     try {
       if (feature === 'points') {
         const [groups, types] = await Promise.all([
-          Promise.all(this.region.points.map(async (ref) => {
+          Promise.all(region.points.map(async (ref) => {
             const value = await read<unknown[]>(ref);
-            if (!Array.isArray(value)) throw new Error(`Invalid OEM point shard: ${ref.path}`);
-            return this.decodePointShard(value, ref.path);
+            if (!Array.isArray(value)) invalid(ref.path, 'Invalid OEM point shard');
+            return this.decodePointShard(value, ref.path, region);
           })),
           Object.keys(this.types).length ? this.types : read<Record<string, OEMPointType>>(this.manifest.types),
         ]);
         if (request.signal.aborted) return;
-        this.points = groups.flat();
+        const points = groups.flat();
+        this.points = points;
         this.types = types;
         this.renderPoints();
       } else if (feature === 'labels') {
         const [labels, messages] = await Promise.all([
-          this.region.labels ? read<OEMLabel[]>(this.region.labels) : Promise.resolve([]),
+          region.labels ? read<OEMLabel[]>(region.labels) : Promise.resolve([]),
           this.manifest.locales[this.resolvedLocale] ? read<OEMLocaleMessages>(this.manifest.locales[this.resolvedLocale]) : Promise.resolve({}),
         ]);
         if (request.signal.aborted) return;
@@ -729,15 +797,18 @@ export class OEM implements OEMContract {
         this.renderLabels(true);
       } else {
         const reference = this.boundarySource === 'game' ? this.region.gameBoundaries : this.region.boundaries;
-        const boundaries = reference ? await this.loadBoundaryData(reference) : [];
+        const boundaries = reference ? await withOEMAbort(this.loadBoundaryData(reference), request.signal) : [];
         if (request.signal.aborted) return;
         this.renderBoundaries(boundaries);
       }
+      if (!request.signal.aborted) this.setResourceStatus(feature, 'ready');
     } catch (error) {
       if (!request.signal.aborted) {
-        this.features[feature] = false;
-        this.emit('error', error instanceof Error ? error : new Error(String(error)));
-        throw error;
+        const failure = resourceError(`load.${feature}`, error);
+        this.clearFeature(feature);
+        this.setResourceStatus(feature, 'error', failure);
+        this.emit('error', failure);
+        throw failure;
       }
     } finally {
       if (this.requests.get(feature) === request) {
@@ -749,6 +820,9 @@ export class OEM implements OEMContract {
   /** Applies a client-side filter without making another network request. */
   setPointFilter(filter: OEMPointFilter): void {
     this.assertAlive();
+    if (!filter || typeof filter !== 'object') invalid('pointFilter', 'Expected an object');
+    for (const key of ['types', 'subregions'] as const) if (filter[key] !== undefined && (!Array.isArray(filter[key]) || filter[key]!.some(value => typeof value !== 'string' || !value.trim()))) invalid(`pointFilter.${key}`, 'Expected non-empty strings');
+    if (filter.floorOnly !== undefined && typeof filter.floorOnly !== 'boolean') invalid('pointFilter.floorOnly', 'Expected boolean');
     const next = cloneFilter(filter);
     if (sameFilter(this.filter, next)) return;
     this.filter = next;
@@ -891,7 +965,7 @@ export class OEM implements OEMContract {
       if (types && !types.has(point.type)) continue;
       if (subregions && !subregions.has(point.subregionId)) continue;
       if (this.filter.floorOnly && point.position.floorId !== this.floorId) continue;
-      const type = this.types[point.type];
+      const type = Object.hasOwn(this.types, point.type) ? this.types[point.type] : undefined;
       if (!type) continue;
       const marker = this.createPointMarker(point, type);
       if (this.markerClustering && CLUSTER_SUBCATEGORIES.has(type.category.sub)) {
@@ -943,15 +1017,19 @@ export class OEM implements OEMContract {
   destroy = (): void => {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.lifetime.abort(this.options.signal?.reason);
     this.cancelRequests();
     this.customPointsRequest?.controller.abort();
     this.customPointsRequest = undefined;
     if (this.overdragFrame !== undefined) cancelAnimationFrame(this.overdragFrame);
     this.observer?.disconnect();
-    this.wheel.dispose();
+    this.wheel?.dispose();
     this.options.signal?.removeEventListener('abort', this.destroy);
     this.listeners.clear();
-    this.map.remove();
+    this.map?.remove();
+    this.clearPointLayers();
+    this.labelsLayer.clearLayers();
+    this.boundariesLayer.clearLayers();
     this.root.remove();
     this.points = [];
     this.customPoints = [];
@@ -959,6 +1037,13 @@ export class OEM implements OEMContract {
     this.clickPointOptions = undefined;
     this.customPointsLayer.clearLayers();
     this.pointShardRequests.clear();
+    this.pointIndex = undefined;
+    this.pointIndexRequest = undefined;
+    this.boundaryData.clear();
+    this.boundaryDataRequests.clear();
+    this.labels = [];
+    this.types = {};
+    this.messages = {};
     mounted.delete(this.container);
   };
 }
