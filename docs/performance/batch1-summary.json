@@ -1,0 +1,750 @@
+{
+  "environment": {
+    "date": "2026-09-11T01:44:37.546Z",
+    "node": "v25.9.0",
+    "os": "darwin 25.6.0 arm64",
+    "cpu": "Apple M2 Pro",
+    "browser": "152.0.7977.83",
+    "viewport": {
+      "width": 1000,
+      "height": 720
+    },
+    "samples": 15,
+    "warmups": 2,
+    "network": "localhost; boundary-200 adds a fixed 200 ms to metadata only; no tile/font network"
+  },
+  "sizes": {
+    "baseline": {
+      "snapshot": {
+        "label": "baseline",
+        "ref": "55fcb1ad3c483ecfb4cf1dd6e95c3f6bd69d15b8",
+        "sha256": "9dfcffcb86e872b10bc8293d9e2e2c6858376c097add64b0702d1f1d6a37602c",
+        "files": 58
+      },
+      "consumers": {
+        "embed": {
+          "bytes": 251884,
+          "gzip": 73604,
+          "brotli": 64142,
+          "chunks": 3
+        },
+        "full": {
+          "bytes": 254263,
+          "gzip": 74276,
+          "brotli": 64694,
+          "chunks": 3
+        },
+        "map": {
+          "bytes": 230039,
+          "gzip": 66260,
+          "brotli": 57626,
+          "chunks": 3
+        },
+        "react": {
+          "bytes": 253300,
+          "gzip": 74000,
+          "brotli": 64492,
+          "chunks": 3
+        }
+      },
+      "packages": {
+        "core": {
+          "distBytes": 44205,
+          "jsBytes": 9532,
+          "declarationBytes": 9930,
+          "cssBytes": 0,
+          "cssGzip": 0
+        },
+        "map": {
+          "distBytes": 249072,
+          "jsBytes": 62409,
+          "declarationBytes": 16157,
+          "cssBytes": 33891,
+          "cssGzip": 6443
+        },
+        "sdk": {
+          "distBytes": 189353,
+          "jsBytes": 40899,
+          "declarationBytes": 9186,
+          "cssBytes": 46813,
+          "cssGzip": 8552
+        },
+        "react": {
+          "distBytes": 8183,
+          "jsBytes": 2787,
+          "declarationBytes": 334,
+          "cssBytes": 0,
+          "cssGzip": 0
+        }
+      }
+    },
+    "batch1": {
+      "snapshot": {
+        "label": "batch1",
+        "ref": "working-tree",
+        "sha256": "21dd65c90289727f12806924071a52b703259f0b883a5795c638ebd098300b7a",
+        "files": 62
+      },
+      "consumers": {
+        "embed": {
+          "bytes": 257750,
+          "gzip": 75444,
+          "brotli": 65762,
+          "chunks": 3
+        },
+        "full": {
+          "bytes": 260154,
+          "gzip": 76139,
+          "brotli": 66399,
+          "chunks": 3
+        },
+        "map": {
+          "bytes": 232944,
+          "gzip": 67350,
+          "brotli": 58583,
+          "chunks": 3
+        },
+        "react": {
+          "bytes": 259301,
+          "gzip": 75886,
+          "brotli": 66087,
+          "chunks": 3
+        }
+      },
+      "packages": {
+        "core": {
+          "distBytes": 59397,
+          "jsBytes": 14279,
+          "declarationBytes": 11292,
+          "cssBytes": 0,
+          "cssGzip": 0
+        },
+        "map": {
+          "distBytes": 263970,
+          "jsBytes": 67685,
+          "declarationBytes": 17171,
+          "cssBytes": 33891,
+          "cssGzip": 6443
+        },
+        "sdk": {
+          "distBytes": 202642,
+          "jsBytes": 45666,
+          "declarationBytes": 9477,
+          "cssBytes": 46813,
+          "cssGzip": 8552
+        },
+        "react": {
+          "distBytes": 9239,
+          "jsBytes": 3097,
+          "declarationBytes": 334,
+          "cssBytes": 0,
+          "cssGzip": 0
+        }
+      }
+    }
+  },
+  "scenarios": {
+    "minimal": {
+      "baseline": {
+        "readyMs": {
+          "median": 73.5,
+          "p95": 78.19999998807907
+        },
+        "paintMs": {
+          "median": 88.69999998807907,
+          "p95": 106.09999996423721
+        },
+        "floorMs": {
+          "median": 1.5,
+          "p95": 1.800000011920929
+        },
+        "appendMs": {
+          "median": null,
+          "p95": null
+        },
+        "destroyMs": {
+          "median": 0.800000011920929,
+          "p95": 1
+        },
+        "initialRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "customRequests": {
+          "median": 0,
+          "p95": 0
+        },
+        "longTaskCount": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskMs": {
+          "median": 67,
+          "p95": 71
+        },
+        "retainedHeapBytes": {
+          "median": 264468,
+          "p95": 264468
+        }
+      },
+      "batch1": {
+        "readyMs": {
+          "median": 70.29999995231628,
+          "p95": 74.80000001192093
+        },
+        "paintMs": {
+          "median": 72.89999997615814,
+          "p95": 77.30000001192093
+        },
+        "floorMs": {
+          "median": 1.199999988079071,
+          "p95": 1.5999999642372131
+        },
+        "appendMs": {
+          "median": null,
+          "p95": null
+        },
+        "destroyMs": {
+          "median": 1,
+          "p95": 1.100000023841858
+        },
+        "initialRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "customRequests": {
+          "median": 0,
+          "p95": 0
+        },
+        "longTaskCount": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskMs": {
+          "median": 70,
+          "p95": 75
+        },
+        "retainedHeapBytes": {
+          "median": 275324,
+          "p95": 275324
+        }
+      }
+    },
+    "labels": {
+      "baseline": {
+        "readyMs": {
+          "median": 83.59999996423721,
+          "p95": 135.79999995231628
+        },
+        "paintMs": {
+          "median": 103.89999997615814,
+          "p95": 157.89999997615814
+        },
+        "floorMs": {
+          "median": 1.5,
+          "p95": 1.800000011920929
+        },
+        "appendMs": {
+          "median": null,
+          "p95": null
+        },
+        "destroyMs": {
+          "median": 2.100000023841858,
+          "p95": 2.300000011920929
+        },
+        "initialRequests": {
+          "median": 3,
+          "p95": 3
+        },
+        "customRequests": {
+          "median": 0,
+          "p95": 0
+        },
+        "longTaskCount": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskMs": {
+          "median": 67,
+          "p95": 119
+        },
+        "retainedHeapBytes": {
+          "median": 445388,
+          "p95": 445484
+        }
+      },
+      "batch1": {
+        "readyMs": {
+          "median": 81.69999998807907,
+          "p95": 86.90000003576279
+        },
+        "paintMs": {
+          "median": 92.30000001192093,
+          "p95": 108
+        },
+        "floorMs": {
+          "median": 1.5999999642372131,
+          "p95": 1.899999976158142
+        },
+        "appendMs": {
+          "median": null,
+          "p95": null
+        },
+        "destroyMs": {
+          "median": 2.300000011920929,
+          "p95": 2.600000023841858
+        },
+        "initialRequests": {
+          "median": 3,
+          "p95": 3
+        },
+        "customRequests": {
+          "median": 0,
+          "p95": 0
+        },
+        "longTaskCount": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskMs": {
+          "median": 67,
+          "p95": 73
+        },
+        "retainedHeapBytes": {
+          "median": 459344,
+          "p95": 459356
+        }
+      }
+    },
+    "boundary-200": {
+      "baseline": {
+        "readyMs": {
+          "median": 278.19999998807907,
+          "p95": 283.89999997615814
+        },
+        "paintMs": {
+          "median": 289.7999999523163,
+          "p95": 306.69999998807907
+        },
+        "floorMs": {
+          "median": 2.300000011920929,
+          "p95": 2.900000035762787
+        },
+        "appendMs": {
+          "median": null,
+          "p95": null
+        },
+        "destroyMs": {
+          "median": 1.399999976158142,
+          "p95": 1.699999988079071
+        },
+        "initialRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "customRequests": {
+          "median": 0,
+          "p95": 0
+        },
+        "longTaskCount": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskMs": {
+          "median": 67,
+          "p95": 72
+        },
+        "retainedHeapBytes": {
+          "median": 264468,
+          "p95": 264468
+        }
+      },
+      "batch1": {
+        "readyMs": {
+          "median": 70.40000003576279,
+          "p95": 76.30000001192093
+        },
+        "paintMs": {
+          "median": 73,
+          "p95": 78.69999998807907
+        },
+        "floorMs": {
+          "median": 1.199999988079071,
+          "p95": 1.399999976158142
+        },
+        "appendMs": {
+          "median": null,
+          "p95": null
+        },
+        "destroyMs": {
+          "median": 1,
+          "p95": 1.2000000476837158
+        },
+        "initialRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "customRequests": {
+          "median": 0,
+          "p95": 0
+        },
+        "longTaskCount": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskMs": {
+          "median": 70,
+          "p95": 76
+        },
+        "retainedHeapBytes": {
+          "median": 275196,
+          "p95": 275196
+        }
+      }
+    },
+    "custom-1000": {
+      "baseline": {
+        "readyMs": {
+          "median": 107.69999998807907,
+          "p95": 118.30000001192093
+        },
+        "paintMs": {
+          "median": 142.80000001192093,
+          "p95": 154.4000000357628
+        },
+        "floorMs": {
+          "median": 38.19999998807907,
+          "p95": 43
+        },
+        "appendMs": {
+          "median": 22.30000001192093,
+          "p95": 24
+        },
+        "destroyMs": {
+          "median": 11.300000011920929,
+          "p95": 11.699999988079071
+        },
+        "initialRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "customRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskCount": {
+          "median": 5,
+          "p95": 5
+        },
+        "longTaskMs": {
+          "median": 376,
+          "p95": 388
+        },
+        "retainedHeapBytes": {
+          "median": 508736,
+          "p95": 508900
+        }
+      },
+      "batch1": {
+        "readyMs": {
+          "median": 104.69999998807907,
+          "p95": 113.90000003576279
+        },
+        "paintMs": {
+          "median": 140.10000002384186,
+          "p95": 148.5
+        },
+        "floorMs": {
+          "median": 37.80000001192093,
+          "p95": 39.89999997615814
+        },
+        "appendMs": {
+          "median": 22.900000035762787,
+          "p95": 25
+        },
+        "destroyMs": {
+          "median": 11.900000035762787,
+          "p95": 12.5
+        },
+        "initialRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "customRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskCount": {
+          "median": 5,
+          "p95": 5
+        },
+        "longTaskMs": {
+          "median": 373,
+          "p95": 418
+        },
+        "retainedHeapBytes": {
+          "median": 521164,
+          "p95": 521360
+        }
+      }
+    },
+    "custom-5000": {
+      "baseline": {
+        "readyMs": {
+          "median": 302.10000002384186,
+          "p95": 311.39999997615814
+        },
+        "paintMs": {
+          "median": 501.80000001192093,
+          "p95": 516.3999999761581
+        },
+        "floorMs": {
+          "median": 276.2999999523163,
+          "p95": 278.10000002384186
+        },
+        "appendMs": {
+          "median": 301.80000001192093,
+          "p95": 306.5
+        },
+        "destroyMs": {
+          "median": 59,
+          "p95": 65
+        },
+        "initialRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "customRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskCount": {
+          "median": 8,
+          "p95": 8
+        },
+        "longTaskMs": {
+          "median": 7506,
+          "p95": 7649
+        },
+        "retainedHeapBytes": {
+          "median": 503108,
+          "p95": 503480
+        }
+      },
+      "batch1": {
+        "readyMs": {
+          "median": 299.10000002384186,
+          "p95": 309.0999999642372
+        },
+        "paintMs": {
+          "median": 498.19999998807907,
+          "p95": 508.89999997615814
+        },
+        "floorMs": {
+          "median": 277.30000001192093,
+          "p95": 279.89999997615814
+        },
+        "appendMs": {
+          "median": 322,
+          "p95": 326.69999998807907
+        },
+        "destroyMs": {
+          "median": 58.30000001192093,
+          "p95": 69.09999996423721
+        },
+        "initialRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "customRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskCount": {
+          "median": 8,
+          "p95": 8
+        },
+        "longTaskMs": {
+          "median": 7524,
+          "p95": 7602
+        },
+        "retainedHeapBytes": {
+          "median": 515440,
+          "p95": 515444
+        }
+      }
+    },
+    "custom-10000": {
+      "baseline": {
+        "readyMs": {
+          "median": 645.0999999642372,
+          "p95": 658.6000000238419
+        },
+        "paintMs": {
+          "median": 1084.5,
+          "p95": 1098
+        },
+        "floorMs": {
+          "median": 822.1999999880791,
+          "p95": 837.4000000357628
+        },
+        "appendMs": {
+          "median": 638.3000000119209,
+          "p95": 644.0999999642372
+        },
+        "destroyMs": {
+          "median": 199.0999999642372,
+          "p95": 311.69999998807907
+        },
+        "initialRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "customRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskCount": {
+          "median": 8,
+          "p95": 9
+        },
+        "longTaskMs": {
+          "median": 32572,
+          "p95": 33936
+        },
+        "retainedHeapBytes": {
+          "median": 497696,
+          "p95": 498460
+        }
+      },
+      "batch1": {
+        "readyMs": {
+          "median": 646.1999999880791,
+          "p95": 665.5
+        },
+        "paintMs": {
+          "median": 1081.0999999642372,
+          "p95": 1103.6000000238419
+        },
+        "floorMs": {
+          "median": 825.0999999642372,
+          "p95": 835.3000000119209
+        },
+        "appendMs": {
+          "median": 632.3999999761581,
+          "p95": 645
+        },
+        "destroyMs": {
+          "median": 198.9000000357628,
+          "p95": 255.30000001192093
+        },
+        "initialRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "customRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskCount": {
+          "median": 9,
+          "p95": 10
+        },
+        "longTaskMs": {
+          "median": 32556,
+          "p95": 33866
+        },
+        "retainedHeapBytes": {
+          "median": 509856,
+          "p95": 510060
+        }
+      }
+    },
+    "react-url": {
+      "baseline": {
+        "readyMs": {
+          "median": 113.19999998807907,
+          "p95": 117.5
+        },
+        "paintMs": {
+          "median": 152.30000001192093,
+          "p95": 158.5
+        },
+        "floorMs": {
+          "median": 38.89999997615814,
+          "p95": 39.39999997615814
+        },
+        "appendMs": {
+          "median": 27.100000023841858,
+          "p95": 27.69999998807907
+        },
+        "destroyMs": {
+          "median": 12.199999988079071,
+          "p95": 13
+        },
+        "initialRequests": {
+          "median": 3,
+          "p95": 3
+        },
+        "customRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "longTaskCount": {
+          "median": 3,
+          "p95": 3
+        },
+        "longTaskMs": {
+          "median": 234,
+          "p95": 247
+        },
+        "retainedHeapBytes": {
+          "median": 687284,
+          "p95": 687512
+        }
+      },
+      "batch1": {
+        "readyMs": {
+          "median": 110.19999998807907,
+          "p95": 116
+        },
+        "paintMs": {
+          "median": 150.39999997615814,
+          "p95": 155.69999998807907
+        },
+        "floorMs": {
+          "median": 38.80000001192093,
+          "p95": 40.40000003576279
+        },
+        "appendMs": {
+          "median": 31.30000001192093,
+          "p95": 32.19999998807907
+        },
+        "destroyMs": {
+          "median": 12.199999988079071,
+          "p95": 13
+        },
+        "initialRequests": {
+          "median": 2,
+          "p95": 2
+        },
+        "customRequests": {
+          "median": 1,
+          "p95": 1
+        },
+        "longTaskCount": {
+          "median": 3,
+          "p95": 3
+        },
+        "longTaskMs": {
+          "median": 202,
+          "p95": 221
+        },
+        "retainedHeapBytes": {
+          "median": 696216,
+          "p95": 696944
+        }
+      }
+    }
+  }
+}
