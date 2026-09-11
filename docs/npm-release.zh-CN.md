@@ -50,11 +50,11 @@ npm 包使用 SemVer，并与以下版本独立：
 使用发布助手可以一次性同步四个公开包的版本、执行 `pnpm check`、生成 tarball，并按依赖顺序发布：
 
 ```bash
-pnpm release:npm --version=0.2.2-beta
-pnpm release:npm --version=0.2.2-beta --publish --tag=beta
+pnpm release:npm --version=0.2.3-beta
+pnpm release:npm --version=0.2.3-beta --publish --tag=beta
 ```
 
-第一条命令只准备本地候选包；第二条命令需要 npm 登录，然后按 `core`、`map`、`sdk`、`react` 顺序统一发布。发布命令加上 `--dry-run` 可以只验证 registry 操作而不上传。
+第一条命令只准备本地候选包；第二条命令需要 npm 登录，然后按 `core`、`map`、`sdk`、`react` 顺序统一发布。上传成功后，助手还会把 `latest` 移到本次版本，并从 registry 校验指定 tag 与 `latest` 均已生效。发布命令加上 `--dry-run` 可以验证发布操作，但不会上传或修改 dist-tag。
 
 ## 发布顺序
 

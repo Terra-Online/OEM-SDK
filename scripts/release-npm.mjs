@@ -11,6 +11,7 @@ const targetVersion = args.find((arg) => arg.startsWith('--version='))?.slice('-
 const publish = args.includes('--publish');
 const dryRun = args.includes('--dry-run');
 const tagArgument = args.find((arg) => arg.startsWith('--tag='))?.slice('--tag='.length);
+const registry = 'https://registry.npmjs.org/';
 
 if (!targetVersion || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(targetVersion)) {
   throw new Error('Usage: pnpm release:npm --version=<semver> [--publish] [--dry-run] [--tag=<tag>]');
@@ -33,7 +34,7 @@ if (new Set(names).size !== names.length) throw new Error('Workspace package nam
 // npm login never leaves the workspace in a half-bumped state.
 if (publish && !dryRun) {
   try {
-    execFileSync('npm', ['whoami', '--registry=https://registry.npmjs.org/'], { cwd: root, stdio: 'ignore' });
+    execFileSync('npm', ['whoami', `--registry=${registry}`], { cwd: root, stdio: 'ignore' });
   } catch {
     throw new Error('npm is not authenticated. Run `npm login` (or configure an npm token), then retry.');
   }
@@ -48,6 +49,7 @@ for (const { filename, text, json } of packageData) {
 }
 
 const run = (command, commandArgs) => execFileSync(command, commandArgs, { cwd: root, stdio: 'inherit' });
+const read = (command, commandArgs) => execFileSync(command, commandArgs, { cwd: root, encoding: 'utf8' });
 run('pnpm', ['check']);
 run('pnpm', ['pack:release']);
 
@@ -55,7 +57,16 @@ if (publish) {
   const publishArgs = ['-r', 'publish', '--tag', tag, '--access', 'public', '--no-git-checks', '--report-summary'];
   if (dryRun) publishArgs.push('--dry-run');
   run('pnpm', publishArgs);
-  console.log(`${dryRun ? 'Validated' : 'Published'} ${names.join(', ')} at ${targetVersion} with dist-tag ${tag}.`);
+  if (!dryRun) {
+    for (const name of names) {
+      if (tag !== 'latest') run('npm', ['dist-tag', 'add', `${name}@${targetVersion}`, 'latest', `--registry=${registry}`]);
+      const distTags = JSON.parse(read('npm', ['view', name, 'dist-tags', '--json', `--registry=${registry}`]));
+      if (distTags[tag] !== targetVersion || distTags.latest !== targetVersion) {
+        throw new Error(`npm dist-tag verification failed for ${name}: expected ${tag} and latest to point to ${targetVersion}`);
+      }
+    }
+  }
+  console.log(`${dryRun ? 'Validated' : 'Published'} ${names.join(', ')} at ${targetVersion} with dist-tags ${[tag, 'latest'].filter((value, index, values) => values.indexOf(value) === index).join(' and ')}.`);
 } else {
   console.log(`Prepared ${names.join(', ')} at ${targetVersion}; tarballs are in artifacts/npm.`);
   console.log(`Publish with: pnpm release:npm --version=${targetVersion} --publish --tag=${tag}`);

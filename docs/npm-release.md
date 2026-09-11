@@ -50,11 +50,11 @@ A package release may support multiple game-data releases through the same schem
 Use the release helper to update all four public packages, run `pnpm check`, create tarballs, and (when requested) publish them in dependency order:
 
 ```bash
-pnpm release:npm --version=0.2.2-beta
-pnpm release:npm --version=0.2.2-beta --publish --tag=beta
+pnpm release:npm --version=0.2.3-beta
+pnpm release:npm --version=0.2.3-beta --publish --tag=beta
 ```
 
-The first command only prepares the release locally. The second requires npm authentication and publishes `core`, `map`, `sdk`, then `react` with one command. `--dry-run` can be added to the publish command to validate the registry operation without uploading.
+The first command only prepares the release locally. The second requires npm authentication and publishes `core`, `map`, `sdk`, then `react` with one command. After a successful upload, the helper also moves `latest` to the published version and verifies both the requested tag and `latest` against the registry. `--dry-run` can be added to validate the publish operation without uploading or changing dist-tags.
 
 ## Publish Order
 

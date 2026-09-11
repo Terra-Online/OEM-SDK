@@ -47,6 +47,15 @@ npm 套件使用 SemVer，並與以下版本獨立：
 
 同一 npm 套件版本可以透過相同 schema 支援多個遊戲資料 release。瓦片使用穩定物件路徑和單一瓦片內容版本，令未變更的快取鍵可跨資料 release 重用。
 
+使用發佈助手可以同步四個公開套件的版本、執行檢查並按依賴順序發佈：
+
+```bash
+pnpm release:npm --version=0.2.3-beta
+pnpm release:npm --version=0.2.3-beta --publish --tag=beta
+```
+
+上傳成功後，助手會把 `latest` 移到本次版本，並從 registry 校驗指定 tag 與 `latest` 均已生效。加入 `--dry-run` 可以驗證發佈操作，但不會上傳或修改 dist-tag。
+
 ## 發佈順序
 
 1. 發佈 `@opendfieldmap/core`。
