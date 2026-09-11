@@ -5,12 +5,17 @@ const input=process.argv[2], name=process.argv[3]??'batch1';
 if(!input)throw new Error('Usage: node scripts/bench/report.mjs measurements-file report-name');
 const measurements=JSON.parse(await readFile(path.join(artifacts,input),'utf8'));
 const labels=Object.keys(measurements.results);
+for (const label of labels) for (const scenario of measurements.environment.scenarios ?? Object.keys(measurements.results[label])) {
+  if (measurements.results[label][scenario]?.length !== measurements.environment.samples) throw new Error(`Incomplete samples: ${label}/${scenario}`);
+}
 const sizes=Object.fromEntries(await Promise.all(labels.map(async label=>[label,JSON.parse(await readFile(path.join(artifacts,`${label}-sizes.json`),'utf8'))])));
 const percentile=(values,p)=>{const sorted=values.filter(v=>v!==null).sort((a,b)=>a-b);return sorted.length?sorted[Math.max(0,Math.ceil(sorted.length*p)-1)]:null;};
 const median=(rows,key)=>percentile(rows.map(row=>row[key]),.5);
 const f=n=>n===null?'—':Number(n).toFixed(2);
 const bytes=n=>n.toLocaleString('en-US');
 const first=labels[0],last=labels.at(-1);
+const commits=Object.fromEntries(process.argv.slice(4).map(value=>value.split('=')));
+for(const label of labels) if(commits[label]) sizes[label].snapshot.commit=commits[label];
 const summary={environment:measurements.environment,sizes,scenarios:{}};
 let md=`# ${name === 'batch1' ? '第一批补测' : '第二批'}：性能与体积报告\n\n`;
 md+=`## 比较口径\n\n- 快照：${labels.map(label=>`\`${label}\`（SHA-256 \`${sizes[label].snapshot.sha256}\`）`).join('；')}。\n`;
@@ -33,7 +38,15 @@ for(const scenario of Object.keys(measurements.results[first])){
 md+='\n追加一点评估保持相同最终集合：旧版通过整体 `setCustomPoints()`，新版若有 `upsertCustomPoints()` 则使用该公开增量方法。它衡量推荐调用方式的操作成本，**不是同一个实现函数的微基准**。\n';
 md+='\n| 场景 | 版本 | 长任务总耗时中位 (ms) | GC 后用后堆增量中位 (B) | 自定义点 JSON 请求 |\n| --- | --- | ---: | ---: | ---: |\n';
 for(const [scenario,versions] of Object.entries(summary.scenarios))for(const [label,s] of Object.entries(versions))md+=`| ${scenario} | ${label} | ${f(s.longTaskMs.median)} | ${bytes(s.retainedHeapBytes.median)} | ${s.customRequests.median} |\n`;
-md+='\n## 复现与原始数据\n\n```sh\nnode scripts/bench/snapshot.mjs baseline 55fcb1a\n# 在第一批／第二批对应 checkout 中分别保存快照；已存在的快照不会被覆盖。\nnode scripts/bench/snapshot.mjs batch1 ddcba3b\nnode scripts/bench/prepare.mjs baseline batch1\nnode scripts/bench/run.mjs baseline batch1\nnode scripts/bench/report.mjs measurements-baseline-batch1.json batch1\n```\n\n使用本机安装的 Google Chrome；`BENCH_SAMPLES` 可覆盖默认 15 次。快照位于被 git 忽略的 `artifacts/benchmarks/snapshots`。原始样本及摘要随本报告保存，包含失败检测、每次请求数及快照指纹。\n';
+md+='\n## 复现与原始数据\n\n```sh\n';
+for(const label of labels){
+ const snapshot=sizes[label].snapshot;
+ const ref=snapshot.commit??(snapshot.ref!=='working-tree'?snapshot.ref:undefined);
+ if(!ref)md+=`# 在对应源代码 checkout 中捕获 ${label}；指纹见上文。\n`;
+ md+=`node scripts/bench/snapshot.mjs ${label}${ref?' '+ref:''}\n`;
+}
+md+=`node scripts/bench/prepare.mjs ${labels.join(' ')}\nnode scripts/bench/run.mjs ${labels.join(' ')}\nnode scripts/bench/report.mjs ${input} ${name} ${Object.entries(commits).map(([label,ref])=>label+'='+ref).join(' ')}\n\`\`\`\n`;
+md+='\n使用本机安装的 Google Chrome；`BENCH_SAMPLES` 可覆盖默认 15 次。快照位于被 git 忽略的 `artifacts/benchmarks/snapshots`，已存在的快照不会被覆盖。报告和原始样本保留在被忽略的 `docs/performance`，不随代码提交。JSON 包含每次请求数、计时和环境；摘要同时包含源代码指纹。\n';
 const directory=path.join(root,'docs/performance');await mkdir(directory,{recursive:true});
 await writeFile(path.join(directory,`${name}.md`),md);await writeFile(path.join(directory,`${name}-summary.json`),JSON.stringify(summary,null,2));await cp(path.join(artifacts,input),path.join(directory,`${name}-samples.json`));
 console.log(JSON.stringify({report:`docs/performance/${name}.md`,summary:summary.scenarios},null,2));

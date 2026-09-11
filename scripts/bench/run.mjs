@@ -38,7 +38,7 @@ const server=createServer(async(req,res)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const base=`http://127.0.0.1:${server.address().port}`;
 const browser=await chromium.launch({channel:'chrome',headless:true,args:['--js-flags=--expose-gc']});
-const result={environment:{date:new Date().toISOString(),node:process.version,os:`${os.platform()} ${os.release()} ${os.arch()}`,cpu:os.cpus()[0].model,browser:browser.version(),viewport:{width:1000,height:720},samples,warmups,network:'localhost; boundary-200 adds a fixed 200 ms to metadata only; no tile/font network'},results:{}};
+const result={environment:{date:new Date().toISOString(),node:process.version,os:`${os.platform()} ${os.release()} ${os.arch()}`,cpu:os.cpus()[0].model,browser:browser.version(),viewport:{width:1000,height:720},samples,warmups,scenarios,network:'localhost; boundary-200 adds a fixed 200 ms to metadata only; no tile/font network'},results:{}};
 try{
  for(const scenario of scenarios){
   for(const label of labels)result.results[label]??={};
@@ -58,6 +58,10 @@ try{
     if(metrics.errors.length||metrics.leftoverRoots)throw new Error(`${label}/${scenario}: ${JSON.stringify(metrics)}`);
     if(round>=0)(result.results[label][scenario]??=[]).push({...metrics,retainedHeapBytes:after.usedSize-before.usedSize});
     await context.close();
+   }
+   if (round >= 0 && (round + 1) % 3 === 0) {
+    console.log(`${scenario}: ${round + 1}/${samples} pairs`);
+    await writeFile(path.join(artifacts,`measurements-${labels.join('-')}.json`),JSON.stringify(result,null,2));
    }
   }
   console.log('Measured '+scenario);
