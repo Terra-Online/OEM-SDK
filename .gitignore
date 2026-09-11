@@ -13,3 +13,4 @@ pnpm-publish-summary.json
 
 # Local measurement reports and raw samples
 /docs/performance/
+/scripts/bench/
