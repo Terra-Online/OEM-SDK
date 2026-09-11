@@ -5,8 +5,8 @@ import type { Control, ControlContext, Panels } from './types';
 
 export const mountControls = (
   root: HTMLElement,
-  visibility: { regionSelector: boolean; floorSelector: boolean; scaleBar: boolean },
-  context: Omit<ControlContext, 'panels'>,
+  visibility: { regionSelector: boolean; floorSelector: boolean; scaleBar: boolean; horizontalSelectors: boolean },
+  context: Omit<ControlContext, 'panels' | 'horizontalSelectors'>,
 ): Control => {
   const hasSwitches = visibility.regionSelector || visibility.floorSelector;
   if (!hasSwitches && !visibility.scaleBar) return { sync: () => {} };
@@ -32,7 +32,7 @@ export const mountControls = (
       expandedPanel = null;
     },
   };
-  const controlContext: ControlContext = { ...context, panels };
+  const controlContext: ControlContext = { ...context, panels, horizontalSelectors: visibility.horizontalSelectors };
   let currentState: OEMWidgetState | null = null;
   const handleOutsidePointer = (event: PointerEvent) => {
     if (expandedPanel && event.target instanceof Node && !expandedPanel.contains(event.target)) panels.collapseAll();
@@ -46,6 +46,7 @@ export const mountControls = (
   if (hasSwitches) {
     const switchArea = document.createElement('div');
     switchArea.className = 'switchArea';
+    switchArea.classList.toggle('horizontalSelectors', visibility.horizontalSelectors);
     if (visibility.regionSelector) {
       const region = createRegionControl(controlContext);
       components.push(region);

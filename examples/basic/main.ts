@@ -38,6 +38,7 @@ const defaultConfig: OEMWidgetConfig = {
 const defaultCreation: DemoCreationConfig = {
   showRegionSelector: true,
   showFloorSelector: false,
+  horizontalSelectors: false,
   showScaleBar: true,
   lockDrag: false,
   lockZoom: false,

@@ -88,6 +88,23 @@
   font-feature-settings: 'lnum' 1, 'onum' 0, 'case' 1;
 }
 
+.switchArea.horizontalSelectors {
+  top: 1rem;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  flex-direction: row;
+  transform: translateX(-50%);
+}
+
+.horizontalSelectors .switch {
+  flex-direction: row;
+}
+
+.horizontalSelectors .switchLabel {
+  display: none;
+}
+
 .switch {
   --itemSize: 2.5rem;
   --itemGap: 0.6rem;
@@ -278,6 +295,34 @@
 .floorList .switchIndicator,
 .subregionList .switchIndicator { left: 1.5px; }
 
+.horizontalSelectors .switchIndicator {
+  top: 1.5px;
+  left: 0;
+  border-top: 8px solid color.adjust($primary-accent-4, $lightness: -10%);
+  border-right: 6px solid transparent;
+  border-bottom: 0;
+  border-left: 6px solid transparent;
+  transform: translateX(-50%);
+}
+
+.horizontalSelectors .floorPanel,
+.horizontalSelectors .subregionPanel {
+  top: 100%;
+  left: 50%;
+  padding-top: 1rem;
+  padding-left: 0;
+  transform: translateX(-50%);
+}
+
+.horizontalSelectors .floorList,
+.horizontalSelectors .subregionList {
+  flex-direction: row;
+  max-width: calc(100cqw - 2rem);
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .scaleControl {
   position: absolute;
   top: 40%;
@@ -388,6 +433,14 @@
   .switchLabel::after { font-size: 0.78rem; }
   .switchLabel::before { border-width: 8px 8px 0; transform: translateY(7.5px); }
   .switchIndicator { left: 2.5px; border-top-width: 5px; border-bottom-width: 5px; border-left-width: 6px; }
+  .horizontalSelectors .switchIndicator {
+    top: 2.5px;
+    left: 0;
+    border-top-width: 6px;
+    border-right-width: 5px;
+    border-bottom-width: 0;
+    border-left-width: 5px;
+  }
   .floorItem { font-size: 1rem; }
   .scaleControl {
     top: 45%;

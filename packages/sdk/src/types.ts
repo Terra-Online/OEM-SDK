@@ -81,6 +81,8 @@ export interface OEMWidgetOptions extends OEMWidgetConfig {
   showRegionSelector?: boolean;
   /** Whether the Atlos-aligned floor selector is shown. Defaults to true. */
   showFloorSelector?: boolean;
+  /** Places the region and floor selectors in a horizontal rail at the top. Defaults to false. */
+  horizontalSelectors?: boolean;
   /** Whether the Atlos-aligned scale bar is shown. Defaults to true. */
   showScaleBar?: boolean;
   /** Prevents user drag and trackpad-pan gestures. Defaults to false. */

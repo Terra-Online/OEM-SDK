@@ -34,7 +34,10 @@ const bindPersistentPanel = (owner: HTMLElement, context: ControlContext): void 
 
 /** Moves an Atlos indicator by transform so transitions stay on the compositor. */
 const positionIndicator = (indicator: HTMLElement, target: HTMLElement): void => {
-  indicator.style.transform = `translateY(calc(${target.offsetTop + target.offsetHeight / 2}px - 50%))`;
+  const horizontal = indicator.closest('.horizontalSelectors') !== null;
+  indicator.style.transform = horizontal
+    ? `translateX(calc(${target.offsetLeft + target.offsetWidth / 2}px - 50%))`
+    : `translateY(calc(${target.offsetTop + target.offsetHeight / 2}px - 50%))`;
 };
 
 /** Creates the RGN control and its hover/focus subregion rail. */
@@ -47,7 +50,8 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
   label.setAttribute('aria-hidden', 'true');
   const indicator = document.createElement('div');
   indicator.className = 'switchIndicator';
-  element.append(label, indicator);
+  if (!context.horizontalSelectors) element.append(label);
+  element.append(indicator);
 
   const controls = new Map<string, {
     region: OEMRegion;
@@ -167,7 +171,8 @@ export const createLayerControl = (context: ControlContext): Control & { element
   list.className = 'floorList';
   panel.append(list);
   mainButton.append(icon, panel);
-  element.append(label, mainButton);
+  if (!context.horizontalSelectors) element.append(label);
+  element.append(mainButton);
   mainButton.addEventListener('keydown', (event) => {
     if (event.target !== mainButton || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();

@@ -89,6 +89,7 @@ Use `customPointsUrl` for a large point set instead of embedding it in `createOE
 | `manifest` | `OEMManifest` | Loaded from `resources` |
 | `showRegionSelector` | `boolean` | `true` |
 | `showFloorSelector` | `boolean` | `true` |
+| `horizontalSelectors` | `boolean` | `false` |
 | `showScaleBar` | `boolean` | `true` |
 | `lockDrag` | `boolean` | `false` |
 | `lockZoom` | `boolean` | `false` |

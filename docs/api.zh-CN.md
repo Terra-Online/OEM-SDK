@@ -89,6 +89,7 @@ interface OEMClickPointOptions {
 | `manifest` | `OEMManifest` | 从 `resources` 加载 |
 | `showRegionSelector` | `boolean` | `true` |
 | `showFloorSelector` | `boolean` | `true` |
+| `horizontalSelectors` | `boolean` | `false` |
 | `showScaleBar` | `boolean` | `true` |
 | `lockDrag` | `boolean` | `false` |
 | `lockZoom` | `boolean` | `false` |

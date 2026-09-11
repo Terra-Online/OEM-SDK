@@ -13,6 +13,7 @@ const REGION_CODES: Readonly<Record<string, string>> = Object.freeze({
 export interface DemoCreationConfig {
   showRegionSelector: boolean;
   showFloorSelector: boolean;
+  horizontalSelectors: boolean;
   showScaleBar: boolean;
   lockDrag: boolean;
   lockZoom: boolean;
@@ -322,6 +323,7 @@ const createWidgetCode = (
   }
   if (!creation.showRegionSelector) lines.push('  showRegionSelector: false,');
   if (!creation.showFloorSelector) lines.push('  showFloorSelector: false,');
+  if (creation.horizontalSelectors) lines.push('  horizontalSelectors: true,');
   if (!creation.showScaleBar) lines.push('  showScaleBar: false,');
   if (creation.lockDrag) lines.push('  lockDrag: true,');
   if (creation.lockZoom) lines.push('  lockZoom: true,');
@@ -543,12 +545,13 @@ export function createDemoConfigPanel(
 
   const regionSelector = createToggle('Region selector');
   const floorSelector = createToggle('Floor selector');
+  const horizontalSelectors = createToggle('Horizontal selectors');
   const scaleBar = createToggle('Scale bar');
   const lockDrag = createToggle('Lock dragging');
   const lockZoom = createToggle('Lock zooming');
   const controls = createSection('Controls');
   controls.fieldset.classList.add('demoControlsSection');
-  controls.content.append(regionSelector.field, floorSelector.field, scaleBar.field, lockDrag.field, lockZoom.field);
+  controls.content.append(regionSelector.field, floorSelector.field, horizontalSelectors.field, scaleBar.field, lockDrag.field, lockZoom.field);
 
   const reset = document.createElement('button');
   reset.type = 'button';
@@ -692,6 +695,7 @@ export function createDemoConfigPanel(
     clustering.input.checked = state.markerClustering;
     regionSelector.input.checked = creation.showRegionSelector;
     floorSelector.input.checked = creation.showFloorSelector;
+    horizontalSelectors.input.checked = creation.horizontalSelectors;
     scaleBar.input.checked = creation.showScaleBar;
     lockDrag.input.checked = creation.lockDrag;
     lockZoom.input.checked = creation.lockZoom;
@@ -757,6 +761,7 @@ export function createDemoConfigPanel(
   clustering.input.addEventListener('change', () => callbacks.update({ markerClustering: clustering.input.checked }));
   regionSelector.input.addEventListener('change', () => callbacks.recreate({ showRegionSelector: regionSelector.input.checked }));
   floorSelector.input.addEventListener('change', () => callbacks.recreate({ showFloorSelector: floorSelector.input.checked }));
+  horizontalSelectors.input.addEventListener('change', () => callbacks.recreate({ horizontalSelectors: horizontalSelectors.input.checked }));
   scaleBar.input.addEventListener('change', () => callbacks.recreate({ showScaleBar: scaleBar.input.checked }));
   lockDrag.input.addEventListener('change', () => callbacks.recreate({ lockDrag: lockDrag.input.checked }));
   lockZoom.input.addEventListener('change', () => callbacks.recreate({ lockZoom: lockZoom.input.checked }));

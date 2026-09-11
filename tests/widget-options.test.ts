@@ -112,6 +112,30 @@ describe('widget creation options', () => {
     widget.destroy();
   });
 
+  it('lays selectors and their selection rails out horizontally at the top', async () => {
+    createOEM.mockResolvedValue(makeCore());
+    const host = document.createElement('div');
+    document.body.append(host);
+
+    const { createOEMWidget } = await import('@opendfieldmap/sdk');
+    const widget = await createOEMWidget(host, {
+      manifest,
+      labels: false,
+      subregion: 'VL_1',
+      horizontalSelectors: true,
+    });
+
+    const switchArea = host.querySelector('.switchArea');
+    expect(switchArea?.classList.contains('horizontalSelectors')).toBe(true);
+    expect(switchArea?.querySelectorAll('.switchLabel')).toHaveLength(0);
+    expect(switchArea?.querySelector('.subregionList')).not.toBeNull();
+    expect(switchArea?.querySelector('.floorList')).not.toBeNull();
+    for (const indicator of switchArea?.querySelectorAll<HTMLElement>('.switchIndicator') ?? []) {
+      expect(indicator.style.transform).toContain('translateX');
+    }
+    widget.destroy();
+  });
+
   it('hides selectors and scale independently', async () => {
     createOEM.mockResolvedValue(makeCore());
     const host = document.createElement('div');

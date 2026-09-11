@@ -187,6 +187,7 @@ class Widget implements OEMWidget {
       regionSelector: options.showRegionSelector ?? true,
       floorSelector: options.showFloorSelector ?? true,
       scaleBar: options.showScaleBar ?? true,
+      horizontalSelectors: options.horizontalSelectors ?? false,
     }, {
       manifest,
       zoomLocked: options.lockZoom ?? false,

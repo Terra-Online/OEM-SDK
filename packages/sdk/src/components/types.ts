@@ -18,6 +18,7 @@ export interface Panels {
 export interface ControlContext {
   manifest: OEMManifest;
   zoomLocked: boolean;
+  horizontalSelectors: boolean;
   apply(update: OEMWidgetConfig): void;
   zoomTo(zoom: number, options: { animate: boolean }): void;
   panels: Panels;
