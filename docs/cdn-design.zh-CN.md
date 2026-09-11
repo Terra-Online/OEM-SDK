@@ -27,6 +27,7 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 /marker/assets/{sha256}/{assetPath}.webp
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
+/map/{gameVersion}/{releaseId}/boundaries/{regionId}.game.json
 /tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
 /tiles/{gameVersion}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
 /fonts/harmony/{sha256}/HMSans.woff2
@@ -36,6 +37,8 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 `gameVersion` 使用路径安全形式，例如 `1_5_3`。`releaseId` 使 manifest、点位、地名和边界保持不可变。`type.json` 保留常规点位类型，并将源数据中的全部 NPC 和档案条目分别统一为 `npc` 与 `files` 两种聚合类型。瓦片对象路径在同一游戏版本内保持稳定，SDK 为每张瓦片追加由内容生成的短 `v` 值；未变化的瓦片可跨 release 复用 CDN 缓存，只有变化的瓦片需要回源。不带 `v` 时会访问该稳定路径下的最新对象。主层瓦片文件名不带楼层后缀，其他楼层使用 `_l1` 这类小写文件名后缀。
 
 使用方只需配置 `baseUrl` 和 `manifestPath`，不应自行拼接单个内容路径。
+
+OEM 和 Game 边界文件统一使用可读的 `{ count, boundaries }` 集合结构。每条边界包含 `id`，polygon `rings` 中的点为 `{ x, z }`；所属 `regionId` 由 manifest 引用确定，不在每个点中重复。游戏关卡网格会按 level 合并后发布，删除共享内边，同时仍可从合并后的环精确还原网格覆盖范围。
 
 ## 托管契约
 

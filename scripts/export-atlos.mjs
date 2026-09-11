@@ -6,7 +6,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveGameVersion } from './game-version.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const akeDataRoot = path.resolve(process.env.AKEDATA_ROOT ?? path.join(root, '../../Preview Repos/AKEData'));
 const SCHEMA_VERSION = 1;
+const GAME_GRID_SIZE = 128;
 const args = process.argv.slice(2);
 const sourceArg = args.find((argument) => !argument.startsWith('--'));
 const source = path.resolve(sourceArg ?? path.join(root, '../Atlos/talos'));
@@ -25,6 +27,11 @@ const read = async (relative) => {
   sourceFiles[relative] = sha256(bytes);
   return JSON.parse(bytes.toString());
 };
+const readAKEData = async (relative) => {
+  const bytes = await fs.readFile(path.join(akeDataRoot, relative));
+  sourceFiles[`AKEData/${relative}`] = sha256(bytes);
+  return JSON.parse(bytes.toString());
+};
 const write = async (relative, content) => {
   const filename = path.join(output, relative);
   await fs.mkdir(path.dirname(filename), { recursive: true });
@@ -36,6 +43,89 @@ const versionedObject = async (namespace, name, content) => {
   const objectPath = `/${namespace}/${gameVersion}/${releasePlaceholder}/${name}`;
   await write(objectPath.slice(1), bytes);
   return { path: objectPath, sha256: hash, bytes: Buffer.byteLength(bytes) };
+};
+const transformGamePoint = (region, x, z) => ({
+  x: (x * region.gameTransform.scaleX + region.gameTransform.offsetX) * 2 ** region.maxNativeZoom,
+  z: (z * region.gameTransform.scaleZ + region.gameTransform.offsetZ) * 2 ** region.maxNativeZoom,
+});
+const pointKey = ([x, z]) => `${x},${z}`;
+const simplifyRing = (ring) => ring.filter((point, index) => {
+  const previous = ring[(index + ring.length - 1) % ring.length];
+  const next = ring[(index + 1) % ring.length];
+  return (previous[0] - point[0]) * (next[1] - point[1]) !==
+    (previous[1] - point[1]) * (next[0] - point[0]);
+});
+const ringArea = (ring) => ring.reduce((area, point, index) => {
+  const next = ring[(index + 1) % ring.length];
+  return area + point[0] * next[1] - next[0] * point[1];
+}, 0) / 2;
+const mergeLevelGrids = (levelId, grids) => {
+  const edges = new Map();
+  const addEdge = (start, end) => {
+    const key = `${pointKey(start)}>${pointKey(end)}`;
+    const reverse = `${pointKey(end)}>${pointKey(start)}`;
+    if (edges.has(reverse)) edges.delete(reverse);
+    else edges.set(key, [start, end]);
+  };
+  for (const { x, z } of grids) {
+    addEdge([x, z], [x + 1, z]);
+    addEdge([x + 1, z], [x + 1, z + 1]);
+    addEdge([x + 1, z + 1], [x, z + 1]);
+    addEdge([x, z + 1], [x, z]);
+  }
+  const outgoing = new Map();
+  for (const [key, edge] of edges) {
+    const start = pointKey(edge[0]);
+    if (outgoing.has(start)) throw new Error(`Ambiguous merged game boundary vertex: ${levelId}/${start}`);
+    outgoing.set(start, { key, edge });
+  }
+  const rings = [];
+  while (edges.size) {
+    const first = edges.entries().next().value;
+    const start = first[1][0];
+    const ring = [];
+    let cursor = start;
+    do {
+      ring.push(cursor);
+      const next = outgoing.get(pointKey(cursor));
+      if (!next || !edges.delete(next.key)) throw new Error(`Open merged game boundary ring: ${levelId}`);
+      cursor = next.edge[1];
+    } while (pointKey(cursor) !== pointKey(start));
+    const simplified = simplifyRing(ring);
+    if (simplified.length < 3) throw new Error(`Invalid merged game boundary ring: ${levelId}`);
+    rings.push(simplified);
+  }
+  const mergedArea = Math.abs(rings.reduce((area, ring) => area + ringArea(ring), 0));
+  if (Math.abs(mergedArea - grids.length) > 1e-9) {
+    throw new Error(`Merged game boundary changed grid coverage: ${levelId} (${mergedArea} vs ${grids.length})`);
+  }
+  return rings.sort((left, right) => Math.abs(ringArea(right)) - Math.abs(ringArea(left)));
+};
+const levelToGameBoundaries = (region, level) => {
+  const grids = (level.levelGrids ?? []).map((grid) => ({ x: grid.x ?? grid.X, z: grid.y ?? grid.Y }));
+  if (grids.some((grid) => !Number.isInteger(grid.x) || !Number.isInteger(grid.z))) {
+    throw new Error(`Invalid level grid coordinates: ${level.id}`);
+  }
+  const rect = level.rectLeftBottom && level.rectRightTop
+    ? [level.rectLeftBottom.x, level.rectLeftBottom.y, level.rectRightTop.x, level.rectRightTop.y]
+    : undefined;
+  if (rect && rect.some((value) => !Number.isFinite(value))) throw new Error(`Invalid level rectangle: ${level.id}`);
+  if (rect && grids.length) {
+    const gridBounds = [
+      Math.min(...grids.map((grid) => grid.x * GAME_GRID_SIZE)),
+      Math.min(...grids.map((grid) => grid.z * GAME_GRID_SIZE)),
+      Math.max(...grids.map((grid) => (grid.x + 1) * GAME_GRID_SIZE)),
+      Math.max(...grids.map((grid) => (grid.z + 1) * GAME_GRID_SIZE)),
+    ];
+    if (gridBounds.some((value, index) => value !== rect[index])) {
+      throw new Error(`Level grid rectangle mismatch: ${level.id} (${gridBounds.join(',')} vs ${rect.join(',')})`);
+    }
+  }
+  return {
+    id: level.id,
+    rings: mergeLevelGrids(level.id, grids).map((ring) => ring.map(([x, z]) =>
+      transformGamePoint(region, x * GAME_GRID_SIZE, z * GAME_GRID_SIZE))),
+  };
 };
 const walk = async (directory) => {
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -232,6 +322,13 @@ const pointIds = new Set();
 const stats = {};
 const pointIndex = {};
 const regions = [];
+const gameBoundaryStats = {};
+const gameMapIds = {
+  Valley_4: 'map01',
+  Wuling: 'map02',
+  Dijiang: 'base01_dg001',
+  Weekraid_1: 'dung01_wrdg001',
+};
 for (const [id, config] of Object.entries(regionSource)) {
   const boundsOffset = config.boundsOffset
     ? { x: config.boundsOffset.x, z: -(config.boundsOffset.y + config.dimensions[1]) }
@@ -311,9 +408,26 @@ for (const [id, config] of Object.entries(regionSource)) {
             [subregion.bounds[0][0], subregion.bounds[1][1]],
           ]]
         : [];
-    return { id: subregion.id, rings: rings.map((ring) => ring.map(([pixelX, pixelZ]) => ({ regionId: id, x: pixelX, z: -pixelZ }))) };
+    return { id: subregion.id, rings: rings.map((ring) => ring.map(([pixelX, pixelZ]) => ({ x: pixelX, z: -pixelZ }))) };
   }).filter((boundary) => boundary.rings.length);
-  region.boundaries = await versionedObject('map', `boundaries/${id}.json`, boundaries);
+  region.boundaries = await versionedObject('map', `boundaries/${id}.json`, { count: boundaries.length, boundaries });
+  const gameMapId = gameMapIds[id];
+  if (!gameMapId) throw new Error(`AKEData map ID is missing: ${id}`);
+  const mapConfig = await readAKEData(`Json/MapConfig/${gameMapId}.json`);
+  const levelIds = [...(mapConfig.levelStrIds ?? [])];
+  if (!levelIds.length) throw new Error(`MapConfig levelStrIds is missing: ${gameMapId}`);
+  const levels = await Promise.all(levelIds.map((levelId) => readAKEData(`Json/LevelConfig/${levelId}.json`)));
+  const gameBoundaries = levels.map((level) => levelToGameBoundaries(region, level));
+  region.gameBoundaries = await versionedObject('map', `boundaries/${id}.game.json`, {
+    count: gameBoundaries.length,
+    boundaries: gameBoundaries,
+  });
+  gameBoundaryStats[id] = {
+    mapId: gameMapId,
+    levels: levels.map((level) => ({ id: level.id, grids: level.levelGrids?.length ?? 0 })),
+    boundaries: gameBoundaries.length,
+    tiles: levels.reduce((count, level) => count + (level.levelGrids?.length ?? 0), 0),
+  };
   regions.push(region);
 }
 const flatten = (value, prefix = '', result = {}) => {
@@ -415,8 +529,8 @@ await fs.writeFile(path.join(root, 'artifacts/export-report.json'), JSON.stringi
   launcherVersion: resolvedGameVersion.launcher, versionSource: resolvedGameVersion.source, tileContentHash, tileCount: tileIndex.length,
   pointCount: pointIds.size, typeCount: Object.keys(types).length, stats, missingIcons, aliasedIcons, excludedPoints, ignoredTileRegions,
   ignoredTileCount: discoveredTileFiles.length - tileFiles.length, novecentoFontsIncluded: includeLicensedNovecento,
-  sourceFiles, sourceReadOnly: true, cloudflareChanges: false }, null, 2));
+  akeDataRoot, gameBoundaryStats, sourceFiles, sourceReadOnly: true, cloudflareChanges: false }, null, 2));
 console.log(JSON.stringify({ releaseId, gameVersion, launcherVersion: resolvedGameVersion.launcher,
   versionSource: resolvedGameVersion.source, tiles: tileIndex.length, points: pointIds.size, missingIcons: missingIcons.length, aliasedIcons,
-  typeCount: Object.keys(types).length, excludedPoints, ignoredTileRegions,
+  typeCount: Object.keys(types).length, excludedPoints, ignoredTileRegions, gameBoundaryStats,
   novecentoFontsIncluded: includeLicensedNovecento, output: publicOutput }, null, 2));

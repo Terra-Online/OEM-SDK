@@ -24,6 +24,15 @@ const readRef = async (ref) => {
   if (hash(bytes) !== ref.sha256) fail(`Resource hash mismatch: ${ref.path}`);
   return JSON.parse(bytes.toString());
 };
+const validateBoundaryCollection = (value, regionId, allowEmpty) => {
+  if (!value || !Number.isInteger(value.count) || !Array.isArray(value.boundaries) ||
+    value.count !== value.boundaries.length || (!allowEmpty && value.count === 0) ||
+    value.boundaries.some((boundary) => !boundary?.id || !Array.isArray(boundary.rings) ||
+      boundary.rings.some((ring) => !Array.isArray(ring) || ring.length < 3 || ring.some((position) =>
+        !position || Object.hasOwn(position, 'regionId') || !Number.isFinite(position.x) || !Number.isFinite(position.z))))) {
+    fail(`Invalid boundary data: ${regionId}`);
+  }
+};
 const decodePoint = (raw, region, shardPath) => {
   if (!Array.isArray(raw) && raw && raw.position && raw.raw) return raw;
   const value = Array.isArray(raw)
@@ -158,17 +167,12 @@ for (const region of manifest.regions) {
   }
   if (region.boundaries) {
     requirePath(region.boundaries.path, `${mapRoot}/boundaries/${region.id}.json`);
-    await readRef(region.boundaries);
+    validateBoundaryCollection(await readRef(region.boundaries), region.id, true);
   }
-  if (region.gameBoundaries) {
-    requirePath(region.gameBoundaries.path, `${mapRoot}/boundaries/${region.id}.game.json`);
-    const gameBoundaries = await readRef(region.gameBoundaries);
-    if (!Array.isArray(gameBoundaries) || gameBoundaries.some((boundary) =>
-      !boundary?.id || !Array.isArray(boundary.rings) || boundary.rings.some((ring) =>
-        !Array.isArray(ring) || ring.length < 3 || ring.some((position) =>
-          position?.regionId !== region.id || !Number.isFinite(position.x) || !Number.isFinite(position.z))))
-    ) fail(`Invalid game boundary data: ${region.id}`);
-  }
+  if (!region.gameBoundaries) fail(`Region has no game boundary data: ${region.id}`);
+  requirePath(region.gameBoundaries.path, `${mapRoot}/boundaries/${region.id}.game.json`);
+  const gameBoundaries = await readRef(region.gameBoundaries);
+  validateBoundaryCollection(gameBoundaries, region.id, false);
   for (const ref of region.points) {
     requirePrefix(ref.path, `${markerRoot}/points`);
     const rawPoints = await readRef(ref);

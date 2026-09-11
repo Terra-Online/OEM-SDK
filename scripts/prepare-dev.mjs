@@ -39,7 +39,7 @@ const hasPreparedData = async () => {
     }));
     return manifest.schemaVersion === 1 && Array.isArray(manifest.regions) && manifest.regions.length > 0
       && manifest.regions.every((region) => hasPlane(region.boundsOffset) && hasPlane(region.initialView)
-        && hasTransform(region.gameTransform) && Array.isArray(region.subregions)
+        && hasTransform(region.gameTransform) && typeof region.gameBoundaries?.path === 'string' && Array.isArray(region.subregions)
         && region.subregions.every((subregion) => !subregion.gameTransform || hasTransform(subregion.gameTransform)))
       && resourcesExist.every(Boolean);
   } catch {

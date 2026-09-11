@@ -31,7 +31,7 @@ import type { OEM as OEMContract, OEMClickPointOptions, OEMCustomPoint, OEMEvent
 import { enableSmoothWheelZoom } from '../atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from '../atlos/mapOverdrag';
 import GithubIcon from '../assets/ghicon.svg';
-import { boundaryScore } from './geometry';
+import { boundaryScore, parseBoundaryCollection } from './geometry';
 import { CoveredTileLayer, OEMMarker } from './layers';
 import {
   BRAND_URL,
@@ -249,14 +249,13 @@ export class OEM implements OEMContract {
   private position(latlng: L.LatLng): OEMPosition {
     return fromOEMLeafletPosition(latlng.lat, latlng.lng, this.region, this.floorId);
   }
-  private loadOEMBoundaryData(reference: OEMAsset): Promise<OEMBoundary[]> {
+  private loadBoundaryData(reference: OEMAsset): Promise<OEMBoundary[]> {
     const cached = this.boundaryData.get(reference.path);
     if (cached) return Promise.resolve(cached);
     const pending = this.boundaryDataRequests.get(reference.path);
     if (pending) return pending;
     const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, reference.path), this.options.signal).then((value) => {
-      if (!Array.isArray(value)) throw new Error(`Invalid OEM boundary data: ${reference.path}`);
-      const boundaries = value as OEMBoundary[];
+      const boundaries = parseBoundaryCollection(value, reference.path);
       this.boundaryData.set(reference.path, boundaries);
       return boundaries;
     }).finally(() => {
@@ -268,7 +267,7 @@ export class OEM implements OEMContract {
   /** Preloads OEM subregion geometry so map clicks can resolve an exact subregion. */
   async prepareSubregionBoundaries(): Promise<void> {
     if (!this.region.boundaries) return;
-    try { await this.loadOEMBoundaryData(this.region.boundaries); } catch { /* Click metadata has a bounds fallback. */ }
+    try { await this.loadBoundaryData(this.region.boundaries); } catch { /* Click metadata has a bounds fallback. */ }
   }
   private inferSubregionId(x: number, z: number): string | undefined {
     const selected = this.filter.subregions?.filter((id) => this.region.subregions.some((subregion) => subregion.id === id));
@@ -308,20 +307,21 @@ export class OEM implements OEMContract {
         right.distance - left.distance || left.id.localeCompare(right.id));
       return ranked[0].id;
     }
+    if (scores.length) return undefined;
 
     const bounds = this.region.subregions
       .filter((subregion) => subregion.bounds && (!allowed || allowed.has(subregion.id)))
-      .map((subregion) => {
+      .flatMap((subregion) => {
         const [[minX, minZ], [maxX, maxZ]] = subregion.bounds!;
         const insideX = point.x >= minX && point.x <= maxX;
         const insideZ = point.z >= minZ && point.z <= maxZ;
-        const dx = insideX ? Math.min(point.x - minX, maxX - point.x) : Math.min(Math.abs(point.x - minX), Math.abs(point.x - maxX));
-        const dz = insideZ ? Math.min(point.z - minZ, maxZ - point.z) : Math.min(Math.abs(point.z - minZ), Math.abs(point.z - maxZ));
-        return { id: subregion.id, inside: insideX && insideZ, distance: dx * dx + dz * dz };
+        if (!insideX || !insideZ) return [];
+        const dx = Math.min(point.x - minX, maxX - point.x);
+        const dz = Math.min(point.z - minZ, maxZ - point.z);
+        return [{ id: subregion.id, distance: Math.min(dx, dz) ** 2 }];
       })
-      .sort((left, right) => Number(right.inside) - Number(left.inside) || left.distance - right.distance || left.id.localeCompare(right.id));
-    if (bounds.length) return bounds[0].id;
-    return scores.sort((left, right) => left.distance - right.distance || left.id.localeCompare(right.id))[0]?.id;
+      .sort((left, right) => right.distance - left.distance || left.id.localeCompare(right.id));
+    return bounds[0]?.id;
   }
   private emitMapClick = (event: L.LeafletMouseEvent): void => {
     if (this.destroyed) return;
@@ -729,11 +729,7 @@ export class OEM implements OEMContract {
         this.renderLabels(true);
       } else {
         const reference = this.boundarySource === 'game' ? this.region.gameBoundaries : this.region.boundaries;
-        const boundaries = reference
-          ? this.boundarySource === 'oem'
-            ? await this.loadOEMBoundaryData(reference)
-            : await read<OEMBoundary[]>(reference)
-          : [];
+        const boundaries = reference ? await this.loadBoundaryData(reference) : [];
         if (request.signal.aborted) return;
         this.renderBoundaries(boundaries);
       }
@@ -914,7 +910,8 @@ export class OEM implements OEMContract {
   private renderBoundaries(boundaries: OEMBoundary[]): void {
     this.boundariesLayer.clearLayers();
     for (const boundary of boundaries) {
-      const rings = boundary.rings.map((ring) => ring.map((position) => toOEMLeafletPosition(position, this.region)));
+      const rings = boundary.rings.map((ring) => ring.map((position) =>
+        toOEMLeafletPosition({ ...position, regionId: this.region.id }, this.region)));
       L.polygon(rings, { color: 'transparent', fillOpacity: 0.2, interactive: false,
         className: 'subregionBoundaryFill' }).addTo(this.boundariesLayer);
       L.polygon(rings, { weight: 2, opacity: 0.8, fill: false, interactive: false,

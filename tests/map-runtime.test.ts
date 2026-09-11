@@ -71,7 +71,7 @@ describe('OEM runtime points', () => {
       const body = url.endsWith('/custom-points.json')
         ? JSON.stringify([{ id: 'custom-url-point', position: { regionId: 'test', x: 420, z: -620 }, style: 'framed', icon: './instance.webp' }])
         : url.endsWith('/test.game.json')
-        ? JSON.stringify([{ id: 'game-grid', rings: [[{ regionId: 'test', x: 80, z: 80 }, { regionId: 'test', x: 160, z: 80 }, { regionId: 'test', x: 160, z: 160 }, { regionId: 'test', x: 80, z: 160 }]] }])
+        ? JSON.stringify({ count: 1, boundaries: [{ id: 'game-level', rings: [[{ x: 80, z: 80 }, { x: 160, z: 80 }, { x: 160, z: 160 }, { x: 80, z: 160 }]] }] })
         : url.endsWith('/point-index.json')
         ? JSON.stringify({ [point.id]: '/marker/1_5_3/test-release/points/all.json' })
         : url.endsWith('/type.json')
@@ -207,6 +207,47 @@ describe('OEM runtime points', () => {
     // Leaflet click coordinates are normalized by max-native zoom (2^3 here),
     // so this probes published coordinate (80, 80), inside all three polygons.
     expect(runtime.inferSubregionId(10, 10)).toBe('deep');
+  });
+
+  it('does not infer a subregion outside every precise boundary', () => {
+    const runtime = core as unknown as {
+      region: OEMRegion;
+      boundaryData: Map<string, unknown>;
+      inferSubregionId: (x: number, z: number) => string | undefined;
+    };
+    const boundaryPath = '/boundaries/disjoint.json';
+    runtime.region = {
+      ...region,
+      boundaries: { path: boundaryPath, sha256: 'unused', bytes: 1 },
+      subregions: [{ id: 'bounded', key: 'bounded', bounds: [[0, 0], [800, 800]] }],
+    };
+    runtime.boundaryData.set(boundaryPath, [{
+      id: 'bounded',
+      rings: [[
+        { regionId: 'test', x: 0, z: 0 },
+        { regionId: 'test', x: 80, z: 0 },
+        { regionId: 'test', x: 80, z: 80 },
+        { regionId: 'test', x: 0, z: 80 },
+      ]],
+    }]);
+
+    // Published coordinate (400, 400) is inside the coarse bounds but not the
+    // precise subregion polygon, so it must remain unassigned.
+    expect(runtime.inferSubregionId(50, 50)).toBeUndefined();
+  });
+
+  it('does not infer the nearest subregion when all fallback bounds miss', () => {
+    const runtime = core as unknown as {
+      region: OEMRegion;
+      inferSubregionId: (x: number, z: number) => string | undefined;
+    };
+    runtime.region = {
+      ...region,
+      subregions: [{ id: 'bounded', key: 'bounded', bounds: [[0, 0], [80, 80]] }],
+    };
+
+    expect(runtime.inferSubregionId(5, 5)).toBe('bounded');
+    expect(runtime.inferSubregionId(50, 50)).toBeUndefined();
   });
 
   it('adds one custom marker for every click in multiple mode', () => {

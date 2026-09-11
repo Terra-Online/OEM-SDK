@@ -163,8 +163,12 @@ export interface OEMPointFilter { types?: string[]; subregions?: string[]; floor
 /** A non-interactive localized map label. */
 export interface OEMLabel { id: string; type: 'site' | 'sub'; position: OEMPosition; textKey: string }
 
+/** One coordinate in a boundary asset; the owning region comes from its manifest reference. */
+export interface OEMBoundaryPoint { x: number; z: number }
 /** A non-interactive region boundary composed of one or more rings. */
-export interface OEMBoundary { id: string; rings: OEMPosition[][] }
+export interface OEMBoundary { id: string; rings: OEMBoundaryPoint[][] }
+/** Published boundary file shared by OEM and game-derived boundary sources. */
+export interface OEMBoundaryCollection { count: number; boundaries: OEMBoundary[] }
 
 /** Selects the source used for the optional boundary layer. */
 export type OEMBoundarySource = 'oem' | 'game';
