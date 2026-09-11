@@ -1,9 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { MarkerMotion, Motion, type MarkerState } from '../packages/map/src/atlos/canvasMarkerMotion';
+import { MarkerMotion, MarkerMotionPool, Motion, type MarkerState } from '../packages/map/src/atlos/canvasMarkerMotion';
 
 const initial: MarkerState = { selected: false, checked: false, offLayer: false,
   hover: false, focus: false, pulsing: false, appearing: false, disappearing: false };
 describe('Canvas point animation state', () => {
+  it('shares batch transitions but isolates later interaction on one point', () => {
+    const pool = new MarkerMotionPool();
+    const a = pool.transition(pool.initial, 0, 0, false, false);
+    const b = pool.transition(pool.initial, 0, 0, false, false);
+    expect(a).toBe(b);
+    const selected = pool.transition(a, 1, 100, false, false);
+    expect(pool.transition(b, 1, 100, false, false)).toBe(selected);
+    const hovered = pool.transition(selected, 9, 140, false, false);
+    expect(hovered).not.toBe(selected);
+    expect(selected.state?.hover).toBe(false);
+    expect(hovered.border.value(140)).toBe(selected.border.value(140));
+  });
+  it('animates entry opacity without repainting identical geometry', () => {
+    const pool = new MarkerMotionPool();
+    const motion = pool.transition(pool.initial, 64, 100, false, false);
+    expect(motion.active(140)).toBe(true);
+    expect(motion.paintActive(140)).toBe(false);
+    expect(motion.opacity(140)).toBeGreaterThan(0);
+    expect(motion.opacity(140)).toBeLessThan(1);
+  });
   it('preserves the official selected no-frame filter precedence on another floor', () => {
     const motion = new MarkerMotion();
     motion.set({ ...initial, offLayer: true }, 0, true);

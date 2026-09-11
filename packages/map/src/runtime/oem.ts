@@ -115,6 +115,8 @@ export class OEM implements OEMContract {
   private customPoints = new Map<string, OEMCustomPoint>();
   private customInteractionEnabled = false;
   private customMarkers = new Map<string, { marker: ViewportMarker; point: OEMCustomPoint; inner: HTMLElement }>();
+  private markerShells = new Map<string, HTMLElement>();
+  private markerVisualTemplates = new WeakMap<OEMPointType, Map<boolean, HTMLElement>>();
   private updates: Promise<unknown> = Promise.resolve();
   private coordinating = 0;
   private emittedState?: OEMMapState;
@@ -850,27 +852,30 @@ export class OEM implements OEMContract {
   }
 
   private createCustomPointVisual(point: OEMCustomPoint): HTMLElement {
-    const inner = document.createElement('div');
-    inner.className = point.style === 'no-frame' ? 'noFrameInner' : 'markerInner';
+    const inner = this.createMarkerShell(point.style === 'no-frame', false);
     inner.setAttribute('aria-label', point.id);
     if (this.customInteractionEnabled) {
       inner.setAttribute('data-oem-point', `custom:${point.id}`); inner.tabIndex = 0; inner.setAttribute('role', 'button');
     }
     if (point.position.floorId && point.position.floorId !== this.floorId) inner.classList.add('offLayer');
-    const image = document.createElement('img');
+    const image = inner.querySelector('img')!;
     image.src = point.icon;
     image.alt = point.id;
-    image.draggable = false;
-    if (point.style === 'no-frame') {
-      image.className = 'noFrameImage';
-      inner.append(image);
-    } else {
-      const frame = document.createElement('div');
-      frame.className = 'frameImage';
-      frame.append(image);
-      inner.append(frame);
-    }
     return inner;
+  }
+
+  private createMarkerShell(noFrame: boolean, link: boolean): HTMLElement {
+    const key = `${+noFrame}${+link}`;
+    let template = this.markerShells.get(key);
+    if (!template) {
+      template = document.createElement(link ? 'a' : 'div');
+      template.className = noFrame ? 'noFrameInner' : 'markerInner';
+      const image = document.createElement('img'); image.draggable = false;
+      if (noFrame) { image.className = 'noFrameImage'; template.append(image); }
+      else { const frame = document.createElement('div'); frame.className = 'frameImage'; frame.append(image); template.append(frame); }
+      this.markerShells.set(key, template);
+    }
+    return template.cloneNode(true) as HTMLElement;
   }
 
   /** Delegated interaction is enabled only when used, without per-marker listeners. */
@@ -914,8 +919,22 @@ export class OEM implements OEMContract {
 
   /** Builds the shared Atlos marker composition for points and cluster summaries. */
   private createMarkerVisual(type: OEMPointType, point?: OEMPoint, count?: number): HTMLElement {
-    const inner = document.createElement(point ? 'a' : 'div');
-    inner.className = type.noFrame ? 'noFrameInner' : 'markerInner';
+    let templates = this.markerVisualTemplates.get(type);
+    if (!templates) this.markerVisualTemplates.set(type, templates = new Map<boolean, HTMLElement>());
+    let template = templates.get(!!point);
+    if (!template) {
+      template = this.createMarkerShell(!!type.noFrame, !!point);
+      const image = template.querySelector('img')!;
+      image.src = resolveOEMAsset(this.options.resources.baseUrl, type.icon); image.alt = type.key;
+      if (type.subIcon) {
+        const sub = document.createElement('div'); sub.className = 'subIconContainer';
+        const subImage = document.createElement('img'); subImage.className = 'subIcon';
+        subImage.src = resolveOEMAsset(this.options.resources.baseUrl, type.subIcon); subImage.alt = '';
+        sub.append(subImage); template.append(sub);
+      }
+      templates.set(!!point, template);
+    }
+    const inner = template.cloneNode(true) as HTMLElement;
     if (point) {
       const link = inner as HTMLAnchorElement;
       link.href = createOEMPointUrl(point.id);
@@ -926,29 +945,6 @@ export class OEM implements OEMContract {
       if (point.tier) inner.dataset.tier = point.position.floorId;
     }
     if (count !== undefined) inner.classList.add('clusterMarker');
-    const image = document.createElement('img');
-    image.src = resolveOEMAsset(this.options.resources.baseUrl, type.icon);
-    image.alt = type.key;
-    image.draggable = false;
-    if (type.noFrame) {
-      image.className = 'noFrameImage';
-      inner.append(image);
-    } else {
-      const frame = document.createElement('div');
-      frame.className = 'frameImage';
-      frame.append(image);
-      inner.append(frame);
-    }
-    if (type.subIcon) {
-      const sub = document.createElement('div');
-      sub.className = 'subIconContainer';
-      const subImage = document.createElement('img');
-      subImage.className = 'subIcon';
-      subImage.src = resolveOEMAsset(this.options.resources.baseUrl, type.subIcon);
-      subImage.alt = '';
-      sub.append(subImage);
-      inner.append(sub);
-    }
     if (count !== undefined) {
       const badge = document.createElement('span');
       badge.className = 'clusterCount';
@@ -1209,6 +1205,7 @@ export class OEM implements OEMContract {
     this.points = [];
     this.customPoints.clear();
     this.customMarkers.clear();
+    this.markerShells.clear(); this.markerVisualTemplates = new WeakMap();
     this.customPointsLayer.clearLayers();
     this.pointShardRequests.clear();
     this.pointIndex = undefined;
