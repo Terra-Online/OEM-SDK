@@ -1,6 +1,7 @@
+import { linkSnapshotDependencies } from './dependencies.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, symlink, writeFile, access } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -18,8 +19,7 @@ for (const file of files) {
   hash.update(file).update('\0').update(bytes);
   if (ref) await writeFile(output, bytes); else await copyFile(path.join(root, file), output);
 }
-await symlink(path.join(root, 'node_modules'), path.join(target, 'node_modules'));
-for (const name of ['core', 'map', 'sdk', 'react']) await symlink(path.join(root, 'packages', name, 'node_modules'), path.join(target, 'packages', name, 'node_modules'));
+await linkSnapshotDependencies(root, target);
 const metadata = { label, ref: ref ? git('rev-parse', ref).toString().trim() : 'working-tree', sha256: hash.digest('hex'), files: files.length };
 await writeFile(path.join(target, 'snapshot.json'), JSON.stringify(metadata, null, 2));
 console.log(JSON.stringify({ ...metadata, target }));

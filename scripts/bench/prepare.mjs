@@ -1,3 +1,4 @@
+import { linkSnapshotDependencies } from './dependencies.mjs';
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { readFile, readdir, mkdir, writeFile, cp } from 'node:fs/promises';
@@ -8,6 +9,7 @@ const artifacts = path.join(root, 'artifacts/benchmarks');
 const files = async directory => (await Promise.all((await readdir(directory, { withFileTypes: true })).map(async item => item.isDirectory() ? files(path.join(directory,item.name)) : path.join(directory,item.name)))).flat();
 for (const label of process.argv.slice(2)) {
   const snapshot = path.join(artifacts, 'snapshots', label);
+  await linkSnapshotDependencies(root, snapshot);
   execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: snapshot, stdio: 'inherit' });
   const alias = Object.fromEntries(['core','map','sdk','react'].map(name => [`@opendfieldmap/${name}`,path.join(snapshot, `packages/${name}/src/index.${name === 'react' ? 'tsx' : 'ts'}`)]));
   const output = path.join(artifacts,'serve',label);
