@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import L from 'leaflet';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ViewportMarker } from '../packages/map/src/atlos/markerViewport';
+import { ViewportMarker } from '../packages/map/src/atlos/canvas/markerViewport';
 
 let map: L.Map;
 let host: HTMLDivElement;
@@ -17,6 +17,29 @@ const marker = (position: L.LatLngExpression) => new ViewportMarker(position, {
   icon: L.divIcon({ className: 'incompleteMarker', html: '<span class="markerInner">point</span>', iconSize: [32, 32], iconAnchor: [16, 32] }),
 });
 describe('Canvas marker lifecycle', () => {
+  it('refreshes physical resolution after a display change without replacing markers', () => {
+    let changed: (() => void) | undefined;
+    const remove = vi.fn();
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      addEventListener: (_: string, fn: () => void) => { changed = fn; }, removeEventListener: remove,
+    })));
+    vi.stubGlobal('devicePixelRatio', 1.25);
+    try {
+      const point = marker([0, 0]).addTo(map), node = point.getElement();
+      map.fire('move');
+      const canvas = host.querySelector<HTMLCanvasElement>('.oem-canvas-markers')!;
+      expect(canvas.width).toBe(1000);
+      vi.stubGlobal('devicePixelRatio', 2);
+      changed!(); map.fire('move');
+      expect(canvas.width).toBe(1600);
+      expect(point.getElement()).toBe(node);
+      vi.stubGlobal('devicePixelRatio', 1.5);
+      map.fire('move');
+      expect(canvas.width).toBe(1200);
+      map.remove(); removed = true;
+      expect(remove).toHaveBeenCalledTimes(3);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('preserves logical members, semantic node identity and handlers while browsing', () => {
     const near = marker([0, 0]), far = marker([1000, 1000]), clicked = vi.fn();
     far.on('click', clicked);

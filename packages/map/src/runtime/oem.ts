@@ -40,9 +40,9 @@ import { enableSmoothWheelZoom } from '../atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from '../atlos/mapOverdrag';
 import GithubIcon from '../assets/ghicon.svg';
 import { boundaryScore, parseBoundaryCollection } from './geometry';
-import { ViewportMarker } from '../atlos/markerViewport';
-import { createCanvasAwareClusterGroup } from '../atlos/canvasMarkerCluster';
-import type { CanvasClusterGroup } from '../atlos/clusterGroup';
+import { ViewportMarker } from '../atlos/canvas/markerViewport';
+import { createCanvasAwareClusterGroup } from '../atlos/canvas/canvasMarkerCluster';
+import type { CanvasClusterGroup } from '../atlos/canvas/clusterGroup';
 import { CoveredTileLayer, OEMMarker } from './layers';
 import {
   BRAND_URL,

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import L from 'leaflet';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CanvasClusterGroup, CanvasClusterMarker } from '../packages/map/src/atlos/clusterGroup';
-import { ViewportMarker } from '../packages/map/src/atlos/markerViewport';
+import { CanvasClusterGroup, CanvasClusterMarker } from '../packages/map/src/atlos/canvas/clusterGroup';
+import { ViewportMarker } from '../packages/map/src/atlos/canvas/markerViewport';
 
 let host: HTMLDivElement, map: L.Map, group: CanvasClusterGroup;
 beforeEach(() => {

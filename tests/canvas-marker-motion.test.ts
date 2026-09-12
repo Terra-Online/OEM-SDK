@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MarkerMotion, MarkerMotionPool, Motion, type MarkerState } from '../packages/map/src/atlos/canvasMarkerMotion';
+import { MarkerMotion, MarkerMotionPool, Motion, type MarkerState } from '../packages/map/src/atlos/canvas/canvasMarkerMotion';
 
 const initial: MarkerState = { selected: false, checked: false, offLayer: false,
   hover: false, focus: false, pulsing: false, appearing: false, disappearing: false };

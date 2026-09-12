@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clusterPositions } from '../packages/map/src/atlos/spatialClusters';
+import { clusterPositions } from '../packages/map/src/atlos/canvas/spatialClusters';
 
 describe('built-in spatial clustering', () => {
   it('groups across cell boundaries and preserves authored positions', () => {
