@@ -10,3 +10,5 @@ This directory mirrors Atlos `mapCore/canvas`; only `canvasMarkerStyle.ts` adapt
 - `clusterGroup`, `spatialClusters`, `canvasMarkerCluster`: spatial grouping and expansion to authored positions.
 
 Keep matching renderer changes synchronized between repositories. Display changes invalidate cached poses without replacing marker identities or restarting animation channels.
+
+The connected semantic tree is clipped under the map's event container, outside the moving Leaflet pane. Both elements and their pseudo-elements have CSS animation/transition work disabled; visible animation belongs exclusively to the Canvas scene. Keep keyboard and delegated link events connected when changing this containment boundary.
