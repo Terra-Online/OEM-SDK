@@ -1,7 +1,7 @@
 import { fetchOEMJson, loadOEMManifest, resolveOEMAsset } from '@opendfieldmap/core';
 import type { OEMManifest, OEMPointType, OEMResources } from '@opendfieldmap/core';
-import { createOEMWidget, parseOEMUrlState } from '@opendfieldmap/sdk';
-import type { OEMCustomPoint, OEMMapClick, OEMWidget, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
+import { createOEMWidget, createClickPointTool, parseOEMUrlState } from '@opendfieldmap/sdk';
+import type { OEMClickPointTool, OEMCustomPoint, OEMMapClick, OEMWidget, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
 import '@opendfieldmap/sdk/style.css';
 import { createDemoConfigPanel } from './configPanel';
 import type { DemoConfigPanel, DemoCreationConfig, DemoVersionOption } from './configPanel';
@@ -82,7 +82,7 @@ let creation = { ...defaultCreation };
 let customPoints: OEMCustomPoint[] = defaultCustomPoints.map((point) => ({ ...point, position: { ...point.position } }));
 let customPointsUrl: string | undefined = defaultCustomPointsUrl;
 let clickPointMode: OEMClickPointMode = 'multiple';
-let clickPointSequence = 0;
+let clickTool: OEMClickPointTool | undefined;
 let operation = Promise.resolve();
 
 const reportError = (cause: unknown) => {
@@ -91,40 +91,14 @@ const reportError = (cause: unknown) => {
 };
 
 const handleMapClick = (click: OEMMapClick): void => {
-  const point: OEMCustomPoint = {
-    id: clickPointMode === 'single' ? 'demo-click-point' : `demo-click-point-${++clickPointSequence}`,
-    position: { ...click.position },
-    style: 'framed',
-    icon: instanceIcon,
-  };
-  const hostPoints = customPoints.filter((entry) => !entry.id.startsWith('demo-click-point'));
-  const nextPoints = clickPointMode === 'single'
-    ? [...hostPoints, point]
-    : [...customPoints, point];
-  widget?.clearClickPoints();
-  widget?.setCustomPoints(nextPoints);
-  customPoints = nextPoints.map((entry) => ({ ...entry, position: { ...entry.position } }));
-  customPointsUrl = undefined;
-  customPointsPanel?.setPoints(customPoints);
-  if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
   customPointsPanel?.setPickStatus(click);
 };
 
 const applyClickPointMode = (mode: OEMClickPointMode): void => {
   clickPointMode = mode;
   clickPointsPanel?.setMode(mode);
-  widget?.setClickPointMode({ mode, style: 'framed', icon: instanceIcon });
-  if (mode !== 'single') return;
-  const clickPoints = customPoints.filter((entry) => entry.id.startsWith('demo-click-point'));
-  if (clickPoints.length <= 1) return;
-  const latest = clickPoints.at(-1)!;
-  const nextPoints = [...customPoints.filter((entry) => !entry.id.startsWith('demo-click-point')), latest];
-  widget?.clearClickPoints();
-  widget?.setCustomPoints(nextPoints);
-  customPoints = nextPoints.map((entry) => ({ ...entry, position: { ...entry.position } }));
-  customPointsUrl = undefined;
-  customPointsPanel?.setPoints(customPoints);
-  if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
+  const tool = clickTool;
+  void tool?.setMode(mode).catch(error => { if (!tool.destroyed) reportError(error); });
 };
 
 const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
@@ -155,7 +129,14 @@ const mountWidget = async (config: OEMWidgetConfig): Promise<OEMWidget> => {
     onStateChange: (state) => panel?.sync(state, creation, customPoints, customPointsUrl),
     onError: reportError,
   });
-  widget.setClickPointMode({ mode: clickPointMode, style: 'framed', icon: instanceIcon });
+  clickTool = createClickPointTool(widget.map, { mode: clickPointMode, style: 'framed', icon: instanceIcon });
+  customPoints = widget.map.getCustomPoints();
+  widget.on('custompointschange', () => {
+    customPoints = widget!.map.getCustomPoints();
+    customPointsUrl = undefined;
+    customPointsPanel?.setPoints(customPoints);
+    panel?.sync(widget!.getState(), creation, customPoints, customPointsUrl);
+  });
   widget.on('click', handleMapClick);
   panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
   return widget;
@@ -216,7 +197,7 @@ const enqueue = (task: () => Promise<void>): Promise<boolean> => {
 customPointsPanel = createDemoCustomPointsPanel(defaultCustomPoints, {
   apply(points) {
     return enqueue(async () => {
-      widget?.setCustomPoints(points);
+      await widget?.setCustomPoints(points);
       customPointsUrl = undefined;
       customPoints = points.map((point) => ({ ...point, position: { ...point.position } }));
       customPointsPanel?.setPoints(customPoints);
@@ -258,7 +239,7 @@ const panelCallbacks = {
   reset() {
     creation = { ...defaultCreation };
     clickPointMode = 'multiple';
-    clickPointSequence = 0;
+
     clickPointsPanel?.setMode(clickPointMode);
     enqueue(async () => {
       customPoints = defaultCustomPoints.map((point) => ({ ...point, position: { ...point.position } }));

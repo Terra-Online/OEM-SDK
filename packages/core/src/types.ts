@@ -8,6 +8,7 @@ export const OEM_SCHEMA_VERSION = 1 as const;
  * interchangeable with geographic latitude/longitude values.
  */
 export interface OEMPosition {
+  space?: 'pixel';
   regionId: string;
   subregionId?: string;
   x: number;
@@ -17,6 +18,7 @@ export interface OEMPosition {
 
 /** A normalized map position, equivalent to published coordinates divided by the native scale. */
 export interface OEMMapPosition {
+  space?: 'map';
   regionId: string;
   subregionId?: string;
   x: number;
@@ -29,6 +31,7 @@ export interface OEMMapOffset { x: number; z: number }
 
 /** A game-space position retained alongside its rendered map position. */
 export interface OEMGamePosition {
+  space?: 'game';
   x: number;
   y: number;
   z: number;
@@ -36,6 +39,7 @@ export interface OEMGamePosition {
 
 /** The horizontal game-space coordinates recoverable from a 2D map position. */
 export interface OEMGameXZPosition {
+  space?: 'game';
   x: number;
   z: number;
 }
@@ -175,3 +179,15 @@ export type OEMBoundarySource = 'oem' | 'game';
 
 /** Flattened locale messages published for labels and static UI. */
 export type OEMLocaleMessages = Record<string, string>;
+
+/** Explicit published-pixel coordinate used in reusable position snapshots. */
+export interface OEMPixelPosition extends OEMPosition { space: 'pixel' }
+/** A JSON-safe coordinate record independent of a live map or DOM event. */
+export interface OEMCoordinateSnapshot {
+  readonly mapPosition: Readonly<OEMMapPosition & { space: 'map' }>;
+  readonly pixelPosition: Readonly<OEMPixelPosition>;
+  readonly gamePosition: Readonly<OEMGameXZPosition & { space: 'game' }> | null;
+  readonly context: Readonly<{ schemaVersion: 1; releaseId: string; gameVersion: string }>;
+  subregionResolution: 'provided' | 'geometry' | 'bounds' | 'unresolved';
+  gameResolution: 'resolved' | 'subregion-unresolved' | 'transform-unavailable';
+}

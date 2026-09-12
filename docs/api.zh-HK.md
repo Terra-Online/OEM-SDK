@@ -100,20 +100,19 @@ interface OEMClickPointOptions {
 | `onStateChange` | `(state: OEMWidgetState) => void` | 無 |
 | `onError` | `(error: Error) => void` | 無 |
 
-互動鎖定只影響使用者輸入，程式化更新仍然可用。建立參數不能傳給 `setOptions()`。
+互動鎖定只影響使用者輸入，程式化更新仍然可用。`theme`、`lockDrag`、`lockZoom` 亦支援執行期間更新；控件顯示與佈局仍為建立參數。
 
 ## Widget 實例
 
 ```ts
 interface OEMWidget {
+  readonly map: OEMMapAPI;
   readonly destroyed: boolean;
   getState(): OEMWidgetState;
   setOptions(options: OEMWidgetConfig): Promise<void>;
-  setCustomPoints(points: readonly OEMCustomPoint[]): void;
-  setClickPointMode(options: OEMClickPointOptions | null): void;
-  clearClickPoints(): void;
+  setCustomPoints(points: readonly OEMCustomPoint[]): Promise<void>;
   loadCustomPoints(url: string): Promise<void>;
-  clearCustomPoints(): void;
+  clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
   resize(): void;
@@ -121,7 +120,6 @@ interface OEMWidget {
 }
 ```
 
-`setClickPointMode()` 會開啟地圖點擊自動加點。`mode: 'multiple'` 會保留每次點擊建立的點，`mode: 'single'` 只保留最後一個點擊點；`style` 和 `icon` 分別指定點的組合樣式及圖示。傳入 `null` 可關閉模式；`clearClickPoints()` 只清除點擊建立的點，不會清除透過 `setCustomPoints()` 寫入的點。
 
 - `getState()` 傳回解析後狀態的防禦性副本。
 - `setOptions()` 按呼叫順序套用部分內容或視圖更新。
@@ -201,3 +199,88 @@ map.on('click', ({ position, game }) => {
 Widget 使用 `widget.on('click', handler)` 監聽同一事件。
 
 標準嵌入場景使用 `@opendfieldmap/sdk`；需要自行管理控制項層時使用 `@opendfieldmap/map`。
+
+## 載入狀態與失敗恢復
+
+顯示選項表示請求的配置。`widget.getResourceState()`（底層實例亦提供）傳回 `points`、`labels`、`boundaries` 的實際狀態，各項包含 `requested`、`status`（`idle`、`loading`、`ready`、`error`）及可選的 `error`。
+
+```ts
+const unsubscribe = widget.on('resourcechange', ({ feature, state }) => {
+  console.log(feature, state.status);
+});
+await widget.retry('labels'); // 只重試仍請求開啟、且上次失敗的圖層
+await widget.retry();         // 重試所有符合條件的圖層
+console.log(widget.getResourceState());
+unsubscribe();
+```
+
+可選圖層失敗會通知 `onError`，但會保留底圖，也不會拒絕整個配置更新。再次明確開啟同一失敗圖層亦會重試。`retry()` 完成表示本輪請求已結束，是否成功須讀取資源狀態。建立期間的事件不會重播，建立後亦應讀取狀態。
+
+無效配置或必要自訂點資料載入失敗會拒絕更新，不提交該次配置。Widget 更新與地圖寫入共用順序佇列，應使用 `await`；點位寫入不再隱式取消先前請求，可用 `map.loadCustomPoints(url, { signal })` 明確取消。銷毀或取消建立會停止 SDK 等待的請求，遲到回應不會更新實例。取消使用 `AbortError`，呼叫方明確提供的取消原因則予以保留。
+
+靜態資源按可信的匯出資料讀取，初始化只做常數時間的 schema 版本檢查，不掃描 Manifest 內容或逐筆校驗點位、標籤、字典和邊界。完整資料格式、雜湊、位元組數及瓦片索引一致性由匯出校驗負責；排查外部 Manifest 時可主動呼叫 core 套件的 `validateOEMManifest()`。宿主配置與自訂點仍進行必要的輸入檢查。子地區邊界在背景預載，不阻塞建立；完成前點擊採用既有的包圍盒回退。`OEMError` 可從 SDK、map 或 core 匯入，包含 `code`、`operation` 及可用時的欄位 `path`。
+
+## 共用行為 API（第二批）
+
+`createOEM()` 傳回 `OEMMapAPI`，Widget 透過 `widget.map` 提供相同介面，不暴露 Leaflet 或 DOM。地圖寫入與 Widget 更新共用順序佇列，直接操作地圖亦會同步官方控件及 Widget 狀態。讀取、訂閱、`resize()` 和 `destroy()` 為同步操作。
+
+| 能力 | API |
+| --- | --- |
+| 狀態與視圖 | `getState()`、`getView()`、`update(config)`、`setView(view)`、`setZoom(zoom, options?)`、`fitBounds(pixelBounds)` |
+| 地區與內容 | `setRegion(id)`、`setSubregion(id \| null)`、`setFloor(id)`、`setLocale(locale)`、`getLocale()` |
+| 圖層與互動 | `setFeatures(features)`、`getResourceState()`、`retry(feature?)`、`getPointFilter()`、`setPointFilter(filter)`、`setMarkerClustering(enabled)`、`setInteractionLocks({ lockDrag?, lockZoom? })` |
+| 官方主題 | `setTheme('light' \| 'dark')` |
+| 自訂點 | `getCustomPoints()`、`getCustomPoint(id)`、`setCustomPoints(points)`、`upsertCustomPoints(points, options?)`、`removeCustomPoints(ids, options?)`、`clearCustomPoints()`、`loadCustomPoints(url, options?)` |
+| 發布點位 | `getPoint(id)`、`loadPoint(id)` |
+| 容器座標 | `project(mapPosition)`、`unproject({ x, y })` |
+
+寫入 Promise 完成表示命令已套用及本輪資源請求已結束，不代表動畫或全部瓦片繪製完成；可選圖層須讀取資源狀態。點位命令的 `options.signal` 可取消等待或尚未提交的操作，銷毀則立即取消整個實例。開啟點位圖層會保留篩選，顯示全部類型可用 `update({ markerTypes: '*' })`。
+
+自訂點讀取傳回副本；upsert 按 ID 新增或更新並保留未修改的 Marker；刪除不存在 ID 為無操作。整批更新先檢查再套用。`getPoint()` 讀取目前地區已載入資料，不受顯示篩選影響；`loadPoint()` 可查詢其他地區並快取索引／分片，不改變視圖或顯示集合。
+
+## 事件與可保存的座標
+
+`on()` 傳回取消訂閱函數，事件包括 `click`、`pointclick`、`pointenter`、`pointleave`、`statechange`、`viewchange`、`regionchange`、`floorchange`、`custompointschange`、`resourcechange`、`loading`、`load`、`error`、`destroy`。
+
+地圖點擊不會自動加點。點擊包含唯讀的 `mapPosition`（`space: 'map'`）、`pixelPosition`（`space: 'pixel'`）、`gamePosition`（`space: 'game'` 或 `null`），以及 `context: { schemaVersion, releaseId, gameVersion }`。快照可序列化為 JSON，銷毀地圖後仍可保存及計算。相容欄位 `position`／`game` 分別指向地圖／遊戲座標。
+
+`subregionResolution` 為 `provided`、`geometry`、`bounds` 或 `unresolved`。若需要子地區轉換但僅能靠包圍盒推測，或缺少轉換參數，遊戲座標為 `null`，由 `gameResolution` 說明原因。二維點擊不推斷遊戲高度。
+
+```ts
+widget.on('click', snapshot => {
+  localStorage.setItem('picked-location', JSON.stringify(snapshot));
+});
+widget.on('pointclick', event => {
+  event.preventDefault(); // 省略即保留發布點位的預設連結
+  openDetails(event.source, event.point, event.coordinates);
+});
+```
+
+點位事件提供 `source: 'published' | 'custom'`、點位副本、座標快照及 `trigger: 'pointer' | 'keyboard'`。點位啟用不會同時觸發地圖空白點擊；自訂點支援 Enter 與空格。集合事件傳回 `{ added, updated, removed }` ID 陣列。
+
+`project()` 將歸一化地圖位置轉為容器內 CSS 像素 `{ x, y }`；`unproject()` 傳回點擊格式的快照。core 提供純函數 `pixelToMapPosition()`、`mapToPixelPosition()`、`gameXZToMapPosition()`、`mapToGameXZPosition()`、`pixelToGameXZPosition()`。計算須使用對應版本的 Manifest 和相同座標空間；未經標定的距離不能直接稱為米。既有輸入可省略 `space`，新事件快照總會標明單位。
+
+## 可選點擊加點工具與遷移
+
+```ts
+import { createClickPointTool } from '@opendfieldmap/sdk';
+const tool = createClickPointTool(widget.map, {
+  mode: 'multiple', style: 'framed', icon: '/pin.webp',
+});
+await tool.setMode('single');
+const ownedPoints = tool.getPoints();
+await tool.clear(); // 只刪除本工具的點
+tool.destroy();    // 停止訂閱和待處理的加點，保留已有點
+```
+
+工具只使用公開事件與集合命令，管理獨立 ID，不刪除宿主點；地圖銷毀時自動停用。停用後仍可明確呼叫 `clear()`。
+
+| 舊呼叫 | 新呼叫 |
+| --- | --- |
+| `setClickPointMode(options)` | `createClickPointTool(widget.map, options)` |
+| `setClickPointMode(null)` | `tool.destroy()` |
+| `clearClickPoints()` | `await tool.clear()` |
+| 同步修改點位／視圖／圖層 | `await` 對應命令 |
+| 直接讀取 `click.game.x` | 先檢查 `gamePosition !== null` 或 `gameResolution` |
+
+顏色、字體、圖示尺寸與錨點維持官方規格，不提供主題變數、字體替換、樣式插槽或任意渲染器入口。

@@ -106,14 +106,13 @@ Interaction locks affect user input only. Programmatic updates remain available.
 
 ```ts
 interface OEMWidget {
+  readonly map: OEMMapAPI;
   readonly destroyed: boolean;
   getState(): OEMWidgetState;
   setOptions(options: OEMWidgetConfig): Promise<void>;
-  setCustomPoints(points: readonly OEMCustomPoint[]): void;
-  setClickPointMode(options: OEMClickPointOptions | null): void;
-  clearClickPoints(): void;
+  setCustomPoints(points: readonly OEMCustomPoint[]): Promise<void>;
   loadCustomPoints(url: string): Promise<void>;
-  clearCustomPoints(): void;
+  clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
   resize(): void;
@@ -121,7 +120,6 @@ interface OEMWidget {
 }
 ```
 
-`setClickPointMode()` enables automatic point creation from map clicks. Pass `mode: 'multiple'` to keep every click, or `mode: 'single'` to keep only the latest click-created point. `style` and `icon` select the marker composition. Pass `null` to disable the mode; `clearClickPoints()` removes click-created points without removing points supplied through `setCustomPoints()`.
 
 - `getState()` returns a defensive copy of the resolved state.
 - `setOptions()` applies partial content or view updates in call order.
@@ -201,3 +199,88 @@ map.on('click', ({ position, game }) => {
 The Widget exposes the same event with `widget.on('click', handler)`.
 
 Use `@opendfieldmap/sdk` for the standard embeddable experience and `@opendfieldmap/map` when the host owns its control layer.
+
+## Loading state and recovery
+
+Visibility options describe requested configuration. Read `widget.getResourceState()` (also available on the low-level instance) for the actual state of `points`, `labels`, and `boundaries`. Each entry contains `requested`, `status` (`idle`, `loading`, `ready`, or `error`), and an optional `error`.
+
+```ts
+const unsubscribe = widget.on('resourcechange', ({ feature, state }) => {
+  console.log(feature, state.status);
+});
+await widget.retry('labels'); // Only retries a failed, still-requested layer.
+await widget.retry();         // Retries all failed, still-requested layers.
+console.log(widget.getResourceState());
+unsubscribe();
+```
+
+Optional layer failures notify `onError` but keep the map alive and do not reject the entire configuration update. Explicitly enabling the same failed layer also retries it. A resolved `retry()` means the attempt has finished; inspect resource state to determine success. Read state after creation too: events emitted during creation are not replayed.
+
+Invalid configuration and required custom-point loading failures reject the update without committing that configuration. Widget updates and all map writes share one ordered queue and should be awaited. Point writes no longer implicitly cancel earlier requests; use `map.loadCustomPoints(url, { signal })` for explicit cancellation. Destroying or cancelling creation stops pending SDK waits and prevents late responses from updating the instance. Cancellation uses `AbortError` unless the caller supplies a different reason.
+
+Static resources are consumed as trusted exports. Initialization performs only a constant-time schema-version check, without scanning manifest contents or validating individual points, labels, dictionaries, or polygon vertices. Full schema, hashes, byte counts, and tile-index consistency remain the export validator's responsibility. Call the core package's `validateOEMManifest()` explicitly when diagnosing an external manifest; host configuration and custom points still receive necessary input checks. Subregion geometry preloads in the background without delaying creation; clicks use the existing bounds fallback until it is available. `OEMError`, exported by the SDK, map, and core packages, includes `code`, `operation`, and a field `path` when available.
+
+## Shared behavior API (batch two)
+
+`createOEM()` returns `OEMMapAPI`; `widget.map` exposes the same interface without Leaflet or DOM objects. All map writes and Widget updates share one ordered queue. Direct map commands synchronize the official Widget controls and state. Reads, subscriptions, `resize()`, and `destroy()` are synchronous.
+
+| Capability | API |
+| --- | --- |
+| State and view | `getState()`, `getView()`, `update(config)`, `setView(view)`, `setZoom(zoom, options?)`, `fitBounds(pixelBounds)` |
+| Region and content | `setRegion(id)`, `setSubregion(id \| null)`, `setFloor(id)`, `setLocale(locale)`, `getLocale()` |
+| Layers and input | `setFeatures(features)`, `getResourceState()`, `retry(feature?)`, `getPointFilter()`, `setPointFilter(filter)`, `setMarkerClustering(enabled)`, `setInteractionLocks({ lockDrag?, lockZoom? })` |
+| Official theme | `setTheme('light' \| 'dark')` |
+| Custom points | `getCustomPoints()`, `getCustomPoint(id)`, `setCustomPoints(points)`, `upsertCustomPoints(points, options?)`, `removeCustomPoints(ids, options?)`, `clearCustomPoints()`, `loadCustomPoints(url, options?)` |
+| Published points | `getPoint(id)`, `loadPoint(id)` |
+| Container coordinates | `project(mapPosition)`, `unproject({ x, y })` |
+
+Writes resolve once the command has applied and its resource attempts have settled, not when all tiles or animations finish. Optional failures remain in resource state. Point command options accept `signal` to cancel waits or uncommitted operations. Destroy cancels the entire instance immediately. Enabling the points layer retains its type filter; use `update({ markerTypes: '*' })` to select all types.
+
+Custom-point reads return copies. Upsert adds or updates IDs while retaining untouched markers; removing absent IDs is a no-op. Whole batches are checked before application. `getPoint()` reads loaded published data in the current region independently of its display filter; `loadPoint()` may query other regions and caches the index/shards without changing the view or visible collection.
+
+## Events and reusable coordinates
+
+`on()` returns an unsubscribe function. Events include `click`, `pointclick`, `pointenter`, `pointleave`, `statechange`, `viewchange`, `regionchange`, `floorchange`, `custompointschange`, `resourcechange`, `loading`, `load`, `error`, and `destroy`.
+
+Map clicks never add points implicitly. Each click contains immutable `mapPosition` (`space: 'map'`), `pixelPosition` (`space: 'pixel'`), `gamePosition` (`space: 'game'` or `null`), and `context: { schemaVersion, releaseId, gameVersion }`. Snapshots are JSON-safe and remain usable after destruction. Compatibility fields `position` and `game` refer to the map and game positions.
+
+`subregionResolution` is `provided`, `geometry`, `bounds`, or `unresolved`. If a subregion-specific transform is needed but only a bounds inference is available, or transform metadata is missing, game coordinates are `null`; `gameResolution` explains why. Clicks never infer game height.
+
+```ts
+widget.on('click', snapshot => {
+  localStorage.setItem('picked-location', JSON.stringify(snapshot));
+});
+widget.on('pointclick', event => {
+  event.preventDefault(); // Omit this to retain the default published-point link.
+  openDetails(event.source, event.point, event.coordinates);
+});
+```
+
+Point events include `source: 'published' | 'custom'`, a point copy, its coordinate snapshot, and `trigger: 'pointer' | 'keyboard'`. Activation does not also produce a blank-map click. Custom points support Enter and Space. Collection events return `{ added, updated, removed }` ID arrays.
+
+`project()` maps normalized map positions to container-local CSS pixels `{ x, y }`; `unproject()` returns a click-shaped snapshot. Core exports pure `pixelToMapPosition()`, `mapToPixelPosition()`, `gameXZToMapPosition()`, `mapToGameXZPosition()`, and `pixelToGameXZPosition()` conversions. Use the matching release manifest and one coordinate space for calculations; uncalibrated distances are not metres. Existing coordinate inputs may omit `space`; new event snapshots always identify their units.
+
+## Optional click-point tool and migration
+
+```ts
+import { createClickPointTool } from '@opendfieldmap/sdk';
+const tool = createClickPointTool(widget.map, {
+  mode: 'multiple', style: 'framed', icon: '/pin.webp',
+});
+await tool.setMode('single');
+const ownedPoints = tool.getPoints();
+await tool.clear(); // Removes only this tool's points.
+tool.destroy();    // Stops subscriptions and pending additions; existing points remain.
+```
+
+The tool uses only public events and collection commands. It owns independent IDs, leaves host points intact, and stops automatically when the map is destroyed. `clear()` remains available after stopping the tool.
+
+| Previous call | Replacement |
+| --- | --- |
+| `setClickPointMode(options)` | `createClickPointTool(widget.map, options)` |
+| `setClickPointMode(null)` | `tool.destroy()` |
+| `clearClickPoints()` | `await tool.clear()` |
+| Synchronous point/view/layer writes | Await the corresponding command |
+| Reading `click.game.x` directly | Check `gamePosition !== null` or `gameResolution` first |
+
+Official colors, fonts, icon sizes and anchors remain fixed. There are no theme-token, font, style-slot, or arbitrary-renderer extension points.

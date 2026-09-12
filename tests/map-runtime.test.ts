@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createClickPointTool } from '@opendfieldmap/sdk';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OEMManifest, OEMPoint, OEMRegion } from '@opendfieldmap/core';
@@ -60,7 +61,7 @@ const manifest: OEMManifest = {
 
 const resources = { baseUrl: 'https://example.test', manifestPath: '/channels/stable.json' };
 
-describe('OEM runtime points', () => {
+describe('OEM runtime points', async () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let core: InstanceType<typeof import('../packages/map/src/runtime').OEM>;
   let host: HTMLDivElement;
@@ -102,7 +103,7 @@ describe('OEM runtime points', () => {
     expect(core.getPoint(point.id)).toBeUndefined();
   });
 
-  it('decodes Atlos compact marker tuples with the shard subregion fallback', () => {
+  it('decodes Atlos compact marker tuples with the shard subregion fallback', async () => {
     const decode = (core as unknown as {
       decodePointShard: (value: unknown[], path: string) => OEMPoint[];
     }).decodePointShard;
@@ -118,14 +119,14 @@ describe('OEM runtime points', () => {
     });
   });
 
-  it('renders and replaces custom points independently of static points', () => {
+  it('renders and replaces custom points independently of static points', async () => {
     const customPoints: OEMCustomPoint[] = [
       { id: 'custom-route', position: { regionId: 'test', x: 400, z: -600 }, style: 'framed', icon: '/icons/route.webp' },
       { id: 'custom-target', position: { regionId: 'test', x: 600, z: -800 }, style: 'no-frame', icon: '/icons/target.webp' },
     ];
-    core.setCustomPoints(customPoints);
-    expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(1);
-    expect(host.querySelectorAll('.noFrameMarkerIcon')).toHaveLength(1);
+    await core.setCustomPoints(customPoints);
+    await vi.waitFor(() => expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(1));
+    await vi.waitFor(() => expect(host.querySelectorAll('.noFrameMarkerIcon')).toHaveLength(1));
     const framed = host.querySelector<HTMLElement>('.frameMarkerIcon');
     const noFrame = host.querySelector<HTMLElement>('.noFrameMarkerIcon');
     expect(framed?.querySelector('img')?.getAttribute('src')).toContain('/icons/route.webp');
@@ -138,7 +139,7 @@ describe('OEM runtime points', () => {
     expect(noFrame?.style.height).toBe('50px');
     expect(noFrame?.style.marginLeft).toBe('-25px');
     expect(noFrame?.style.marginTop).toBe('-25px');
-    core.clearCustomPoints();
+    await core.clearCustomPoints();
     expect(host.querySelectorAll('.frameMarkerIcon, .noFrameMarkerIcon')).toHaveLength(0);
   });
 
@@ -148,13 +149,13 @@ describe('OEM runtime points', () => {
     expect(image?.getAttribute('src')).toBe('https://example.test/data/instance.webp');
   });
 
-  it('rejects legacy custom-point positions that use y instead of z', () => {
-    expect(() => core.setCustomPoints([{
+  it('rejects legacy custom-point positions that use y instead of z', async () => {
+    await expect(core.setCustomPoints([{
       id: 'legacy-point',
       position: { regionId: 'test', x: 420, y: 620 } as never,
       style: 'framed',
       icon: '/icons/legacy.webp',
-    }])).toThrow('Invalid OEM map position');
+    }])).rejects.toThrow('Invalid OEM map position');
   });
 
   it('switches the boundary layer between OEM and game sources', async () => {
@@ -165,18 +166,18 @@ describe('OEM runtime points', () => {
     expect(host.querySelectorAll('.subregionBoundaryStroke')).toHaveLength(0);
   });
 
-  it('reports OEM and recoverable game coordinates for map clicks', () => {
+  it('reports OEM and recoverable game coordinates for map clicks', async () => {
     const clicks: unknown[] = [];
     core.on('click', (payload) => clicks.push(payload));
     const map = (core as unknown as { map: { fire: (event: string, payload: unknown) => void } }).map;
     map.fire('click', { latlng: { lat: -562.8297, lng: 400.0071 } });
-    expect(clicks).toEqual([{
+    expect(clicks).toMatchObject([{
       position: { regionId: 'test', x: 400.0071, z: -562.8297, floorId: 'M' },
       game: { x: -255.34226179053363, z: -176.89459252157732 },
     }]);
   });
 
-  it('resolves overlapping subregions by pairwise interior clearance', () => {
+  it('resolves overlapping subregions by pairwise interior clearance', async () => {
     const runtime = core as unknown as {
       region: OEMRegion;
       boundaryData: Map<string, unknown>;
@@ -209,7 +210,7 @@ describe('OEM runtime points', () => {
     expect(runtime.inferSubregionId(10, 10)).toBe('deep');
   });
 
-  it('does not infer a subregion outside every precise boundary', () => {
+  it('does not infer a subregion outside every precise boundary', async () => {
     const runtime = core as unknown as {
       region: OEMRegion;
       boundaryData: Map<string, unknown>;
@@ -236,7 +237,7 @@ describe('OEM runtime points', () => {
     expect(runtime.inferSubregionId(50, 50)).toBeUndefined();
   });
 
-  it('does not infer the nearest subregion when all fallback bounds miss', () => {
+  it('does not infer the nearest subregion when all fallback bounds miss', async () => {
     const runtime = core as unknown as {
       region: OEMRegion;
       inferSubregionId: (x: number, z: number) => string | undefined;
@@ -250,46 +251,46 @@ describe('OEM runtime points', () => {
     expect(runtime.inferSubregionId(50, 50)).toBeUndefined();
   });
 
-  it('adds one custom marker for every click in multiple mode', () => {
-    core.setClickPointMode({ mode: 'multiple', style: 'framed', icon: '/icons/pin.webp' });
+  it('adds one custom marker for every click in multiple mode', async () => {
+    const tool = createClickPointTool(core, { mode: 'multiple', style: 'framed', icon: '/icons/pin.webp' });
     const map = (core as unknown as { map: { fire: (event: string, payload: unknown) => void } }).map;
     map.fire('click', { latlng: { lat: -100, lng: 200 } });
     map.fire('click', { latlng: { lat: -300, lng: 400 } });
-    expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(2);
+    await vi.waitFor(() => expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(2));
     expect([...host.querySelectorAll('.frameMarkerIcon img')].map((image) => image.getAttribute('src')))
       .toEqual(['/icons/pin.webp', '/icons/pin.webp']);
   });
 
-  it('keeps only the latest click marker in single mode and can clear it', () => {
-    core.setCustomPoints([{
+  it('keeps only the latest click marker in single mode and can clear it', async () => {
+    await core.setCustomPoints([{
       id: 'host-point', position: { regionId: 'test', x: 10, z: 20 }, style: 'no-frame', icon: '/icons/host.webp',
     }]);
-    core.setClickPointMode({ mode: 'single', style: 'framed', icon: '/icons/pin.webp' });
+    const tool = createClickPointTool(core, { mode: 'single', style: 'framed', icon: '/icons/pin.webp' });
     const map = (core as unknown as { map: { fire: (event: string, payload: unknown) => void } }).map;
     map.fire('click', { latlng: { lat: -100, lng: 200 } });
     map.fire('click', { latlng: { lat: -300, lng: 400 } });
-    expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(1);
-    expect(host.querySelectorAll('.noFrameMarkerIcon')).toHaveLength(1);
-    core.clearClickPoints();
+    await vi.waitFor(() => expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(1));
+    await vi.waitFor(() => expect(host.querySelectorAll('.noFrameMarkerIcon')).toHaveLength(1));
+    await tool.clear();
     expect(host.querySelectorAll('.frameMarkerIcon, .noFrameMarkerIcon')).toHaveLength(1);
-    core.setClickPointMode(null);
+    tool.destroy();
     map.fire('click', { latlng: { lat: -500, lng: 600 } });
     expect(host.querySelectorAll('.frameMarkerIcon, .noFrameMarkerIcon')).toHaveLength(1);
   });
 
-  it('rejects custom marker variants outside the Atlos compositions', () => {
-    expect(() => core.setCustomPoints([{
+  it('rejects custom marker variants outside the Atlos compositions', async () => {
+    await expect(core.setCustomPoints([{
       id: 'invalid-style',
       position: { regionId: 'test', x: 400, z: -600 },
       style: 'custom' as never,
       icon: '/icons/custom.webp',
-    }])).toThrow('Invalid custom point style');
-    expect(() => core.setCustomPoints([{
+    }])).rejects.toThrow('Invalid custom point style');
+    await expect(core.setCustomPoints([{
       id: 'missing-icon',
       position: { regionId: 'test', x: 400, z: -600 },
       style: 'framed',
       icon: '',
-    }])).toThrow('Custom point icon');
+    }])).rejects.toThrow('Custom point icon');
   });
 
   it('loads static points for getPoint and returns defensive copies', async () => {

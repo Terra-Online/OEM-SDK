@@ -23,7 +23,8 @@
     "check": "pnpm validate:export && pnpm typecheck && pnpm test && pnpm build:demo",
     "pack:release": "pnpm build && node scripts/pack-release.mjs",
     "release:npm": "node scripts/release-npm.mjs",
-    "release:check": "pnpm export:atlos && pnpm check && node scripts/pack-release.mjs"
+    "release:check": "pnpm export:atlos && pnpm check && node scripts/pack-release.mjs",
+    "test:browser": "node scripts/verify-browser.mjs"
   },
   "devDependencies": {
     "@opendfieldmap/core": "workspace:*",
@@ -36,6 +37,7 @@
     "@types/react-dom": "^19.0.4",
     "esbuild": "^0.25.0",
     "jsdom": "^26.1.0",
+    "playwright-core": "1.58.2",
     "postcss": "^8.5.6",
     "postcss-selector-parser": "^7.1.0",
     "react": "^19.0.0",

@@ -35,7 +35,6 @@ export default defineConfig(({ command }) => {
           if (id !== devStylesId) return undefined;
           return [
             `import ${JSON.stringify(resolve(root, 'packages/map/node_modules/leaflet/dist/leaflet.css'))};`,
-            `import ${JSON.stringify(resolve(root, 'packages/map/node_modules/leaflet.markercluster/dist/MarkerCluster.css'))};`,
             `import ${JSON.stringify(resolve(root, 'packages/map/src/styles/index.scss'))};`,
             `import ${JSON.stringify(resolve(root, 'packages/sdk/src/style.scss'))};`,
           ].join('\n');

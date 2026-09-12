@@ -53,7 +53,13 @@ export function OEMWidget({ options = {}, className, style }: OEMWidgetProps) {
         return;
       }
       widget.current = instance;
-      return instance.setOptions(getConfig(latestOptions.current));
+      // Only replay props that changed while creation was pending. Replaying
+      // the initial URL would otherwise download custom points a second time.
+      const initial = getConfig(initialOptions.current);
+      const latest = getConfig(latestOptions.current);
+      const changes = Object.fromEntries(Object.entries(latest).filter(([key, value]) =>
+        value !== initial[key as keyof OEMWidgetConfig])) as OEMWidgetConfig;
+      if (Object.keys(changes).length) return instance.setOptions(changes);
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) latestOptions.current.onError?.(toError(error));
     });
@@ -66,9 +72,10 @@ export function OEMWidget({ options = {}, className, style }: OEMWidgetProps) {
   }, []);
 
   useEffect(() => {
-    if (!widget.current || widget.current.destroyed) return;
-    void widget.current.setOptions(getConfig(options)).catch((error: unknown) => {
-      latestOptions.current.onError?.(toError(error));
+    const instance = widget.current;
+    if (!instance || instance.destroyed) return;
+    void instance.setOptions(getConfig(options)).catch((error: unknown) => {
+      if (widget.current === instance && !instance.destroyed) latestOptions.current.onError?.(toError(error));
     });
   }, [options.region, options.subregion, options.floor, options.locale, options.markerTypes, options.labels,
     options.boundaries, options.boundarySource, options.markerClustering, options.customPoints, options.customPointsUrl, options.zoom, options.center]);

@@ -10,3 +10,7 @@ scripts/local/
 .wrangler/
 pnpm-publish-summary.json
 /config/config.r2.json
+
+# Local measurement reports and raw samples
+/docs/performance/
+/scripts/bench/

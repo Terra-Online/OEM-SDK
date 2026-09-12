@@ -32,9 +32,8 @@ for (const name of ['core', 'map', 'sdk', 'react']) {
 const leafletPath = require.resolve('leaflet/dist/leaflet.css');
 let leafletCss = await fs.readFile(leafletPath, 'utf8');
 leafletCss = leafletCss.replace(/url\((?:"|')?(images\/[^)'"\s]+)(?:"|')?\)/g, (match, filename) => `url(./assets/${path.basename(filename)})`);
-const markerClusterCss = await fs.readFile(require.resolve('leaflet.markercluster/dist/MarkerCluster.css'), 'utf8');
 const ownCss = sass.compile(path.join(root, 'packages/map/src/styles/index.scss'), { style: 'expanded', silenceDeprecations: ['global-builtin', 'color-functions'] }).css;
-const css = postcss.parse(`${leafletCss}\n${markerClusterCss}\n${ownCss}`);
+const css = postcss.parse(`${leafletCss}\n${ownCss}`);
 css.walkDecls((declaration) => {
   if (/assets\/(?:layers(?:-2x)?|marker-icon)\.png/.test(declaration.value)) declaration.parent?.remove();
 });

@@ -1,6 +1,11 @@
 @use './palette.scss' as *;
 @use './curves.scss' as *;
 
+// Hint compositor reuse while Leaflet changes marker position transforms.
+.frameMarkerIcon,
+.noFrameMarkerIcon {
+    will-change: transform;
+}
 
 
 
