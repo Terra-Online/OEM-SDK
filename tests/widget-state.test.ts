@@ -3,7 +3,11 @@ import { parseOEMUrlState } from '@opendfieldmap/sdk';
 
 describe('widget URL state', () => {
   it('uses Atlos-compatible routing keys plus widget view keys', () => {
-    expect(parseOEMUrlState('?r=WL&f=crate_i,aurylene&s=WL_1&l=zh-CN&layer=B2&z=2.5&cx=3200&cz=4100&labels=1&boundaries=1&cluster=0')).toEqual({
+    expect(
+      parseOEMUrlState(
+        '?r=WL&f=crate_i,aurylene&s=WL_1&l=zh-CN&layer=B2&z=2.5&cx=3200&cz=4100&labels=1&boundaries=1&cluster=0',
+      ),
+    ).toEqual({
       region: 'WL',
       floor: 'B2',
       locale: 'zh-CN',
@@ -19,7 +23,9 @@ describe('widget URL state', () => {
 
   it('supports all markers and explicit label hiding', () => {
     expect(parseOEMUrlState('https://wiki.example/map?r=VL&f=*&labels=0')).toMatchObject({
-      region: 'VL', markerTypes: '*', labels: false,
+      region: 'VL',
+      markerTypes: '*',
+      labels: false,
     });
   });
 
@@ -29,7 +35,10 @@ describe('widget URL state', () => {
 
   it('leaves omitted URL values unresolved', () => {
     expect(parseOEMUrlState('?r=WL')).toMatchObject({
-      region: 'WL', subregion: null, boundaries: undefined, markerClustering: undefined,
+      region: 'WL',
+      subregion: null,
+      boundaries: undefined,
+      markerClustering: undefined,
     });
   });
 });

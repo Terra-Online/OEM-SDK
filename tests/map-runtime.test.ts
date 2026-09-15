@@ -51,8 +51,11 @@ const manifest: OEMManifest = {
   locales: {},
   controls: {
     'en-US': {
-      layerSelect: 'Layer selection', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
-      brandName: 'Open Endfield Map', termsOfService: 'Terms of Service',
+      layerSelect: 'Layer selection',
+      zoomIn: 'Zoom in',
+      zoomOut: 'Zoom out',
+      brandName: 'Open Endfield Map',
+      termsOfService: 'Terms of Service',
     },
   },
   fallbackLocale: 'en-US',
@@ -70,14 +73,42 @@ describe('OEM runtime points', async () => {
     fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       const body = url.endsWith('/custom-points.json')
-        ? JSON.stringify([{ id: 'custom-url-point', position: { regionId: 'test', x: 420, z: -620 }, style: 'framed', icon: './instance.webp' }])
+        ? JSON.stringify([
+            {
+              id: 'custom-url-point',
+              position: { regionId: 'test', x: 420, z: -620 },
+              style: 'framed',
+              icon: './instance.webp',
+            },
+          ])
         : url.endsWith('/test.game.json')
-        ? JSON.stringify({ count: 1, boundaries: [{ id: 'game-level', rings: [[{ x: 80, z: 80 }, { x: 160, z: 80 }, { x: 160, z: 160 }, { x: 80, z: 160 }]] }] })
-        : url.endsWith('/point-index.json')
-        ? JSON.stringify({ [point.id]: '/marker/1_5_3/test-release/points/all.json' })
-        : url.endsWith('/type.json')
-          ? JSON.stringify({ crate_i: { key: 'crate_i', icon: '/marker/1_5_3/test-release/assets/crate.webp', category: { main: 'item', sub: 'item' } } })
-          : JSON.stringify([point]);
+          ? JSON.stringify({
+              count: 1,
+              boundaries: [
+                {
+                  id: 'game-level',
+                  rings: [
+                    [
+                      { x: 80, z: 80 },
+                      { x: 160, z: 80 },
+                      { x: 160, z: 160 },
+                      { x: 80, z: 160 },
+                    ],
+                  ],
+                },
+              ],
+            })
+          : url.endsWith('/point-index.json')
+            ? JSON.stringify({ [point.id]: '/marker/1_5_3/test-release/points/all.json' })
+            : url.endsWith('/type.json')
+              ? JSON.stringify({
+                  crate_i: {
+                    key: 'crate_i',
+                    icon: '/marker/1_5_3/test-release/assets/crate.webp',
+                    category: { main: 'item', sub: 'item' },
+                  },
+                })
+              : JSON.stringify([point]);
       return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -104,10 +135,16 @@ describe('OEM runtime points', async () => {
   });
 
   it('decodes Atlos compact marker tuples with the shard subregion fallback', async () => {
-    const decode = (core as unknown as {
-      decodePointShard: (value: unknown[], path: string) => OEMPoint[];
-    }).decodePointShard;
-    const decoded = decode.call(core, [[point.id, 10, -30, 20, 0, 'crate_i']], '/marker/1_5_3/test-release/points/test.json');
+    const decode = (
+      core as unknown as {
+        decodePointShard: (value: unknown[], path: string) => OEMPoint[];
+      }
+    ).decodePointShard;
+    const decoded = decode.call(
+      core,
+      [[point.id, 10, -30, 20, 0, 'crate_i']],
+      '/marker/1_5_3/test-release/points/test.json',
+    );
     expect(decoded[0]).toMatchObject({
       id: point.id,
       regionId: 'test',
@@ -121,8 +158,18 @@ describe('OEM runtime points', async () => {
 
   it('renders and replaces custom points independently of static points', async () => {
     const customPoints: OEMCustomPoint[] = [
-      { id: 'custom-route', position: { regionId: 'test', x: 400, z: -600 }, style: 'framed', icon: '/icons/route.webp' },
-      { id: 'custom-target', position: { regionId: 'test', x: 600, z: -800 }, style: 'no-frame', icon: '/icons/target.webp' },
+      {
+        id: 'custom-route',
+        position: { regionId: 'test', x: 400, z: -600 },
+        style: 'framed',
+        icon: '/icons/route.webp',
+      },
+      {
+        id: 'custom-target',
+        position: { regionId: 'test', x: 600, z: -800 },
+        style: 'no-frame',
+        icon: '/icons/target.webp',
+      },
     ];
     await core.setCustomPoints(customPoints);
     await vi.waitFor(() => expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(1));
@@ -150,12 +197,16 @@ describe('OEM runtime points', async () => {
   });
 
   it('rejects legacy custom-point positions that use y instead of z', async () => {
-    await expect(core.setCustomPoints([{
-      id: 'legacy-point',
-      position: { regionId: 'test', x: 420, y: 620 } as never,
-      style: 'framed',
-      icon: '/icons/legacy.webp',
-    }])).rejects.toThrow('Invalid OEM map position');
+    await expect(
+      core.setCustomPoints([
+        {
+          id: 'legacy-point',
+          position: { regionId: 'test', x: 420, y: 620 } as never,
+          style: 'framed',
+          icon: '/icons/legacy.webp',
+        },
+      ]),
+    ).rejects.toThrow('Invalid OEM map position');
   });
 
   it('switches the boundary layer between OEM and game sources', async () => {
@@ -171,16 +222,18 @@ describe('OEM runtime points', async () => {
     core.on('click', (payload) => clicks.push(payload));
     const map = (core as unknown as { map: { fire: (event: string, payload: unknown) => void } }).map;
     map.fire('click', { latlng: { lat: -562.8297, lng: 400.0071 } });
-    expect(clicks).toMatchObject([{
-      position: { regionId: 'test', x: 400.0071, z: -562.8297, floorId: 'M' },
-      game: { x: -255.34226179053363, z: -176.89459252157732 },
-    }]);
+    expect(clicks).toMatchObject([
+      {
+        position: { regionId: 'test', x: 400.0071, z: -562.8297, floorId: 'M' },
+        game: { x: -255.34226179053363, z: -176.89459252157732 },
+      },
+    ]);
   });
 
   it('resolves overlapping subregions by pairwise interior clearance', async () => {
     const runtime = core as unknown as {
       region: OEMRegion;
-      boundaryData: Map<string, unknown>;
+      repository: { load(key: string, loader: () => Promise<unknown>): Promise<unknown> };
       inferSubregionId: (x: number, z: number) => string | undefined;
     };
     const boundaryPath = '/boundaries/overlap.json';
@@ -199,7 +252,7 @@ describe('OEM runtime points', async () => {
       { regionId: 'test', x: maxX, z: maxZ },
       { regionId: 'test', x: minX, z: maxZ },
     ];
-    runtime.boundaryData.set(boundaryPath, [
+    await runtime.repository.load(`boundary:${boundaryPath}`, async () => [
       { id: 'near-edge', rings: [ring(70, 0, 90, 160)] },
       { id: 'middle', rings: [ring(40, -20, 120, 180)] },
       { id: 'deep', rings: [ring(0, -80, 200, 240)] },
@@ -213,24 +266,37 @@ describe('OEM runtime points', async () => {
   it('does not infer a subregion outside every precise boundary', async () => {
     const runtime = core as unknown as {
       region: OEMRegion;
-      boundaryData: Map<string, unknown>;
+      repository: { load(key: string, loader: () => Promise<unknown>): Promise<unknown> };
       inferSubregionId: (x: number, z: number) => string | undefined;
     };
     const boundaryPath = '/boundaries/disjoint.json';
     runtime.region = {
       ...region,
       boundaries: { path: boundaryPath, sha256: 'unused', bytes: 1 },
-      subregions: [{ id: 'bounded', key: 'bounded', bounds: [[0, 0], [800, 800]] }],
+      subregions: [
+        {
+          id: 'bounded',
+          key: 'bounded',
+          bounds: [
+            [0, 0],
+            [800, 800],
+          ],
+        },
+      ],
     };
-    runtime.boundaryData.set(boundaryPath, [{
-      id: 'bounded',
-      rings: [[
-        { regionId: 'test', x: 0, z: 0 },
-        { regionId: 'test', x: 80, z: 0 },
-        { regionId: 'test', x: 80, z: 80 },
-        { regionId: 'test', x: 0, z: 80 },
-      ]],
-    }]);
+    await runtime.repository.load(`boundary:${boundaryPath}`, async () => [
+      {
+        id: 'bounded',
+        rings: [
+          [
+            { regionId: 'test', x: 0, z: 0 },
+            { regionId: 'test', x: 80, z: 0 },
+            { regionId: 'test', x: 80, z: 80 },
+            { regionId: 'test', x: 0, z: 80 },
+          ],
+        ],
+      },
+    ]);
 
     // Published coordinate (400, 400) is inside the coarse bounds but not the
     // precise subregion polygon, so it must remain unassigned.
@@ -244,7 +310,16 @@ describe('OEM runtime points', async () => {
     };
     runtime.region = {
       ...region,
-      subregions: [{ id: 'bounded', key: 'bounded', bounds: [[0, 0], [80, 80]] }],
+      subregions: [
+        {
+          id: 'bounded',
+          key: 'bounded',
+          bounds: [
+            [0, 0],
+            [80, 80],
+          ],
+        },
+      ],
     };
 
     expect(runtime.inferSubregionId(5, 5)).toBe('bounded');
@@ -252,19 +327,25 @@ describe('OEM runtime points', async () => {
   });
 
   it('adds one custom marker for every click in multiple mode', async () => {
-    const tool = createClickPointTool(core, { mode: 'multiple', style: 'framed', icon: '/icons/pin.webp' });
+    createClickPointTool(core, { mode: 'multiple', style: 'framed', icon: '/icons/pin.webp' });
     const map = (core as unknown as { map: { fire: (event: string, payload: unknown) => void } }).map;
     map.fire('click', { latlng: { lat: -100, lng: 200 } });
     map.fire('click', { latlng: { lat: -300, lng: 400 } });
     await vi.waitFor(() => expect(host.querySelectorAll('.frameMarkerIcon')).toHaveLength(2));
-    expect([...host.querySelectorAll('.frameMarkerIcon img')].map((image) => image.getAttribute('src')))
-      .toEqual(['/icons/pin.webp', '/icons/pin.webp']);
+    expect(
+      [...host.querySelectorAll('.frameMarkerIcon img')].map((image) => image.getAttribute('src')),
+    ).toEqual(['/icons/pin.webp', '/icons/pin.webp']);
   });
 
   it('keeps only the latest click marker in single mode and can clear it', async () => {
-    await core.setCustomPoints([{
-      id: 'host-point', position: { regionId: 'test', x: 10, z: 20 }, style: 'no-frame', icon: '/icons/host.webp',
-    }]);
+    await core.setCustomPoints([
+      {
+        id: 'host-point',
+        position: { regionId: 'test', x: 10, z: 20 },
+        style: 'no-frame',
+        icon: '/icons/host.webp',
+      },
+    ]);
     const tool = createClickPointTool(core, { mode: 'single', style: 'framed', icon: '/icons/pin.webp' });
     const map = (core as unknown as { map: { fire: (event: string, payload: unknown) => void } }).map;
     map.fire('click', { latlng: { lat: -100, lng: 200 } });
@@ -279,18 +360,26 @@ describe('OEM runtime points', async () => {
   });
 
   it('rejects custom marker variants outside the Atlos compositions', async () => {
-    await expect(core.setCustomPoints([{
-      id: 'invalid-style',
-      position: { regionId: 'test', x: 400, z: -600 },
-      style: 'custom' as never,
-      icon: '/icons/custom.webp',
-    }])).rejects.toThrow('Invalid custom point style');
-    await expect(core.setCustomPoints([{
-      id: 'missing-icon',
-      position: { regionId: 'test', x: 400, z: -600 },
-      style: 'framed',
-      icon: '',
-    }])).rejects.toThrow('Custom point icon');
+    await expect(
+      core.setCustomPoints([
+        {
+          id: 'invalid-style',
+          position: { regionId: 'test', x: 400, z: -600 },
+          style: 'custom' as never,
+          icon: '/icons/custom.webp',
+        },
+      ]),
+    ).rejects.toThrow('Invalid custom point style');
+    await expect(
+      core.setCustomPoints([
+        {
+          id: 'missing-icon',
+          position: { regionId: 'test', x: 400, z: -600 },
+          style: 'framed',
+          icon: '',
+        },
+      ]),
+    ).rejects.toThrow('Custom point icon');
   });
 
   it('loads static points for getPoint and returns defensive copies', async () => {

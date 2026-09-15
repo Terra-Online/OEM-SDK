@@ -1,8 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { MarkerMotion, MarkerMotionPool, Motion, type MarkerState } from '../packages/map/src/atlos/canvas/canvasMarkerMotion';
+import {
+  MarkerMotion,
+  MarkerMotionPool,
+  Motion,
+  type MarkerState,
+} from '../packages/map/src/atlos/canvas/canvasMarkerMotion';
 
-const initial: MarkerState = { selected: false, checked: false, offLayer: false,
-  hover: false, focus: false, pulsing: false, appearing: false, disappearing: false };
+const initial: MarkerState = {
+  selected: false,
+  checked: false,
+  offLayer: false,
+  hover: false,
+  focus: false,
+  pulsing: false,
+  appearing: false,
+  disappearing: false,
+};
 describe('Canvas point animation state', () => {
   it('shares batch transitions but isolates later interaction on one point', () => {
     const pool = new MarkerMotionPool();
@@ -43,9 +56,16 @@ describe('Canvas point animation state', () => {
     const motion = new MarkerMotion();
     motion.set(initial, 0, false);
     let now = 100;
-    for (const patch of [{ hover: true }, { selected: true }, { checked: true }, { offLayer: true }, { hover: false }]) {
+    for (const patch of [
+      { hover: true },
+      { selected: true },
+      { checked: true },
+      { offLayer: true },
+      { hover: false },
+    ]) {
       motion.set({ ...motion.state!, ...patch }, now, false);
-      for (let frame = now; frame < now + 400; frame += 16) expect(motion.opacity(frame)).toBeGreaterThanOrEqual(0.3);
+      for (let frame = now; frame < now + 400; frame += 16)
+        expect(motion.opacity(frame)).toBeGreaterThanOrEqual(0.3);
       now += 400;
     }
   });
@@ -60,8 +80,10 @@ describe('Canvas point animation state', () => {
     expect(motion.border.value(250)).toBe(1);
   });
   it('keeps unrelated points and their timelines independent', () => {
-    const first = new MarkerMotion(), second = new MarkerMotion();
-    first.set(initial, 0, false); second.set(initial, 0, false);
+    const first = new MarkerMotion(),
+      second = new MarkerMotion();
+    first.set(initial, 0, false);
+    second.set(initial, 0, false);
     first.set({ ...initial, hover: true, selected: true, checked: true }, 500, false);
     expect(second.active(501)).toBe(false);
     expect(second.opacity(501)).toBe(1);

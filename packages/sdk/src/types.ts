@@ -1,9 +1,17 @@
-import type { OEMBoundarySource, OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
+import type { OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
 export type { OEMBoundarySource } from '@opendfieldmap/core';
-import type { OEMCustomPoint, OEMFeatureName, OEMResourceStates, OEMEvents, OEMMapAPI, OEMMapState, OEMMapConfig } from '@opendfieldmap/map';
+import type {
+  OEMCustomPoint,
+  OEMFeatureName,
+  OEMResourceStates,
+  OEMEvents,
+  OEMMapAPI,
+  OEMMapState,
+  OEMMapConfig,
+} from '@opendfieldmap/map';
 
 /** Stable top-level region identifiers published by OEM. */
-export type OEMRegionId = 'Valley_4' | 'Wuling' | 'Dijiang' | 'Weekraid_1';
+export type OEMRegionId = 'Valley_4' | 'Wuling' | 'Dijiang' | 'Weekraid_1' | (string & {});
 
 /** Short region aliases accepted for parity with existing OEM links. */
 export type OEMRegionCode = 'VL' | 'WL' | 'DJ' | 'ES';
@@ -12,7 +20,7 @@ export type OEMRegionCode = 'VL' | 'WL' | 'DJ' | 'ES';
 export type OEMRegionSelector = OEMRegionId | OEMRegionCode;
 
 /** Floor identifiers currently used by OEM tile sets. */
-export type OEMFloorId = 'M' | 'L1' | 'L2' | 'L3' | 'L4' | 'B1' | 'B2' | 'B3' | 'B4';
+export type OEMFloorId = 'M' | 'L1' | 'L2' | 'L3' | 'L4' | 'B1' | 'B2' | 'B3' | 'B4' | (string & {});
 
 /** Locales with complete place-name data in the current static release. */
 export type OEMLocale =
@@ -29,7 +37,8 @@ export type OEMLocale =
   | 'id-ID'
   | 'pt-BR'
   | 'th-TH'
-  | 'vi-VN';
+  | 'vi-VN'
+  | (string & {});
 
 /** Center coordinates in the selected region's max-native-zoom pixel space. */
 export interface OEMWidgetCenter {
@@ -38,7 +47,15 @@ export interface OEMWidgetCenter {
 }
 
 /** Widget content uses the same configuration contract as the map API. */
-export interface OEMWidgetConfig extends OEMMapConfig {}
+export interface OEMWidgetControls {
+  showRegionSelector: boolean;
+  showFloorSelector: boolean;
+  showScaleBar: boolean;
+  horizontalSelectors: boolean;
+}
+export interface OEMWidgetConfig extends OEMMapConfig, Partial<OEMWidgetControls> {
+  controls?: Partial<OEMWidgetControls>;
+}
 
 /** Complete creation options for an embeddable OEM Widget. */
 export interface OEMWidgetOptions extends OEMWidgetConfig {
@@ -80,6 +97,7 @@ export interface OEMWidget {
   readonly destroyed: boolean;
   readonly map: OEMMapAPI;
   getState(): OEMWidgetState;
+  getControlState(): OEMWidgetControls;
   getResourceState(): OEMResourceStates;
   retry(feature?: OEMFeatureName): Promise<void>;
   setOptions(options: OEMWidgetConfig): Promise<void>;
@@ -88,7 +106,10 @@ export interface OEMWidget {
   clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
-  on<Event extends keyof OEMWidgetEvents>(event: Event, handler: (payload: OEMWidgetEvents[Event]) => void): () => void;
+  on<Event extends keyof OEMWidgetEvents>(
+    event: Event,
+    handler: (payload: OEMWidgetEvents[Event]) => void,
+  ): () => void;
   resize(): void;
   destroy(): void;
 }

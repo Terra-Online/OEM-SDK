@@ -16,9 +16,14 @@ export const installFonts = (root: HTMLElement, manifest: OEMManifest, resources
   if (!manifest.fonts?.length) return;
   const rules = manifest.fonts.map((font, index) => {
     if (!font || typeof font !== 'object') invalid(`manifest.fonts[${index}]`, 'Expected a font resource');
-    if (!FONT_FAMILIES.has(font.family) || !Number.isFinite(font.weight) ||
-      (font.weightRange && (!Number.isFinite(font.weightRange[0]) || !Number.isFinite(font.weightRange[1]) ||
-        font.weightRange[0] > font.weightRange[1]))) {
+    if (
+      !FONT_FAMILIES.has(font.family) ||
+      !Number.isFinite(font.weight) ||
+      (font.weightRange &&
+        (!Number.isFinite(font.weightRange[0]) ||
+          !Number.isFinite(font.weightRange[1]) ||
+          font.weightRange[0] > font.weightRange[1]))
+    ) {
       throw new Error(`Unsupported OEM font: ${font.family}`);
     }
     const url = resolveOEMAsset(resources.baseUrl, font.path);

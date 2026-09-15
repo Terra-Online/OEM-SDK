@@ -1,15 +1,21 @@
+import { OEM_REGION_ALIASES } from '@opendfieldmap/sdk';
 import type { OEMManifest, OEMPointType } from '@opendfieldmap/core';
-import type { OEMBoundarySource, OEMCustomPoint, OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
+import type {
+  OEMBoundarySource,
+  OEMCustomPoint,
+  OEMFloorId,
+  OEMLocale,
+  OEMRegionSelector,
+  OEMWidgetConfig,
+  OEMWidgetState,
+} from '@opendfieldmap/sdk';
 
 const FLOOR_ORDER = ['L4', 'L3', 'L2', 'L1', 'M', 'B1', 'B2', 'B3', 'B4'];
-const REGION_CODES: Readonly<Record<string, string>> = Object.freeze({
-  Valley_4: 'VL',
-  Wuling: 'WL',
-  Dijiang: 'DJ',
-  Weekraid_1: 'ES',
-});
+const REGION_CODES: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(Object.entries(OEM_REGION_ALIASES).map(([alias, region]) => [region, alias])),
+);
 
-/** Creation-only Widget options exposed by the interactive Demo. */
+/** Dynamic official Widget options exposed by the interactive Demo. */
 export interface DemoCreationConfig {
   showRegionSelector: boolean;
   showFloorSelector: boolean;
@@ -29,7 +35,7 @@ export interface DemoVersionOption {
 
 interface DemoConfigPanelCallbacks {
   update(config: OEMWidgetConfig): void;
-  recreate(config: Partial<DemoCreationConfig>): void;
+  configure(config: Partial<DemoCreationConfig>): void;
   selectVersion?(id: string): void;
   reset(): void;
 }
@@ -38,7 +44,12 @@ interface DemoConfigPanelCallbacks {
 export interface DemoConfigPanel {
   element: HTMLDetailsElement;
   setBusy(busy: boolean): void;
-  sync(state: OEMWidgetState, creation: DemoCreationConfig, customPoints: readonly OEMCustomPoint[], customPointsUrl?: string): void;
+  sync(
+    state: OEMWidgetState,
+    creation: DemoCreationConfig,
+    customPoints: readonly OEMCustomPoint[],
+    customPointsUrl?: string,
+  ): void;
   destroy(): void;
 }
 
@@ -175,7 +186,10 @@ export const bindPanelDragging = (element: HTMLDetailsElement, handle: HTMLEleme
     const maxLeft = Math.max(margin, window.innerWidth - margin - rect.width);
     // The body max-height follows the top offset, so the header is the stable
     // minimum height used to clamp the panel while it contracts downward.
-    const maxTop = Math.max(margin, window.innerHeight - bottomMargin - handle.getBoundingClientRect().height);
+    const maxTop = Math.max(
+      margin,
+      window.innerHeight - bottomMargin - handle.getBoundingClientRect().height,
+    );
     const nextLeft = Math.min(Math.max(margin, left), maxLeft);
     const nextTop = Math.min(Math.max(margin, top), maxTop);
     element.style.left = `${nextLeft}px`;
@@ -285,7 +299,9 @@ const createWidgetCode = (
         z: (subregion.bounds[0][1] + subregion.bounds[1][1]) / 2,
       }
     : region.initialView;
-  const presetZoom = subregion ? Math.max(region.minZoom, Math.min(region.maxZoom, 1)) : region.initialView.zoom;
+  const presetZoom = subregion
+    ? Math.max(region.minZoom, Math.min(region.maxZoom, 1))
+    : region.initialView.zoom;
   const lines = [
     `  region: ${quote(REGION_CODES[state.regionId] ?? state.regionId)},`,
     `  locale: ${quote(state.locale)},`,
@@ -301,7 +317,8 @@ const createWidgetCode = (
   if (state.subregionId) lines.push(`  subregion: ${quote(state.subregionId)},`);
   if (state.floorId !== 'M') lines.push(`  floor: ${quote(state.floorId)},`);
   if (state.markerTypes === '*') lines.push("  markerTypes: '*',");
-  else if (state.markerTypes.length) lines.push(`  markerTypes: [${state.markerTypes.map(quote).join(', ')}],`);
+  else if (state.markerTypes.length)
+    lines.push(`  markerTypes: [${state.markerTypes.map(quote).join(', ')}],`);
   if (!state.labels) lines.push('  labels: false,');
   if (state.boundaries) {
     lines.push('  boundaries: true,');
@@ -399,7 +416,8 @@ export function createDemoConfigPanel(
   });
 
   const regionSelect = createSelect('Region');
-  for (const region of manifest.regions) regionSelect.append(createOption(region.id, region.locales['en-US'] ?? region.name));
+  for (const region of manifest.regions)
+    regionSelect.append(createOption(region.id, region.locales['en-US'] ?? region.name));
   const subregionSelect = createSelect('Subregion');
   const floorSelect = createSelect('Floor');
   const localeSelect = createSelect('Language');
@@ -454,7 +472,11 @@ export function createDemoConfigPanel(
   markerMode.setAttribute('role', 'group');
   markerMode.setAttribute('aria-label', 'Marker data');
   const markerModes = new Map<string, HTMLInputElement>();
-  for (const [value, label] of [['none', 'None'], ['selected', 'Selected'], ['all', 'All']]) {
+  for (const [value, label] of [
+    ['none', 'None'],
+    ['selected', 'Selected'],
+    ['all', 'All'],
+  ]) {
     const segment = document.createElement('label');
     const input = document.createElement('input');
     input.type = 'radio';
@@ -520,7 +542,10 @@ export function createDemoConfigPanel(
   boundarySource.setAttribute('role', 'radiogroup');
   boundarySource.setAttribute('aria-label', 'Boundary source');
   const boundarySources = new Map<string, HTMLInputElement>();
-  for (const [value, label] of [['oem', 'OEM'], ['game', 'Game']]) {
+  for (const [value, label] of [
+    ['oem', 'OEM'],
+    ['game', 'Game'],
+  ]) {
     const segment = document.createElement('label');
     const input = document.createElement('input');
     input.type = 'radio';
@@ -540,8 +565,13 @@ export function createDemoConfigPanel(
   clustering.field.classList.add('demoClusteringField');
   const content = createSection('Content');
   content.fieldset.classList.add('demoContentSection');
-  content.content.append(createField('Marker data', markerMode, true), markerField, labels.field, clustering.field,
-    boundaryControls);
+  content.content.append(
+    createField('Marker data', markerMode, true),
+    markerField,
+    labels.field,
+    clustering.field,
+    boundaryControls,
+  );
 
   const regionSelector = createToggle('Region selector');
   const floorSelector = createToggle('Floor selector');
@@ -551,7 +581,14 @@ export function createDemoConfigPanel(
   const lockZoom = createToggle('Lock zooming');
   const controls = createSection('Controls');
   controls.fieldset.classList.add('demoControlsSection');
-  controls.content.append(regionSelector.field, floorSelector.field, horizontalSelectors.field, scaleBar.field, lockDrag.field, lockZoom.field);
+  controls.content.append(
+    regionSelector.field,
+    floorSelector.field,
+    horizontalSelectors.field,
+    scaleBar.field,
+    lockDrag.field,
+    lockZoom.field,
+  );
 
   const reset = document.createElement('button');
   reset.type = 'button';
@@ -595,13 +632,13 @@ export function createDemoConfigPanel(
     markerTrigger.setAttribute('aria-expanded', String(open));
     if (open) markerSearch.focus();
   };
-  const selectedMarkerTypes = () => [...markerInputs]
-    .filter(([, input]) => input.checked)
-    .map(([key]) => key);
+  const selectedMarkerTypes = () =>
+    [...markerInputs].filter(([, input]) => input.checked).map(([key]) => key);
   const syncMarkerPicker = (selected: readonly string[]) => {
     const selectedSet = new Set(selected);
     for (const [key, input] of markerInputs) input.checked = selectedSet.has(key);
-    markerSelection.textContent = selected.length === 1 ? '1 type selected' : `${selected.length} types selected`;
+    markerSelection.textContent =
+      selected.length === 1 ? '1 type selected' : `${selected.length} types selected`;
   };
   const filterMarkerOptions = () => {
     const query = markerSearch.value.trim().toLocaleLowerCase();
@@ -655,14 +692,21 @@ export function createDemoConfigPanel(
       subregionSelect.append(createOption(subregion.id, localized?.name ?? subregion.key));
     }
     floorSelect.replaceChildren();
-    for (const floor of [...region.floors].sort((left, right) => FLOOR_ORDER.indexOf(left.id) - FLOOR_ORDER.indexOf(right.id))) {
+    for (const floor of [...region.floors].sort(
+      (left, right) => FLOOR_ORDER.indexOf(left.id) - FLOOR_ORDER.indexOf(right.id),
+    )) {
       floorSelect.append(createOption(floor.id));
     }
     zoomInput.min = String(region.minZoom);
     zoomInput.max = String(region.maxZoom);
   };
 
-  const sync = (state: OEMWidgetState, creation: DemoCreationConfig, customPoints: readonly OEMCustomPoint[], customPointsUrl?: string) => {
+  const sync = (
+    state: OEMWidgetState,
+    creation: DemoCreationConfig,
+    customPoints: readonly OEMCustomPoint[],
+    customPointsUrl?: string,
+  ) => {
     const previousRegion = optionRegion;
     updateRegionOptions(state);
     regionSelect.value = state.regionId;
@@ -678,7 +722,8 @@ export function createDemoConfigPanel(
     if (document.activeElement !== centerZ) centerZ.value = String(Math.round(state.center.z));
 
     const selectedTypes = state.markerTypes === '*' ? [] : state.markerTypes;
-    markerModes.get(state.markerTypes === '*' ? 'all' : selectedTypes.length ? 'selected' : 'none')!.checked = true;
+    markerModes.get(state.markerTypes === '*' ? 'all' : selectedTypes.length ? 'selected' : 'none')!.checked =
+      true;
     markerPickerEnabled = state.markerTypes !== '*' && selectedTypes.length > 0;
     markerPicker.classList.toggle('disabled', !markerPickerEnabled);
     markerTrigger.disabled = !markerPickerEnabled;
@@ -691,7 +736,8 @@ export function createDemoConfigPanel(
     boundarySources.get(state.boundarySource)!.checked = true;
     boundarySource.classList.toggle('disabled', !state.boundaries);
     boundarySource.setAttribute('aria-disabled', String(!state.boundaries));
-    for (const input of boundarySources.values()) input.disabled = !state.boundaries || element.classList.contains('busy');
+    for (const input of boundarySources.values())
+      input.disabled = !state.boundaries || element.classList.contains('busy');
     clustering.input.checked = state.markerClustering;
     regionSelector.input.checked = creation.showRegionSelector;
     floorSelector.input.checked = creation.showFloorSelector;
@@ -703,16 +749,24 @@ export function createDemoConfigPanel(
     code.value = createWidgetCode(manifest, state, creation, customPoints, customPointsUrl, selectedVersion);
   };
 
-  regionSelect.addEventListener('change', () => callbacks.update({ region: regionSelect.value as OEMRegionSelector }));
-  subregionSelect.addEventListener('change', () => callbacks.update({ subregion: subregionSelect.value || null }));
+  regionSelect.addEventListener('change', () =>
+    callbacks.update({ region: regionSelect.value as OEMRegionSelector }),
+  );
+  subregionSelect.addEventListener('change', () =>
+    callbacks.update({ subregion: subregionSelect.value || null }),
+  );
   floorSelect.addEventListener('change', () => callbacks.update({ floor: floorSelect.value as OEMFloorId }));
-  localeSelect.addEventListener('change', () => callbacks.update({ locale: localeSelect.value as OEMLocale }));
+  localeSelect.addEventListener('change', () =>
+    callbacks.update({ locale: localeSelect.value as OEMLocale }),
+  );
   boundarySource.addEventListener('change', () => {
     if (!boundaries.input.checked) return;
     const value = [...boundarySources].find(([, input]) => input.checked)?.[0];
     if (value) callbacks.update({ boundarySource: value as OEMBoundarySource });
   });
-  themeSelect.addEventListener('change', () => callbacks.recreate({ theme: themeSelect.value as DemoCreationConfig['theme'] }));
+  themeSelect.addEventListener('change', () =>
+    callbacks.configure({ theme: themeSelect.value as DemoCreationConfig['theme'] }),
+  );
   versionSelect?.addEventListener('change', () => callbacks.selectVersion?.(versionSelect.value));
   zoomInput.addEventListener('input', () => updateZoomDisplay());
   zoomInput.addEventListener('change', () => callbacks.update({ zoom: Number(zoomInput.value) }));
@@ -737,7 +791,9 @@ export function createDemoConfigPanel(
       callbacks.update({ markerTypes: selected.length ? selected : initialMarkerTypes });
     }
   });
-  markerTrigger.addEventListener('click', () => setMarkerPickerOpen(!markerPicker.classList.contains('open')));
+  markerTrigger.addEventListener('click', () =>
+    setMarkerPickerOpen(!markerPicker.classList.contains('open')),
+  );
   markerSearch.addEventListener('input', filterMarkerOptions);
   markerSearch.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -747,7 +803,8 @@ export function createDemoConfigPanel(
   });
   markerOptions.addEventListener('change', () => {
     const selected = selectedMarkerTypes();
-    markerSelection.textContent = selected.length === 1 ? '1 type selected' : `${selected.length} types selected`;
+    markerSelection.textContent =
+      selected.length === 1 ? '1 type selected' : `${selected.length} types selected`;
     callbacks.update({ markerTypes: selected.length ? selected : false });
   });
   labels.input.addEventListener('change', () => callbacks.update({ labels: labels.input.checked }));
@@ -758,27 +815,46 @@ export function createDemoConfigPanel(
     for (const input of boundarySources.values()) input.disabled = !enabled;
     callbacks.update({ boundaries: enabled });
   });
-  clustering.input.addEventListener('change', () => callbacks.update({ markerClustering: clustering.input.checked }));
-  regionSelector.input.addEventListener('change', () => callbacks.recreate({ showRegionSelector: regionSelector.input.checked }));
-  floorSelector.input.addEventListener('change', () => callbacks.recreate({ showFloorSelector: floorSelector.input.checked }));
-  horizontalSelectors.input.addEventListener('change', () => callbacks.recreate({ horizontalSelectors: horizontalSelectors.input.checked }));
-  scaleBar.input.addEventListener('change', () => callbacks.recreate({ showScaleBar: scaleBar.input.checked }));
-  lockDrag.input.addEventListener('change', () => callbacks.recreate({ lockDrag: lockDrag.input.checked }));
-  lockZoom.input.addEventListener('change', () => callbacks.recreate({ lockZoom: lockZoom.input.checked }));
+  clustering.input.addEventListener('change', () =>
+    callbacks.update({ markerClustering: clustering.input.checked }),
+  );
+  regionSelector.input.addEventListener('change', () =>
+    callbacks.configure({ showRegionSelector: regionSelector.input.checked }),
+  );
+  floorSelector.input.addEventListener('change', () =>
+    callbacks.configure({ showFloorSelector: floorSelector.input.checked }),
+  );
+  horizontalSelectors.input.addEventListener('change', () =>
+    callbacks.configure({ horizontalSelectors: horizontalSelectors.input.checked }),
+  );
+  scaleBar.input.addEventListener('change', () =>
+    callbacks.configure({ showScaleBar: scaleBar.input.checked }),
+  );
+  lockDrag.input.addEventListener('change', () => callbacks.configure({ lockDrag: lockDrag.input.checked }));
+  lockZoom.input.addEventListener('change', () => callbacks.configure({ lockZoom: lockZoom.input.checked }));
   reset.addEventListener('click', callbacks.reset);
   copyCode.addEventListener('click', () => {
     if (!navigator.clipboard?.writeText) {
       copyCode.textContent = 'Unavailable';
-      window.setTimeout(() => { copyCode.textContent = 'Copy'; }, 1200);
+      window.setTimeout(() => {
+        copyCode.textContent = 'Copy';
+      }, 1200);
       return;
     }
-    void navigator.clipboard.writeText(code.value).then(() => {
-      copyCode.textContent = 'Copied';
-      window.setTimeout(() => { copyCode.textContent = 'Copy'; }, 1200);
-    }).catch(() => {
-      copyCode.textContent = 'Unavailable';
-      window.setTimeout(() => { copyCode.textContent = 'Copy'; }, 1200);
-    });
+    void navigator.clipboard
+      .writeText(code.value)
+      .then(() => {
+        copyCode.textContent = 'Copied';
+        window.setTimeout(() => {
+          copyCode.textContent = 'Copy';
+        }, 1200);
+      })
+      .catch(() => {
+        copyCode.textContent = 'Unavailable';
+        window.setTimeout(() => {
+          copyCode.textContent = 'Copy';
+        }, 1200);
+      });
   });
 
   return {
@@ -786,8 +862,11 @@ export function createDemoConfigPanel(
     setBusy(busy) {
       element.classList.toggle('busy', busy);
       element.setAttribute('aria-busy', String(busy));
-      for (const control of body.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button')) {
-        control.disabled = busy ||
+      for (const control of body.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
+        'input, select, button',
+      )) {
+        control.disabled =
+          busy ||
           (boundarySource.contains(control) && !boundaries.input.checked) ||
           ((control === markerTrigger || markerInputs.has(control.value)) && !markerPickerEnabled);
       }

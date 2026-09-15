@@ -5,7 +5,12 @@ import type { Control, ControlContext, Panels } from './types';
 
 export const mountControls = (
   root: HTMLElement,
-  visibility: { regionSelector: boolean; floorSelector: boolean; scaleBar: boolean; horizontalSelectors: boolean },
+  visibility: {
+    regionSelector: boolean;
+    floorSelector: boolean;
+    scaleBar: boolean;
+    horizontalSelectors: boolean;
+  },
   context: Omit<ControlContext, 'panels' | 'horizontalSelectors'>,
 ): Control => {
   const hasSwitches = visibility.regionSelector || visibility.floorSelector;
@@ -32,15 +37,23 @@ export const mountControls = (
       expandedPanel = null;
     },
   };
-  const controlContext: ControlContext = { ...context, panels, horizontalSelectors: visibility.horizontalSelectors };
+  const controlContext: ControlContext = {
+    ...context,
+    panels,
+    horizontalSelectors: visibility.horizontalSelectors,
+  };
   let currentState: OEMWidgetState | null = null;
   const handleOutsidePointer = (event: PointerEvent) => {
-    if (expandedPanel && event.target instanceof Node && !expandedPanel.contains(event.target)) panels.collapseAll();
+    if (expandedPanel && event.target instanceof Node && !expandedPanel.contains(event.target))
+      panels.collapseAll();
   };
   if (hasSwitches) document.addEventListener('pointerdown', handleOutsidePointer, true);
-  const observer = !hasSwitches || typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
-    if (currentState) for (const component of components) component.sync(currentState);
-  });
+  const observer =
+    !hasSwitches || typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => {
+          if (currentState) for (const component of components) component.sync(currentState);
+        });
   observer?.observe(root);
 
   const destroy = () => {

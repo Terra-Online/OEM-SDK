@@ -1,4 +1,16 @@
-import type { OEMCoordinateSnapshot, OEMScreenPosition, OEMBoundarySource, OEMGameXZPosition, OEMManifest, OEMMapPosition, OEMPoint, OEMPointFilter, OEMPosition, OEMResources, OEMView } from '@opendfieldmap/core';
+import type {
+  OEMCoordinateSnapshot,
+  OEMScreenPosition,
+  OEMBoundarySource,
+  OEMGameXZPosition,
+  OEMManifest,
+  OEMMapPosition,
+  OEMPoint,
+  OEMPointFilter,
+  OEMPosition,
+  OEMResources,
+  OEMView,
+} from '@opendfieldmap/core';
 
 /** Optional static layers controlled independently by the host. */
 export interface OEMFeatures {
@@ -58,7 +70,8 @@ export interface OEMMapClick extends OEMCoordinateSnapshot {
   /** Compatibility name for gamePosition; null when conversion is not reliable. */
   readonly game: Readonly<OEMGameXZPosition> | null;
 }
-export type OEMPointTarget = { source: 'published'; point: OEMPoint } | { source: 'custom'; point: OEMCustomPoint };
+export type OEMPointTarget =
+  { source: 'published'; point: OEMPoint } | { source: 'custom'; point: OEMCustomPoint };
 export type OEMPointInteraction = OEMPointTarget & {
   coordinates: OEMCoordinateSnapshot;
   trigger: 'pointer' | 'keyboard';
@@ -67,10 +80,15 @@ export type OEMPointActivation = OEMPointInteraction & {
   readonly defaultPrevented: boolean;
   preventDefault(): void;
 };
-export interface OEMCommandOptions { signal?: AbortSignal }
-export interface OEMInteractionLocks { lockDrag?: boolean; lockZoom?: boolean }
-/** Flat configuration remains supported; grouping is a separate migration. */
-export interface OEMMapConfig extends OEMInteractionLocks {
+export interface OEMCommandOptions {
+  signal?: AbortSignal;
+}
+export interface OEMInteractionLocks {
+  lockDrag?: boolean;
+  lockZoom?: boolean;
+}
+/** Legacy flat configuration remains a supported input contract. */
+export interface OEMMapFlatConfig extends OEMInteractionLocks {
   region?: string;
   subregion?: string | null;
   floor?: string;
@@ -83,8 +101,19 @@ export interface OEMMapConfig extends OEMInteractionLocks {
   customPoints?: readonly OEMCustomPoint[];
   customPointsUrl?: string;
   zoom?: number;
-  center?: { x: number; z: number };
+  center?: { space?: 'pixel'; x: number; z: number };
   theme?: 'light' | 'dark';
+}
+export type OEMViewConfig = Pick<OEMMapFlatConfig, 'region' | 'subregion' | 'floor' | 'zoom' | 'center'>;
+export type OEMLayerConfig = Pick<
+  OEMMapFlatConfig,
+  'locale' | 'markerTypes' | 'labels' | 'boundaries' | 'boundarySource' | 'markerClustering'
+>;
+/** Groups are optional. A defined flat field takes precedence over its grouped alias. */
+export interface OEMMapConfig extends OEMMapFlatConfig {
+  view?: OEMViewConfig;
+  layers?: OEMLayerConfig;
+  interaction?: OEMInteractionLocks;
 }
 export interface OEMMapState {
   regionId: string;
@@ -129,7 +158,9 @@ export interface OEMEvents {
   error: Error;
 }
 /** Controls whether a programmatic zoom uses Leaflet's native transition. */
-export interface OEMZoomOptions { animate?: boolean }
+export interface OEMZoomOptions {
+  animate?: boolean;
+}
 /**
  * The framework-agnostic OEM rendering kernel.
  *

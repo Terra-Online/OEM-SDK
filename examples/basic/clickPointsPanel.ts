@@ -78,7 +78,10 @@ export function createDemoClickPointsPanel(
   mode.setAttribute('role', 'radiogroup');
   mode.setAttribute('aria-label', 'Click point mode');
   const inputs = new Map<OEMClickPointMode, HTMLInputElement>();
-  for (const [value, label] of [['single', 'Single point'], ['multiple', 'Multiple points']] as const) {
+  for (const [value, label] of [
+    ['single', 'Single point'],
+    ['multiple', 'Multiple points'],
+  ] as const) {
     const choice = document.createElement('label');
     const input = document.createElement('input');
     input.type = 'radio';
@@ -107,9 +110,8 @@ export function createDemoClickPointsPanel(
   const setMode = (value: OEMClickPointMode): void => {
     const input = inputs.get(value);
     if (input) input.checked = true;
-    status.textContent = value === 'single'
-      ? 'Only the latest clicked point is kept.'
-      : 'Every clicked point is kept.';
+    status.textContent =
+      value === 'single' ? 'Only the latest clicked point is kept.' : 'Every clicked point is kept.';
   };
   setMode(initialMode);
 

@@ -97,7 +97,8 @@ export const createScaleControl = (context: ControlContext): Control & { element
     if (dragPointerId !== event.pointerId || dragStartY === null || dragStartZoom === null) return;
     event.preventDefault();
     const region = getOEMRegion(manifest, currentState.regionId);
-    const delta = ((dragStartY - event.clientY) / Math.max(1, track.getBoundingClientRect().height)) *
+    const delta =
+      ((dragStartY - event.clientY) / Math.max(1, track.getBoundingClientRect().height)) *
       (region.maxZoom - region.minZoom);
     const nextZoom = clamp(dragStartZoom + delta, region.minZoom, region.maxZoom);
     updateScale(nextZoom, region.minZoom, region.maxZoom);

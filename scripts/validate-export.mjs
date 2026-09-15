@@ -6,13 +6,24 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const SCHEMA_VERSION = 1;
 const publicRoot = path.join(root, 'public');
-const fail = (message) => { throw new Error(message); };
+const fail = (message) => {
+  throw new Error(message);
+};
 const warnings = [];
-const warn = (message) => { warnings.push(message); console.warn(`Warning: ${message}`); };
+const warn = (message) => {
+  warnings.push(message);
+  console.warn(`Warning: ${message}`);
+};
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const readJson = async (filename) => JSON.parse(await fs.readFile(filename, 'utf8'));
 const validatePath = (value) => {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('/oem/') || value.split('/').includes('..') || /^[a-z][a-z\d+.-]*:/i.test(value)) {
+  if (
+    typeof value !== 'string' ||
+    !value.startsWith('/') ||
+    value.startsWith('/oem/') ||
+    value.split('/').includes('..') ||
+    /^[a-z][a-z\d+.-]*:/i.test(value)
+  ) {
     fail(`Unsafe resource path: ${value}`);
   }
 };
@@ -25,11 +36,30 @@ const readRef = async (ref) => {
   return JSON.parse(bytes.toString());
 };
 const validateBoundaryCollection = (value, regionId, allowEmpty) => {
-  if (!value || !Number.isInteger(value.count) || !Array.isArray(value.boundaries) ||
-    value.count !== value.boundaries.length || (!allowEmpty && value.count === 0) ||
-    value.boundaries.some((boundary) => !boundary?.id || !Array.isArray(boundary.rings) ||
-      boundary.rings.some((ring) => !Array.isArray(ring) || ring.length < 3 || ring.some((position) =>
-        !position || Object.hasOwn(position, 'regionId') || !Number.isFinite(position.x) || !Number.isFinite(position.z))))) {
+  if (
+    !value ||
+    !Number.isInteger(value.count) ||
+    !Array.isArray(value.boundaries) ||
+    value.count !== value.boundaries.length ||
+    (!allowEmpty && value.count === 0) ||
+    value.boundaries.some(
+      (boundary) =>
+        !boundary?.id ||
+        !Array.isArray(boundary.rings) ||
+        boundary.rings.some(
+          (ring) =>
+            !Array.isArray(ring) ||
+            ring.length < 3 ||
+            ring.some(
+              (position) =>
+                !position ||
+                Object.hasOwn(position, 'regionId') ||
+                !Number.isFinite(position.x) ||
+                !Number.isFinite(position.z),
+            ),
+        ),
+    )
+  ) {
     fail(`Invalid boundary data: ${regionId}`);
   }
 };
@@ -44,13 +74,23 @@ const decodePoint = (raw, region, shardPath) => {
   const y = value.y ?? value.pos?.[2] ?? 0;
   const tier = value.tier ?? 0;
   const subregionId = value.subregId ?? path.basename(shardPath, '.json');
-  const transform = region.subregions.find((entry) => entry.id === subregionId)?.gameTransform ?? region.gameTransform;
+  const transform =
+    region.subregions.find((entry) => entry.id === subregionId)?.gameTransform ?? region.gameTransform;
   const scale = 2 ** region.maxNativeZoom;
   return {
-    id: String(value.id), regionId: region.id, subregionId, type: value.type ?? '', tier,
+    id: String(value.id),
+    regionId: region.id,
+    subregionId,
+    type: value.type ?? '',
+    tier,
     raw: { x: (x - transform.offsetX) / transform.scaleX, y, z: (z - transform.offsetZ) / transform.scaleZ },
-    position: { regionId: region.id, subregionId, x: x * scale, z: z * scale,
-      floorId: tier === 0 ? 'M' : `${tier < 0 ? 'B' : 'L'}${Math.abs(Math.trunc(tier))}` },
+    position: {
+      regionId: region.id,
+      subregionId,
+      x: x * scale,
+      z: z * scale,
+      floorId: tier === 0 ? 'M' : `${tier < 0 ? 'B' : 'L'}${Math.abs(Math.trunc(tier))}`,
+    },
   };
 };
 const validateFileRef = async (ref) => {
@@ -61,17 +101,25 @@ const validateFileRef = async (ref) => {
 };
 const walk = async (directory) => {
   const entries = await fs.readdir(directory, { withFileTypes: true });
-  return (await Promise.all(entries.map(async (entry) => {
-    const filename = path.join(directory, entry.name);
-    return entry.isDirectory() ? walk(filename) : [filename];
-  }))).flat();
+  return (
+    await Promise.all(
+      entries.map(async (entry) => {
+        const filename = path.join(directory, entry.name);
+        return entry.isDirectory() ? walk(filename) : [filename];
+      }),
+    )
+  ).flat();
 };
 
 const channel = await readJson(path.join(publicRoot, 'channels/stable.json'));
 const manifest = await readRef(channel.manifest);
-if (manifest.schemaVersion !== SCHEMA_VERSION || !/^\d+_\d+_\d+$/.test(manifest.gameVersion) ||
+if (
+  manifest.schemaVersion !== SCHEMA_VERSION ||
+  !/^\d+_\d+_\d+$/.test(manifest.gameVersion) ||
   !/^atlos-[0-9a-f]{7}$/.test(manifest.releaseId) ||
-  manifest.releaseId !== path.basename(path.dirname(channel.manifest.path))) fail('Channel and manifest release mismatch');
+  manifest.releaseId !== path.basename(path.dirname(channel.manifest.path))
+)
+  fail('Channel and manifest release mismatch');
 const releaseRoot = `${manifest.gameVersion}/${manifest.releaseId}`;
 const markerRoot = `/marker/${releaseRoot}`;
 const mapRoot = `/map/${releaseRoot}`;
@@ -82,10 +130,14 @@ const requirePath = (value, expected) => {
 const requirePrefix = (value, expected) => {
   if (!value.startsWith(`${expected}/`)) fail(`Unexpected versioned resource path: ${value}`);
 };
-if (Object.prototype.hasOwnProperty.call(manifest, 'attribution')) fail('Legacy attribution text must not be published');
-if (!manifest.controls?.[manifest.fallbackLocale]?.layerSelect ||
+if (Object.prototype.hasOwnProperty.call(manifest, 'attribution'))
+  fail('Legacy attribution text must not be published');
+if (
+  !manifest.controls?.[manifest.fallbackLocale]?.layerSelect ||
   !manifest.controls[manifest.fallbackLocale].brandName ||
-  !manifest.controls[manifest.fallbackLocale].termsOfService) fail('Fallback control messages are unavailable');
+  !manifest.controls[manifest.fallbackLocale].termsOfService
+)
+  fail('Fallback control messages are unavailable');
 await Promise.all((manifest.fonts ?? []).map((font) => validateFileRef(font)));
 if (manifest.fontLicense) await validateFileRef(manifest.fontLicense);
 await Promise.all((manifest.fontLicenses ?? []).map((license) => validateFileRef(license)));
@@ -106,31 +158,51 @@ for (const font of manifest.fonts ?? []) {
 }
 const exportedFontFamilies = new Set((manifest.fonts ?? []).map((font) => font.family));
 const novecentoFamilies = [...expectedFontFiles.keys()].filter((family) => family.startsWith('Novecento'));
-if (novecentoFamilies.some((family) => exportedFontFamilies.has(family)) &&
-  novecentoFamilies.some((family) => !exportedFontFamilies.has(family))) {
+if (
+  novecentoFamilies.some((family) => exportedFontFamilies.has(family)) &&
+  novecentoFamilies.some((family) => !exportedFontFamilies.has(family))
+) {
   warn('Novecento export is missing a script-specific Wide face');
 }
 requirePath(manifest.types.path, `${markerRoot}/type.json`);
 const types = await readRef(manifest.types);
-if (Object.hasOwn(types, '__unknown') || Object.values(types).some((type) =>
-  type.category?.main === 'unknown' || type.category?.sub === 'unknown')) fail('Unknown marker types must not be published');
+if (
+  Object.hasOwn(types, '__unknown') ||
+  Object.values(types).some((type) => type.category?.main === 'unknown' || type.category?.sub === 'unknown')
+)
+  fail('Unknown marker types must not be published');
 if (types.npc?.category?.main !== 'npc' || types.files?.category?.main !== 'files') {
   fail('Aggregated npc/files marker types are unavailable');
 }
-await Promise.all(Object.values(types).flatMap((type) => [type.icon, type.subIcon].filter(Boolean)).map(async (iconPath) => {
-  validatePath(iconPath);
-  requirePrefix(iconPath, '/marker/assets');
-  await fs.access(path.join(publicRoot, iconPath));
-}));
+await Promise.all(
+  Object.values(types)
+    .flatMap((type) => [type.icon, type.subIcon].filter(Boolean))
+    .map(async (iconPath) => {
+      validatePath(iconPath);
+      requirePrefix(iconPath, '/marker/assets');
+      await fs.access(path.join(publicRoot, iconPath));
+    }),
+);
 if (manifest.pointIndex) requirePath(manifest.pointIndex.path, `${markerRoot}/point-index.json`);
 const pointIndex = manifest.pointIndex ? await readRef(manifest.pointIndex) : {};
 const localeEntries = Object.entries(manifest.locales);
-if (!localeEntries.some(([locale]) => locale === manifest.fallbackLocale)) fail('Fallback locale is unavailable');
-if (localeEntries.some(([locale]) => {
-  const messages = manifest.controls[locale];
-  return !messages?.layerSelect || !messages.zoomIn || !messages.zoomOut || !messages.brandName || !messages.termsOfService;
-})) warn('A locale is missing control messages; clients will use the fallback locale');
-for (const [locale, ref] of localeEntries) requirePath(ref.path, `${markerRoot}/locales/${locale}/places.json`);
+if (!localeEntries.some(([locale]) => locale === manifest.fallbackLocale))
+  fail('Fallback locale is unavailable');
+if (
+  localeEntries.some(([locale]) => {
+    const messages = manifest.controls[locale];
+    return (
+      !messages?.layerSelect ||
+      !messages.zoomIn ||
+      !messages.zoomOut ||
+      !messages.brandName ||
+      !messages.termsOfService
+    );
+  })
+)
+  warn('A locale is missing control messages; clients will use the fallback locale');
+for (const [locale, ref] of localeEntries)
+  requirePath(ref.path, `${markerRoot}/locales/${locale}/places.json`);
 await Promise.all(localeEntries.map(([, ref]) => readRef(ref)));
 
 const ids = new Set();
@@ -143,21 +215,40 @@ for (const region of manifest.regions) {
   if (!region.locales?.[manifest.fallbackLocale]) fail(`Region has no fallback name: ${region.id}`);
   if (subregionIds.size !== region.subregions.length) fail(`Duplicate subregion ID in ${region.id}`);
   for (const subregion of region.subregions) {
-    if (subregion.bounds && (subregion.bounds.length !== 2 || subregion.bounds.flat().some((value) => !Number.isFinite(value)))) {
+    if (
+      subregion.bounds &&
+      (subregion.bounds.length !== 2 || subregion.bounds.flat().some((value) => !Number.isFinite(value)))
+    ) {
       fail(`Invalid subregion bounds: ${subregion.id}`);
     }
     if (region.subregions.length > 1 && !subregion.locales?.[manifest.fallbackLocale]?.name) {
       fail(`Subregion has no fallback name: ${subregion.id}`);
     }
-    if (subregion.gameTransform && (![subregion.gameTransform.scaleX, subregion.gameTransform.scaleZ,
-      subregion.gameTransform.offsetX, subregion.gameTransform.offsetZ].every(Number.isFinite) ||
-      subregion.gameTransform.scaleX === 0 || subregion.gameTransform.scaleZ === 0)) {
+    if (
+      subregion.gameTransform &&
+      (![
+        subregion.gameTransform.scaleX,
+        subregion.gameTransform.scaleZ,
+        subregion.gameTransform.offsetX,
+        subregion.gameTransform.offsetZ,
+      ].every(Number.isFinite) ||
+        subregion.gameTransform.scaleX === 0 ||
+        subregion.gameTransform.scaleZ === 0)
+    ) {
       fail(`Invalid subregion game transform: ${subregion.id}`);
     }
   }
-  if (!region.gameTransform || ![region.gameTransform.scaleX, region.gameTransform.scaleZ,
-    region.gameTransform.offsetX, region.gameTransform.offsetZ].every(Number.isFinite) ||
-    region.gameTransform.scaleX === 0 || region.gameTransform.scaleZ === 0) {
+  if (
+    !region.gameTransform ||
+    ![
+      region.gameTransform.scaleX,
+      region.gameTransform.scaleZ,
+      region.gameTransform.offsetX,
+      region.gameTransform.offsetZ,
+    ].every(Number.isFinite) ||
+    region.gameTransform.scaleX === 0 ||
+    region.gameTransform.scaleZ === 0
+  ) {
     fail(`Invalid region game transform: ${region.id}`);
   }
   for (const floor of region.floors) requirePrefix(floor.tileTemplate, `${tileRootPath}/${region.id}`);
@@ -180,18 +271,26 @@ for (const region of manifest.regions) {
     const points = rawPoints.map((point) => decodePoint(point, region, ref.path)).filter(Boolean);
     for (const point of points) {
       if (ids.has(point.id)) fail(`Duplicate point ID: ${point.id}`);
-      if (!/^\d+$/.test(point.id) || BigInt(point.id) >= (1n << 36n)) fail(`Point ID cannot use an OEM short link: ${point.id}`);
+      if (!/^\d+$/.test(point.id) || BigInt(point.id) >= 1n << 36n)
+        fail(`Point ID cannot use an OEM short link: ${point.id}`);
       ids.add(point.id);
       pointCount += 1;
       if (point.regionId !== region.id) fail(`Point region mismatch: ${point.id}`);
-      if (!subregionIds.has(point.subregionId)) fail(`Point subregion missing: ${point.id}/${point.subregionId}`);
+      if (!subregionIds.has(point.subregionId))
+        fail(`Point subregion missing: ${point.id}/${point.subregionId}`);
       if (!types[point.type]) fail(`Point type missing: ${point.type}`);
-      if (!floorIds.has(point.position.floorId)) fail(`Point floor missing: ${point.id}/${point.position.floorId}`);
-      if (![point.raw.x, point.raw.y, point.raw.z, point.position.x, point.position.z].every(Number.isFinite)) fail(`Point coordinates invalid: ${point.id}`);
-      const transform = region.subregions.find((subregion) => subregion.id === point.subregionId)?.gameTransform ?? region.gameTransform;
+      if (!floorIds.has(point.position.floorId))
+        fail(`Point floor missing: ${point.id}/${point.position.floorId}`);
+      if (![point.raw.x, point.raw.y, point.raw.z, point.position.x, point.position.z].every(Number.isFinite))
+        fail(`Point coordinates invalid: ${point.id}`);
+      const transform =
+        region.subregions.find((subregion) => subregion.id === point.subregionId)?.gameTransform ??
+        region.gameTransform;
       const scale = 2 ** region.maxNativeZoom;
-      if (Math.abs(point.position.x / scale - (point.raw.x * transform.scaleX + transform.offsetX)) > 1e-5 ||
-        Math.abs(point.position.z / scale - (point.raw.z * transform.scaleZ + transform.offsetZ)) > 1e-5) {
+      if (
+        Math.abs(point.position.x / scale - (point.raw.x * transform.scaleX + transform.offsetX)) > 1e-5 ||
+        Math.abs(point.position.z / scale - (point.raw.z * transform.scaleZ + transform.offsetZ)) > 1e-5
+      ) {
         fail(`Point coordinate transform mismatch: ${point.id}`);
       }
       if (pointIndex[point.id] !== ref.path) fail(`Point index mismatch: ${point.id}`);
@@ -203,14 +302,19 @@ for (const region of manifest.regions) {
       const floor = region.floors.find((entry) => entry.id === floorId);
       const template = floor.tileTemplate;
       const versionRows = floor.tileVersions?.[zoom] ?? {};
-      if (Object.keys(versionRows).length !== Object.keys(rows).length) fail(`Tile version rows mismatch: ${region.id}/${floorId}/${zoom}`);
+      if (Object.keys(versionRows).length !== Object.keys(rows).length)
+        fail(`Tile version rows mismatch: ${region.id}/${floorId}/${zoom}`);
       for (const [tileY, ranges] of Object.entries(rows)) {
-        if (ranges.length % 2 !== 0) fail(`Invalid coverage ranges: ${region.id}/${floorId}/${zoom}/${tileY}`);
+        if (ranges.length % 2 !== 0)
+          fail(`Invalid coverage ranges: ${region.id}/${floorId}/${zoom}/${tileY}`);
         const versions = versionRows[tileY] ?? [];
         let versionIndex = 0;
         for (let index = 0; index < ranges.length; index += 2) {
           for (let tileX = ranges[index]; tileX <= ranges[index + 1]; tileX += 1) {
-            const tilePath = template.replace('{z}', zoom).replace('{x}', String(tileX)).replace('{y}', tileY);
+            const tilePath = template
+              .replace('{z}', zoom)
+              .replace('{x}', String(tileX))
+              .replace('{y}', tileY);
             validatePath(tilePath);
             const tileBytes = await fs.readFile(path.join(publicRoot, tilePath));
             if (versions[versionIndex] !== hash(tileBytes).slice(0, 7)) {
@@ -220,7 +324,8 @@ for (const region of manifest.regions) {
             coveredTiles += 1;
           }
         }
-        if (versions.length !== versionIndex) fail(`Tile version count mismatch: ${region.id}/${floorId}/${zoom}/${tileY}`);
+        if (versions.length !== versionIndex)
+          fail(`Tile version count mismatch: ${region.id}/${floorId}/${zoom}/${tileY}`);
       }
     }
   }
@@ -229,16 +334,21 @@ if (Object.keys(pointIndex).length !== pointCount) fail('Point index cardinality
 
 const tileRoot = path.join(publicRoot, tileRootPath);
 const tileFiles = (await walk(tileRoot)).filter((filename) => filename.endsWith('.webp'));
-if (tileFiles.length !== coveredTiles) fail(`Tile coverage mismatch: ${tileFiles.length} files, ${coveredTiles} indexed`);
-const tileIndex = await Promise.all(tileFiles.map(async (filename) => {
-  const [regionId, zoom, tileX, tileName] = path.relative(tileRoot, filename).split(path.sep);
-  return { relative: `${regionId}/${zoom}/${tileX}_${tileName}`, hash: hash(await fs.readFile(filename)) };
-}));
+if (tileFiles.length !== coveredTiles)
+  fail(`Tile coverage mismatch: ${tileFiles.length} files, ${coveredTiles} indexed`);
+const tileIndex = await Promise.all(
+  tileFiles.map(async (filename) => {
+    const [regionId, zoom, tileX, tileName] = path.relative(tileRoot, filename).split(path.sep);
+    return { relative: `${regionId}/${zoom}/${tileX}_${tileName}`, hash: hash(await fs.readFile(filename)) };
+  }),
+);
 tileIndex.sort((left, right) => left.relative.localeCompare(right.relative));
 const tileContentHash = hash(JSON.stringify(tileIndex));
 for (const namespace of ['tiles', 'marker', 'map']) {
   const versions = await fs.readdir(path.join(publicRoot, namespace), { withFileTypes: true });
-  const versionDirectories = versions.filter((entry) => entry.isDirectory() && entry.name !== 'assets').map((entry) => entry.name);
+  const versionDirectories = versions
+    .filter((entry) => entry.isDirectory() && entry.name !== 'assets')
+    .map((entry) => entry.name);
   if (!versionDirectories.includes(manifest.gameVersion)) {
     fail(`Missing ${namespace} version directory: ${manifest.gameVersion}`);
   }
@@ -247,7 +357,9 @@ for (const namespace of ['tiles', 'marker', 'map']) {
   }
 }
 for (const namespace of ['marker', 'map']) {
-  const releases = await fs.readdir(path.join(publicRoot, namespace, manifest.gameVersion), { withFileTypes: true });
+  const releases = await fs.readdir(path.join(publicRoot, namespace, manifest.gameVersion), {
+    withFileTypes: true,
+  });
   const versionReleases = releases.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
   if (!versionReleases.includes(manifest.releaseId)) {
     fail(`Missing ${namespace} release directory: ${manifest.releaseId}`);
@@ -267,23 +379,45 @@ if (releaseDirectories.length > 1) {
 }
 
 const report = await readJson(path.join(root, 'artifacts/export-report.json'));
-if (report.releaseId !== manifest.releaseId || report.gameVersion !== manifest.gameVersion || report.tileContentHash !== tileContentHash ||
-  report.tileCount !== tileFiles.length || report.pointCount !== pointCount || report.typeCount !== Object.keys(types).length ||
-  !report.sourceReadOnly || report.cloudflareChanges) {
+if (
+  report.releaseId !== manifest.releaseId ||
+  report.gameVersion !== manifest.gameVersion ||
+  report.tileContentHash !== tileContentHash ||
+  report.tileCount !== tileFiles.length ||
+  report.pointCount !== pointCount ||
+  report.typeCount !== Object.keys(types).length ||
+  !report.sourceReadOnly ||
+  report.cloudflareChanges
+) {
   fail('Export report does not match validated content');
 }
 if (report.missingIcons?.length) warn(`Unresolved Atlos icons remain: ${report.missingIcons.join(', ')}`);
-const expectedExclusions = new Map([
-  ['2800000983', 'missing-type'],
-]);
+const expectedExclusions = new Map([['2800000983', 'missing-type']]);
 for (const excluded of report.excludedPoints ?? []) {
   if (excluded.type === 'cv_wall') expectedExclusions.set(excluded.id, 'unsupported-collision-volume');
-  if (expectedExclusions.get(excluded.id) !== excluded.reason) fail(`Unexpected excluded marker point: ${excluded.id}`);
+  if (expectedExclusions.get(excluded.id) !== excluded.reason)
+    fail(`Unexpected excluded marker point: ${excluded.id}`);
   expectedExclusions.delete(excluded.id);
 }
-if (expectedExclusions.size || report.excludedPoints?.length !== 2) warn('Marker exclusion set differs from the historical baseline');
+if (expectedExclusions.size || report.excludedPoints?.length !== 2)
+  warn('Marker exclusion set differs from the historical baseline');
 const novecentoFontsIncluded = Boolean(manifest.fonts?.some((font) => font.family.startsWith('Novecento')));
-if (report.novecentoFontsIncluded !== novecentoFontsIncluded) fail('Font export report does not match manifest');
+if (report.novecentoFontsIncluded !== novecentoFontsIncluded)
+  fail('Font export report does not match manifest');
 
-console.log(JSON.stringify({ releaseId: manifest.releaseId, gameVersion: manifest.gameVersion, regions: manifest.regions.length,
-  locales: localeEntries.length, points: pointCount, tiles: tileFiles.length, cloudflareChanges: false, warnings: warnings.length }, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      releaseId: manifest.releaseId,
+      gameVersion: manifest.gameVersion,
+      regions: manifest.regions.length,
+      locales: localeEntries.length,
+      points: pointCount,
+      tiles: tileFiles.length,
+      cloudflareChanges: false,
+      warnings: warnings.length,
+    },
+    null,
+    2,
+  ),
+);

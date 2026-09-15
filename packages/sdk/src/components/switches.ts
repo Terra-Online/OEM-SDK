@@ -1,6 +1,6 @@
-import { getOEMRegion } from '@opendfieldmap/core';
+import { getOEMRegion, getOEMDefaultFloor } from '@opendfieldmap/core';
 import type { OEMRegion, OEMSubregion } from '@opendfieldmap/core';
-import { LAYER_ICON, REGION_ICONS } from '../icons';
+import { LAYER_ICON, REGION_ICONS, GENERIC_REGION_ICON } from '../icons';
 import type { OEMFloorId, OEMRegionSelector, OEMWidgetState } from '../types';
 import { createButton, getMessages, setLabel } from './types';
 import type { Control, ControlContext } from './types';
@@ -25,10 +25,12 @@ const bindPersistentPanel = (owner: HTMLElement, context: ControlContext): void 
     if (event.pointerType === 'touch' || event.pointerType === 'pen') context.panels.expand(owner);
   });
   owner.addEventListener('focusin', () => {
-    if (owner.matches(':focus-visible') || owner.querySelector(':focus-visible')) context.panels.expand(owner);
+    if (owner.matches(':focus-visible') || owner.querySelector(':focus-visible'))
+      context.panels.expand(owner);
   });
   owner.addEventListener('focusout', (event) => {
-    if (!(event.relatedTarget instanceof Node) || !owner.contains(event.relatedTarget)) context.panels.collapse(owner);
+    if (!(event.relatedTarget instanceof Node) || !owner.contains(event.relatedTarget))
+      context.panels.collapse(owner);
   });
 };
 
@@ -53,12 +55,15 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
   if (!context.horizontalSelectors) element.append(label);
   element.append(indicator);
 
-  const controls = new Map<string, {
-    region: OEMRegion;
-    button: HTMLDivElement;
-    subregions: Map<string, { data: OEMSubregion; button: HTMLButtonElement }>;
-    subregionIndicator?: HTMLDivElement;
-  }>();
+  const controls = new Map<
+    string,
+    {
+      region: OEMRegion;
+      button: HTMLDivElement;
+      subregions: Map<string, { data: OEMSubregion; button: HTMLButtonElement }>;
+      subregionIndicator?: HTMLDivElement;
+    }
+  >();
 
   for (const region of manifest.regions) {
     const regionButton = createSwitchAction('switchItem regionEntry');
@@ -66,13 +71,18 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
     if (region.subregions.length > 1) bindPersistentPanel(regionButton, context);
     const icon = document.createElement('span');
     icon.className = 'switchIcon';
-    const markup = REGION_ICONS[region.id];
-    if (!markup) throw new Error(`Missing Atlos region icon: ${region.id}`);
+    const markup = REGION_ICONS[region.id] ?? GENERIC_REGION_ICON;
     icon.innerHTML = markup;
     regionButton.append(icon);
     const selectRegion = () => {
       const target = region.initialView;
-      apply({ region: region.id as OEMRegionSelector, subregion: null, floor: 'M', center: { x: target.x, z: target.z }, zoom: target.zoom });
+      apply({
+        region: region.id as OEMRegionSelector,
+        subregion: null,
+        floor: getOEMDefaultFloor(region),
+        center: { x: target.x, z: target.z },
+        zoom: target.zoom,
+      });
     };
     regionButton.addEventListener('click', selectRegion);
     regionButton.addEventListener('keydown', (event) => {
@@ -115,7 +125,12 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
       panel.append(list);
       regionButton.append(panel);
     }
-    controls.set(region.id, { region, button: regionButton, subregions: subregionControls, subregionIndicator });
+    controls.set(region.id, {
+      region,
+      button: regionButton,
+      subregions: subregionControls,
+      subregionIndicator,
+    });
     element.append(regionButton);
   }
 
@@ -127,11 +142,15 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
       if (nextKey !== stateKey) {
         stateKey = nextKey;
         for (const [regionId, control] of controls) {
-          const regionName = control.region.locales[state.locale] ?? control.region.locales[manifest.fallbackLocale] ?? control.region.name;
+          const regionName =
+            control.region.locales[state.locale] ??
+            control.region.locales[manifest.fallbackLocale] ??
+            control.region.name;
           control.button.classList.toggle('selected', regionId === state.regionId);
           setLabel(control.button, regionName);
           for (const [subregionId, subregion] of control.subregions) {
-            const localized = subregion.data.locales?.[state.locale] ?? subregion.data.locales?.[manifest.fallbackLocale];
+            const localized =
+              subregion.data.locales?.[state.locale] ?? subregion.data.locales?.[manifest.fallbackLocale];
             subregion.button.textContent = localized?.short ?? subregion.data.key;
             setLabel(subregion.button, localized?.name ?? subregion.data.key);
             subregion.button.classList.toggle('selected', subregionId === state.subregionId);
@@ -196,7 +215,9 @@ export const createLayerControl = (context: ControlContext): Control & { element
         currentRegion = region.id;
         floorButtons.clear();
         list.replaceChildren(indicator);
-        const floors = [...region.floors].sort((left, right) => FLOOR_ORDER.indexOf(left.id) - FLOOR_ORDER.indexOf(right.id));
+        const floors = [...region.floors].sort(
+          (left, right) => FLOOR_ORDER.indexOf(left.id) - FLOOR_ORDER.indexOf(right.id),
+        );
         element.hidden = floors.length <= 1;
         for (const floor of floors) {
           const button = createButton('selectionItem floorItem');

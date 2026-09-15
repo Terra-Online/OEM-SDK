@@ -1,8 +1,15 @@
-import { getOEMRegion, normalizeOEMLocale, invalid } from '@opendfieldmap/core';
+import { getOEMRegion, getOEMDefaultFloor, normalizeOEMLocale, invalid } from '@opendfieldmap/core';
 import type { OEMManifest, OEMRegion, OEMSubregion } from '@opendfieldmap/core';
 import type { OEMMapConfig, OEMMapState } from './types';
+import {
+  flattenOEMMapConfig,
+  OEM_MAP_DEFAULTS,
+  OEM_MAP_CONFIG_FIELDS,
+  OEM_MAP_CONFIG_KEYS,
+  equalOEMConfigValue,
+} from './configSpec';
 
-const REGION_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+export const OEM_REGION_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   VL: 'Valley_4',
   WL: 'Wuling',
   DJ: 'Dijiang',
@@ -11,33 +18,76 @@ const REGION_ALIASES: Readonly<Record<string, string>> = Object.freeze({
 
 /** Validate the entire patch before cloning it or touching a live instance. */
 export const validateConfig = (config: OEMMapConfig): void => {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) invalid('options', 'Expected an object');
-  for (const key of ['region', 'floor', 'locale', 'customPointsUrl'] as const) {
-    if (config[key] !== undefined && (typeof config[key] !== 'string' || !config[key]!.trim())) invalid(`options.${key}`, 'Expected a non-empty string');
+  config = flattenOEMMapConfig(config);
+  for (const key of OEM_MAP_CONFIG_KEYS) {
+    const value = config[key];
+    if (value === undefined) continue;
+    const path = `options.${key}`;
+    switch (OEM_MAP_CONFIG_FIELDS[key].kind) {
+      case 'string':
+        if (typeof value !== 'string' || !value.trim()) invalid(path, 'Expected a non-empty string');
+        break;
+      case 'nullableString':
+        if (value !== null && typeof value !== 'string') invalid(path, 'Expected a string or null');
+        break;
+      case 'boolean':
+        if (typeof value !== 'boolean') invalid(path, 'Expected boolean');
+        break;
+      case 'number':
+        if (!Number.isFinite(value)) invalid(path, 'Expected a finite number');
+        break;
+      case 'theme':
+        if (value !== 'light' && value !== 'dark') invalid(path, 'Unknown official theme');
+        break;
+      case 'boundarySource':
+        if (value !== 'oem' && value !== 'game') invalid(path, 'Expected oem or game');
+        break;
+      case 'center': {
+        const center = value as OEMMapConfig['center'];
+        if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.z))
+          invalid(path, 'Center coordinates must be finite');
+        if (center.space !== undefined && center.space !== 'pixel')
+          invalid(`${path}.space`, 'Center uses published pixels');
+        break;
+      }
+      case 'markers':
+        if (
+          value !== false &&
+          value !== '*' &&
+          (!Array.isArray(value) || value.some((item) => typeof item !== 'string'))
+        )
+          invalid(path, 'Expected type keys, * or false');
+        break;
+      case 'points': {
+        if (!Array.isArray(value)) invalid(path, 'Expected an array');
+        value.forEach((point, index) => {
+          if (!point || typeof point !== 'object' || !point.position || typeof point.position !== 'object')
+            invalid(`${path}[${index}]`, 'Expected a point with a position');
+        });
+        break;
+      }
+    }
   }
-  if (config.subregion !== undefined && config.subregion !== null && typeof config.subregion !== 'string') invalid('options.subregion', 'Expected a string or null');
-  for (const key of ['labels', 'boundaries', 'markerClustering', 'lockDrag', 'lockZoom'] as const) {
-    if (config[key] !== undefined && typeof config[key] !== 'boolean') invalid(`options.${key}`, 'Expected boolean');
-  }
-  if (config.theme !== undefined && config.theme !== 'light' && config.theme !== 'dark') invalid('options.theme', 'Unknown official theme');
-  if (config.zoom !== undefined && !Number.isFinite(config.zoom)) invalid('options.zoom', 'Zoom must be finite');
-  if (config.center !== undefined && (!config.center || !Number.isFinite(config.center.x) || !Number.isFinite(config.center.z))) invalid('options.center', 'Center coordinates must be finite');
-  if (config.markerTypes !== undefined && config.markerTypes !== false && config.markerTypes !== '*' &&
-    (!Array.isArray(config.markerTypes) || config.markerTypes.some(value => typeof value !== 'string'))) invalid('options.markerTypes', 'Expected type keys, * or false');
-  if (config.customPoints !== undefined && !Array.isArray(config.customPoints)) invalid('options.customPoints', 'Expected an array');
-  config.customPoints?.forEach((point, index) => { if (!point || typeof point !== 'object' || !point.position || typeof point.position !== 'object') invalid(`options.customPoints[${index}]`, 'Expected a point with a position'); });
-  if (config.customPoints !== undefined && config.customPointsUrl !== undefined) invalid('options.customPoints', 'Pass either customPoints or customPointsUrl, not both');
+  if (config.customPoints !== undefined && config.customPointsUrl !== undefined)
+    invalid('options.customPoints', 'Pass either customPoints or customPointsUrl, not both');
 };
 
-export const cloneConfig = (config: OEMMapConfig): OEMMapConfig => ({
-  ...config,
-  markerTypes: Array.isArray(config.markerTypes) ? [...config.markerTypes] : config.markerTypes,
-  customPoints: config.customPoints?.map((point) => ({ ...point, position: { ...point.position } })),
-  center: config.center ? { ...config.center } : config.center,
-});
+export const cloneConfig = (input: OEMMapConfig): OEMMapConfig => {
+  const config = flattenOEMMapConfig(input);
+  return {
+    ...config,
+    markerTypes: Array.isArray(config.markerTypes) ? [...config.markerTypes] : config.markerTypes,
+    customPoints: config.customPoints?.map((point) => ({ ...point, position: { ...point.position } })),
+    center: config.center ? { ...config.center } : config.center,
+  };
+};
 
 export const resolveRegionId = (manifest: OEMManifest, value?: string): string => {
-  const requested = value ? REGION_ALIASES[value.toUpperCase()] ?? value : manifest.defaultRegionId;
+  const requested = value
+    ? manifest.regions.some((region) => region.id === value)
+      ? value
+      : (OEM_REGION_ALIASES[value.toUpperCase()] ?? value)
+    : manifest.defaultRegionId;
   return getOEMRegion(manifest, requested).id as string;
 };
 
@@ -70,11 +120,14 @@ export const getPreset = (region: OEMRegion, subregion?: OEMSubregion) => {
 };
 
 export const normalizeState = (input: OEMMapConfig, manifest: OEMManifest): OEMMapState => {
+  input = flattenOEMMapConfig(input);
   validateConfig(input);
   let regionId = resolveRegionId(manifest, input.region);
   const subregionId = input.subregion?.trim() || null;
   if (subregionId) {
-    const owner = manifest.regions.find((region) => region.subregions.some((subregion) => subregion.id === subregionId));
+    const owner = manifest.regions.find((region) =>
+      region.subregions.some((subregion) => subregion.id === subregionId),
+    );
     if (!owner) throw new Error(`Unknown OEM subregion: ${subregionId}`);
     if (input.region && owner.id !== regionId) {
       throw new Error(`OEM subregion ${subregionId} does not belong to ${regionId}`);
@@ -83,10 +136,8 @@ export const normalizeState = (input: OEMMapConfig, manifest: OEMManifest): OEMM
   }
 
   const region = getOEMRegion(manifest, regionId);
-  const subregion = subregionId
-    ? region.subregions.find((entry) => entry.id === subregionId)
-    : undefined;
-  const floorId = (input.floor ?? 'M') as string;
+  const subregion = subregionId ? region.subregions.find((entry) => entry.id === subregionId) : undefined;
+  const floorId = input.floor ?? getOEMDefaultFloor(region);
   if (!region.floors.some((floor) => floor.id === floorId)) {
     throw new Error(`Unknown OEM floor ${floorId} in ${regionId}`);
   }
@@ -96,21 +147,26 @@ export const normalizeState = (input: OEMMapConfig, manifest: OEMManifest): OEMM
     throw new Error('OEM Widget center coordinates must be finite');
   }
   const preset = getPreset(region, subregion);
-  const requestedLocale = input.locale ?? (typeof navigator === 'undefined' ? manifest.fallbackLocale : navigator.language);
+  const requestedLocale =
+    input.locale ?? (typeof navigator === 'undefined' ? manifest.fallbackLocale : navigator.language);
 
   return {
     regionId,
     subregionId,
     floorId,
-    locale: normalizeOEMLocale(requestedLocale, Object.keys(manifest.locales), manifest.fallbackLocale) as string,
+    locale: normalizeOEMLocale(
+      requestedLocale,
+      Object.keys(manifest.locales),
+      manifest.fallbackLocale,
+    ) as string,
     markerTypes: normalizeMarkerTypes(input.markerTypes),
-    labels: input.labels ?? true,
-    boundaries: input.boundaries ?? false,
+    labels: input.labels ?? OEM_MAP_DEFAULTS.labels,
+    boundaries: input.boundaries ?? OEM_MAP_DEFAULTS.boundaries,
     boundarySource: normalizeBoundarySource(input.boundarySource),
-    markerClustering: input.markerClustering ?? true,
-    theme: input.theme ?? 'light',
-    lockDrag: input.lockDrag ?? false,
-    lockZoom: input.lockZoom ?? false,
+    markerClustering: input.markerClustering ?? OEM_MAP_DEFAULTS.markerClustering,
+    theme: input.theme ?? OEM_MAP_DEFAULTS.theme,
+    lockDrag: input.lockDrag ?? OEM_MAP_DEFAULTS.lockDrag,
+    lockZoom: input.lockZoom ?? OEM_MAP_DEFAULTS.lockZoom,
     zoom: Math.max(region.minZoom, Math.min(region.maxZoom, input.zoom ?? preset.zoom)),
     center: {
       x: requestedCenter?.x ?? preset.center.x,
@@ -119,42 +175,65 @@ export const normalizeState = (input: OEMMapConfig, manifest: OEMManifest): OEMM
   };
 };
 
-export const toConfig = (state: OEMMapState): OEMMapConfig => ({
-  region: state.regionId,
-  subregion: state.subregionId,
-  floor: state.floorId,
-  locale: state.locale,
-  markerTypes: state.markerTypes,
-  labels: state.labels,
-  boundaries: state.boundaries,
-  boundarySource: state.boundarySource,
-  markerClustering: state.markerClustering,
-  theme: state.theme,
-  lockDrag: state.lockDrag,
-  lockZoom: state.lockZoom,
-  zoom: state.zoom,
-  center: { ...state.center },
-});
+export const toConfig = (state: OEMMapState): OEMMapConfig =>
+  Object.fromEntries(
+    OEM_MAP_CONFIG_KEYS.flatMap((key) => {
+      const field = OEM_MAP_CONFIG_FIELDS[key];
+      return 'state' in field ? [[key, state[field.state]]] : [];
+    }),
+  ) as OEMMapConfig;
 
 export const sameMarkers = (left: OEMMapState['markerTypes'], right: OEMMapState['markerTypes']): boolean =>
-  left === right || (left !== '*' && right !== '*' && left.length === right.length &&
+  left === right ||
+  (left !== '*' &&
+    right !== '*' &&
+    left.length === right.length &&
     left.every((marker, index) => marker === right[index]));
 
 export const sameState = (left: OEMMapState, right: OEMMapState): boolean =>
-  left.theme === right.theme && left.lockDrag === right.lockDrag && left.lockZoom === right.lockZoom &&
-  left.regionId === right.regionId &&
-  left.subregionId === right.subregionId &&
-  left.floorId === right.floorId &&
-  left.locale === right.locale &&
-  sameMarkers(left.markerTypes, right.markerTypes) &&
-  left.labels === right.labels &&
-  left.boundaries === right.boundaries &&
-  left.boundarySource === right.boundarySource &&
-  left.markerClustering === right.markerClustering &&
-  left.zoom === right.zoom &&
-  left.center.x === right.center.x &&
-  left.center.z === right.center.z;
+  OEM_MAP_CONFIG_KEYS.every((key) => {
+    const field = OEM_MAP_CONFIG_FIELDS[key];
+    return !('state' in field) || equalOEMConfigValue(left[field.state], right[field.state]);
+  });
 
 export const hasMarkers = (state: OEMMapState): boolean =>
   state.markerTypes === '*' || state.markerTypes.length > 0;
 
+/** Resolve dependent region/subregion presets before committing any runtime state. */
+export function resolveConfigUpdate(
+  previous: OEMMapState,
+  config: OEMMapConfig,
+  manifest: OEMManifest,
+): { changes: OEMMapConfig; next: OEMMapState } {
+  const changes = Object.fromEntries(
+    Object.entries(config).filter(([, value]) => value !== undefined),
+  ) as OEMMapConfig;
+  if (changes.subregion !== undefined) changes.subregion = changes.subregion?.trim() || null;
+  if (changes.subregion && changes.region === undefined) {
+    const owner = manifest.regions.find((region) =>
+      region.subregions.some((sub) => sub.id === changes.subregion),
+    );
+    if (!owner) invalid('options.subregion', 'Unknown subregion');
+    changes.region = owner.id;
+  }
+  const merged = { ...toConfig(previous), ...changes };
+  const regionId = resolveRegionId(manifest, changes.region ?? previous.regionId);
+  if (regionId !== previous.regionId) {
+    const preset = getPreset(getOEMRegion(manifest, regionId));
+    if (changes.floor === undefined) merged.floor = undefined;
+    if (changes.subregion === undefined) merged.subregion = null;
+    if (changes.center === undefined) merged.center = preset.center;
+    if (changes.zoom === undefined) merged.zoom = preset.zoom;
+  }
+  if (changes.subregion !== undefined && changes.subregion !== previous.subregionId) {
+    const region = getOEMRegion(manifest, regionId);
+    const preset = getPreset(
+      region,
+      region.subregions.find((sub) => sub.id === changes.subregion),
+    );
+    if (changes.center === undefined) merged.center = preset.center;
+    if (changes.zoom === undefined) merged.zoom = preset.zoom;
+  }
+  const next = normalizeState(merged, manifest);
+  return { changes, next };
+}

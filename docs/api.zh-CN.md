@@ -2,6 +2,8 @@
 
 语言：[English](api.md) · 简体中文 · [繁體中文（香港）](api.zh-HK.md)
 
+增量说明：[分组配置、动态控件、React ref／事件和兼容规则](config-governance.zh-CN.md)。旧扁平接口继续有效。
+
 ## `createOEMWidget`
 
 ```ts

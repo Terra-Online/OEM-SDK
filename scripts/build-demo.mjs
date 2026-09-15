@@ -15,18 +15,34 @@ const demoIcons = [
   'apple-touch-icon.png',
   'apple-touch-icon_dark.png',
 ];
-await Promise.all(demoIcons.map((filename) =>
-  fs.copyFile(path.join(root, 'demo', filename), path.join(root, 'dist', filename)),
-));
-await Promise.all(['_headers'].map((filename) =>
-  fs.copyFile(path.join(root, 'deploy', filename), path.join(root, 'dist', filename)),
-));
+await Promise.all(
+  demoIcons.map((filename) =>
+    fs.copyFile(path.join(root, 'demo', filename), path.join(root, 'dist', filename)),
+  ),
+);
+await Promise.all(
+  ['_headers'].map((filename) =>
+    fs.copyFile(path.join(root, 'deploy', filename), path.join(root, 'dist', filename)),
+  ),
+);
 await fs.mkdir(path.join(root, 'dist', 'demo', 'assets'), { recursive: true });
-await fs.copyFile(path.join(root, 'examples', 'basic', 'custom-points.json'), path.join(root, 'dist', 'demo', 'assets', 'custom-points.json'));
-await fs.copyFile(path.join(root, 'examples', 'assets', 'instance.webp'), path.join(root, 'dist', 'demo', 'assets', 'instance.webp'));
+await fs.copyFile(
+  path.join(root, 'examples', 'basic', 'custom-points.json'),
+  path.join(root, 'dist', 'demo', 'assets', 'custom-points.json'),
+);
+await fs.copyFile(
+  path.join(root, 'examples', 'assets', 'instance.webp'),
+  path.join(root, 'dist', 'demo', 'assets', 'instance.webp'),
+);
 await fs.mkdir(path.join(root, 'dist', 'assets'), { recursive: true });
-await fs.copyFile(path.join(root, 'examples', 'basic', 'custom-points.json'), path.join(root, 'dist', 'assets', 'custom-points.json'));
-await fs.copyFile(path.join(root, 'examples', 'assets', 'instance.webp'), path.join(root, 'dist', 'assets', 'instance.webp'));
+await fs.copyFile(
+  path.join(root, 'examples', 'basic', 'custom-points.json'),
+  path.join(root, 'dist', 'assets', 'custom-points.json'),
+);
+await fs.copyFile(
+  path.join(root, 'examples', 'assets', 'instance.webp'),
+  path.join(root, 'dist', 'assets', 'instance.webp'),
+);
 
 const dist = path.join(root, 'dist');
 for (const namespace of ['channels', 'releases', 'marker', 'map', 'tiles', 'fonts']) {
@@ -39,7 +55,9 @@ for (const namespace of ['channels', 'releases', 'marker', 'map', 'tiles', 'font
 }
 const demoAssets = path.join(dist, 'demo', 'assets');
 const scripts = (await fs.readdir(demoAssets)).filter((filename) => filename.endsWith('.js'));
-const scriptContents = await Promise.all(scripts.map((filename) => fs.readFile(path.join(demoAssets, filename), 'utf8')));
+const scriptContents = await Promise.all(
+  scripts.map((filename) => fs.readFile(path.join(demoAssets, filename), 'utf8')),
+);
 if (!scriptContents.some((contents) => contents.includes('https://data.opendfieldmap.org'))) {
   throw new Error('Demo build does not reference the production data origin');
 }

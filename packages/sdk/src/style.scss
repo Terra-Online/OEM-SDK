@@ -25,7 +25,9 @@
 
 .oemWidget *,
 .oemWidget *::before,
-.oemWidget *::after { box-sizing: border-box; }
+.oemWidget *::after {
+  box-sizing: border-box;
+}
 
 .oemWidget[data-theme='dark'] {
   --switchBg: #{rgba($grey-2, 0.3)};
@@ -68,10 +70,22 @@
 }
 
 @keyframes widgetLoading {
-  0% { transform: scaleX(0); transform-origin: left; }
-  45% { transform: scaleX(1); transform-origin: left; }
-  55% { transform: scaleX(1); transform-origin: right; }
-  100% { transform: scaleX(0); transform-origin: right; }
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  45% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  55% {
+    transform: scaleX(1);
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
 }
 
 .switchArea {
@@ -83,9 +97,14 @@
   flex-direction: column;
   gap: 0.5rem;
   pointer-events: auto;
-  font-family: 'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family:
+    'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist',
+    system-ui, sans-serif;
   font-variant-numeric: lining-nums;
-  font-feature-settings: 'lnum' 1, 'onum' 0, 'case' 1;
+  font-feature-settings:
+    'lnum' 1,
+    'onum' 0,
+    'case' 1;
 }
 
 .switchArea.horizontalSelectors {
@@ -144,7 +163,9 @@
   border-radius: 2px;
   background: var(--switchItem);
   filter: drop-shadow(0 0 2px rgba($black-0, 0.6));
-  font-family: 'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family:
+    'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist',
+    system-ui, sans-serif;
   line-height: 1;
 }
 
@@ -157,7 +178,9 @@
   text-shadow: 0 0 2px rgba($black-0, 0.6);
 }
 
-.switchLabel.layerLabel::after { content: 'LYR'; }
+.switchLabel.layerLabel::after {
+  content: 'LYR';
+}
 
 .switchLabel::before {
   content: '';
@@ -182,11 +205,15 @@
   border-left: 8px solid color.adjust($primary-accent-4, $lightness: -10%);
   transform: translateY(-50%);
   filter: drop-shadow(0 0 1px rgba($black-0, 0.8));
-  transition: transform 0.4s $presto-curve, opacity 0.3s ease;
+  transition:
+    transform 0.4s $presto-curve,
+    opacity 0.3s ease;
   pointer-events: none;
 }
 
-.switchIndicator.hidden { opacity: 0; }
+.switchIndicator.hidden {
+  opacity: 0;
+}
 
 .regionEntry {
   position: relative;
@@ -207,7 +234,10 @@
   background: var(--switchItem);
   box-shadow: 0 0 4px rgba($black-0, 0.6);
   cursor: pointer;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    box-shadow 0.3s ease,
+    color 0.3s ease;
 }
 
 .switchItem:hover,
@@ -287,13 +317,17 @@
 
 .floorItem,
 .subregionItem {
-  font-family: 'Novecento Wide Bold', 'Novecento Cyrillic DemiBold', 'Novecento Vietnamese DemiBold', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family:
+    'Novecento Wide Bold', 'Novecento Cyrillic DemiBold', 'Novecento Vietnamese DemiBold', 'HMSans_EN',
+    'Geist', system-ui, sans-serif;
   font-size: 1.1rem;
   font-weight: 700;
 }
 
 .floorList .switchIndicator,
-.subregionList .switchIndicator { left: 1.5px; }
+.subregionList .switchIndicator {
+  left: 1.5px;
+}
 
 .horizontalSelectors .switchIndicator {
   top: 1.5px;
@@ -336,10 +370,15 @@
   user-select: none;
   pointer-events: auto;
   font-variant-numeric: lining-nums;
-  font-feature-settings: 'lnum' 1, 'onum' 0, 'case' 1;
+  font-feature-settings:
+    'lnum' 1,
+    'onum' 0,
+    'case' 1;
 }
 
-.scaleDecoration { display: none; }
+.scaleDecoration {
+  display: none;
+}
 
 .scaleFrame {
   width: 1.5rem;
@@ -351,12 +390,18 @@
   border: 1.5px solid $white-1;
   border-radius: 4px;
   background: rgba($white-2, 0.35);
-  box-shadow: 0 0 2px 1px rgba($black-0, 0.4), inset 0 0 2px rgba($black-0, 0.2);
+  box-shadow:
+    0 0 2px 1px rgba($black-0, 0.4),
+    inset 0 0 2px rgba($black-0, 0.2);
   backdrop-filter: blur(1px) brightness(100%);
 }
 
-.zoomInFrame { margin-bottom: 6px; }
-.zoomOutFrame { margin-top: 6px; }
+.zoomInFrame {
+  margin-bottom: 6px;
+}
+.zoomOutFrame {
+  margin-top: 6px;
+}
 
 .zoomButton {
   width: calc(1rem + 1px);
@@ -367,7 +412,9 @@
   color: $white-1;
   background: $grey-1;
   box-shadow: 0 0 2px 1px rgba($black-0, 0.4);
-  font-family: 'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist', system-ui, sans-serif;
+  font-family:
+    'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist',
+    system-ui, sans-serif;
   font-size: 18px;
   line-height: 0;
   cursor: pointer;
@@ -381,7 +428,9 @@
   outline: 0;
 }
 
-.zoomButton:active { background: rgba($grey-1, 0.2); }
+.zoomButton:active {
+  background: rgba($grey-1, 0.2);
+}
 
 .zoomButton:disabled {
   opacity: 0.5;
@@ -398,7 +447,9 @@
   border: 2px solid $grey-1;
   border-radius: 4px;
   background: var(--scaleBg);
-  box-shadow: 0 0 2.5px 1px rgba($white-0, 0.6), inset 0 0 2px rgba($white-0, 0.3);
+  box-shadow:
+    0 0 2.5px 1px rgba($white-0, 0.6),
+    inset 0 0 2px rgba($white-0, 0.3);
   backdrop-filter: blur(10px);
   cursor: pointer;
   touch-action: none;
@@ -423,16 +474,34 @@
     0 calc(-1.5px * max(1, min(10, 1 / max(0.1, var(--scale))))) 4px 0.5px rgba($black-0, 0.2);
   transform: scaleY(var(--scale));
   transform-origin: bottom;
-  transition: transform 0.4s ease, box-shadow 0.1s ease;
+  transition:
+    transform 0.4s ease,
+    box-shadow 0.1s ease;
   pointer-events: none;
 }
 
 @container (width < 480px) {
-  .switchArea { top: 25%; left: 0.65rem; }
-  .switch { --itemSize: 2.25rem; --itemGap: 0.4rem; }
-  .switchLabel::after { font-size: 0.78rem; }
-  .switchLabel::before { border-width: 8px 8px 0; transform: translateY(7.5px); }
-  .switchIndicator { left: 2.5px; border-top-width: 5px; border-bottom-width: 5px; border-left-width: 6px; }
+  .switchArea {
+    top: 25%;
+    left: 0.65rem;
+  }
+  .switch {
+    --itemSize: 2.25rem;
+    --itemGap: 0.4rem;
+  }
+  .switchLabel::after {
+    font-size: 0.78rem;
+  }
+  .switchLabel::before {
+    border-width: 8px 8px 0;
+    transform: translateY(7.5px);
+  }
+  .switchIndicator {
+    left: 2.5px;
+    border-top-width: 5px;
+    border-bottom-width: 5px;
+    border-left-width: 6px;
+  }
   .horizontalSelectors .switchIndicator {
     top: 2.5px;
     left: 0;
@@ -441,14 +510,18 @@
     border-bottom-width: 0;
     border-left-width: 5px;
   }
-  .floorItem { font-size: 1rem; }
+  .floorItem {
+    font-size: 1rem;
+  }
   .scaleControl {
     top: 45%;
     right: 0;
     padding: 0;
     border-radius: 6px 0 0 6px;
   }
-  .scaleFrame { display: none; }
+  .scaleFrame {
+    display: none;
+  }
   .scaleDecoration {
     position: absolute;
     right: 0;
@@ -474,29 +547,48 @@
     padding: 4px;
     border: 0;
     border-radius: 6px 0 0 6px;
-    box-shadow: inset 0 0 2px rgba($white-0, 0.3), 0 0 3px 1px rgba($black-0, 0.3);
+    box-shadow:
+      inset 0 0 2px rgba($white-0, 0.3),
+      0 0 3px 1px rgba($black-0, 0.3);
     backdrop-filter: blur(4px);
     cursor: grab;
   }
-  .scaleTrack:active { cursor: grabbing; }
+  .scaleTrack:active {
+    cursor: grabbing;
+  }
   .scaleFill {
     width: calc(100% - 8px);
     height: calc(100% - 8px);
     margin: 4px;
     border-radius: 3px;
-    transition: transform 0.2s ease, box-shadow 0.1s ease;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.1s ease;
   }
-  .scaleControl.dragging .scaleFill { transition: box-shadow 0.1s ease; }
+  .scaleControl.dragging .scaleFill {
+    transition: box-shadow 0.1s ease;
+  }
 }
 
 @container (height < 560px) {
-  .switchArea { top: 0.65rem; }
-  .switch { --itemSize: 2.25rem; --itemGap: 0.35rem; }
-  .scaleControl { top: 50%; }
-  .scaleTrack { height: 7rem; }
+  .switchArea {
+    top: 0.65rem;
+  }
+  .switch {
+    --itemSize: 2.25rem;
+    --itemGap: 0.35rem;
+  }
+  .scaleControl {
+    top: 50%;
+  }
+  .scaleTrack {
+    height: 7rem;
+  }
 }
 
 @container (width < 220px), (height < 220px) {
   .switchArea,
-  .scaleControl { display: none; }
+  .scaleControl {
+    display: none;
+  }
 }

@@ -13,33 +13,40 @@ const apply = args.includes('--apply');
 const refreshPlan = args.includes('--refresh-plan');
 const confirmationIndex = args.indexOf('--confirm-release');
 const confirmedRelease = confirmationIndex >= 0 ? args[confirmationIndex + 1] : undefined;
-const localBuildConfig = JSON.parse(await fs.readFile(path.join(root, 'config/config.r2.json'), 'utf8'))?.web?.build;
+const localBuildConfig = JSON.parse(await fs.readFile(path.join(root, 'config/config.r2.json'), 'utf8'))?.web
+  ?.build;
 const localR2Config = localBuildConfig?.r2;
 if (!localR2Config?.bucket) throw new Error('R2 bucket is missing from config/config.r2.json');
 const accessKeyId = process.env.OEM_R2_ACCESS_KEY_ID ?? localR2Config.accessKeyId;
 const accessKeySecret = process.env.OEM_R2_ACCESS_KEY_SECRET ?? localR2Config.accessKeySecret;
 const endpointValue = process.env.OEM_R2_ENDPOINT ?? localR2Config.endpoint;
 
-const runCommand = (command, commandArgs, capture = false, env = process.env) => new Promise((resolve, reject) => {
-  const child = spawn(command, commandArgs, {
-    cwd: root,
-    env,
-    stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+const runCommand = (command, commandArgs, capture = false, env = process.env) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, commandArgs, {
+      cwd: root,
+      env,
+      stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+    });
+    let stdout = '';
+    let stderr = '';
+    if (capture) {
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+    }
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve({ stdout, stderr });
+      else
+        reject(new Error(`${path.basename(command)} exited with code ${code}${stderr ? `\n${stderr}` : ''}`));
+    });
   });
-  let stdout = '';
-  let stderr = '';
-  if (capture) {
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-  }
-  child.on('error', reject);
-  child.on('close', (code) => {
-    if (code === 0) resolve({ stdout, stderr });
-    else reject(new Error(`${path.basename(command)} exited with code ${code}${stderr ? `\n${stderr}` : ''}`));
-  });
-});
 const runWrangler = (wranglerArgs, capture = false) =>
   runCommand(process.execPath, [wrangler, ...wranglerArgs], capture);
 
@@ -67,10 +74,18 @@ if (confirmedRelease !== plan.releaseId) {
 }
 
 let endpoint;
-try { endpoint = new URL(endpointValue); } catch { throw new Error('Invalid R2 S3 endpoint in R2 configuration'); }
-if (endpoint.protocol !== 'https:' || !endpoint.hostname.endsWith('.r2.cloudflarestorage.com') ||
+try {
+  endpoint = new URL(endpointValue);
+} catch {
+  throw new Error('Invalid R2 S3 endpoint in R2 configuration');
+}
+if (
+  endpoint.protocol !== 'https:' ||
+  !endpoint.hostname.endsWith('.r2.cloudflarestorage.com') ||
   localR2Config.bucket !== plan.bucket ||
-  !accessKeyId || !accessKeySecret) {
+  !accessKeyId ||
+  !accessKeySecret
+) {
   throw new Error('R2 S3 credentials are missing or do not match the prepared bucket');
 }
 const remoteName = 'oempubsdk';
@@ -88,18 +103,31 @@ const runRclone = (rcloneArgs, capture = false) => runCommand('rclone', rcloneAr
 const commonRcloneArgs = [
   '--s3-no-check-bucket',
   '--ignore-times',
-  '--transfers', String(plan.concurrency), '--checkers', '32', '--fast-list',
-  '--stats', '10s', '--stats-one-line',
+  '--transfers',
+  String(plan.concurrency),
+  '--checkers',
+  '32',
+  '--fast-list',
+  '--stats',
+  '10s',
+  '--stats-one-line',
 ];
 await runRclone([
-  'copy', 'public', remoteRoot,
-  '--exclude', 'channels/stable.json',
-  '--header-upload', 'Cache-Control: public, max-age=31536000, immutable',
+  'copy',
+  'public',
+  remoteRoot,
+  '--exclude',
+  'channels/stable.json',
+  '--header-upload',
+  'Cache-Control: public, max-age=31536000, immutable',
   ...commonRcloneArgs,
 ]);
 await runRclone([
-  'copy', 'public/fonts', `${remoteRoot}/fonts`,
-  '--header-upload', 'Cache-Control: public, max-age=31536000, immutable',
+  'copy',
+  'public/fonts',
+  `${remoteRoot}/fonts`,
+  '--header-upload',
+  'Cache-Control: public, max-age=31536000, immutable',
   ...commonRcloneArgs,
 ]);
 
@@ -107,24 +135,38 @@ await runWrangler(['r2', 'bucket', 'cors', 'set', plan.bucket, '--file', localR2
 const domains = await runWrangler(['r2', 'bucket', 'domain', 'list', plan.bucket], true);
 if (!domains.stdout.includes(`domain:            ${plan.domain}`)) {
   await runWrangler([
-    'r2', 'bucket', 'domain', 'add', plan.bucket,
-    '--domain', plan.domain,
-    '--zone-id', plan.zoneId,
-    '--min-tls', localR2Config.minimumTlsVersion ?? '1.2',
+    'r2',
+    'bucket',
+    'domain',
+    'add',
+    plan.bucket,
+    '--domain',
+    plan.domain,
+    '--zone-id',
+    plan.zoneId,
+    '--min-tls',
+    localR2Config.minimumTlsVersion ?? '1.2',
     '--force',
   ]);
 }
 
 await runCommand(process.execPath, [path.join(root, 'scripts/validate-r2.mjs'), '--preflight']);
 await runRclone([
-  'copyto', 'public/channels/stable.json', `${remoteRoot}/channels/stable.json`,
+  'copyto',
+  'public/channels/stable.json',
+  `${remoteRoot}/channels/stable.json`,
   '--s3-no-check-bucket',
-  '--header-upload', 'Cache-Control: public, no-cache, must-revalidate',
+  '--header-upload',
+  'Cache-Control: public, no-cache, must-revalidate',
 ]);
 
 const localChannel = channel;
-const remoteChannel = await runRclone(['cat', `${remoteRoot}/channels/stable.json`, '--s3-no-check-bucket'], true);
+const remoteChannel = await runRclone(
+  ['cat', `${remoteRoot}/channels/stable.json`, '--s3-no-check-bucket'],
+  true,
+);
 const published = JSON.parse(remoteChannel.stdout);
-if (published.manifest?.path !== localChannel.manifest?.path) throw new Error('Published stable channel verification failed');
+if (published.manifest?.path !== localChannel.manifest?.path)
+  throw new Error('Published stable channel verification failed');
 await runCommand(process.execPath, [path.join(root, 'scripts/validate-r2.mjs')]);
 console.log(`Published ${plan.releaseId} to https://${plan.domain}/channels/stable.json`);

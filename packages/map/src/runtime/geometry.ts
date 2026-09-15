@@ -8,9 +8,13 @@ export const parseBoundaryCollection = (value: unknown, path: string): OEMBounda
   // Immutable releases predating the collection wrapper remain readable.
   const collection = Array.isArray(value)
     ? { count: value.length, boundaries: value }
-    : value as Partial<OEMBoundaryCollection> | null;
-  if (!collection || !Number.isInteger(collection.count) || !Array.isArray(collection.boundaries) ||
-    collection.count !== collection.boundaries.length) {
+    : (value as Partial<OEMBoundaryCollection> | null);
+  if (
+    !collection ||
+    !Number.isInteger(collection.count) ||
+    !Array.isArray(collection.boundaries) ||
+    collection.count !== collection.boundaries.length
+  ) {
     invalid(path, 'Invalid OEM boundary data');
   }
   return collection.boundaries as OEMBoundary[];
@@ -19,8 +23,12 @@ export const parseBoundaryCollection = (value: unknown, path: string): OEMBounda
 const pointOnSegment = (point: GeometryPoint, start: GeometryPoint, end: GeometryPoint): boolean => {
   const cross = (point.x - start.x) * (end.z - start.z) - (point.z - start.z) * (end.x - start.x);
   if (Math.abs(cross) > 1e-7) return false;
-  return point.x >= Math.min(start.x, end.x) - 1e-7 && point.x <= Math.max(start.x, end.x) + 1e-7 &&
-    point.z >= Math.min(start.z, end.z) - 1e-7 && point.z <= Math.max(start.z, end.z) + 1e-7;
+  return (
+    point.x >= Math.min(start.x, end.x) - 1e-7 &&
+    point.x <= Math.max(start.x, end.x) + 1e-7 &&
+    point.z >= Math.min(start.z, end.z) - 1e-7 &&
+    point.z <= Math.max(start.z, end.z) + 1e-7
+  );
 };
 
 const pointInRing = (point: GeometryPoint, ring: readonly GeometryPoint[]): boolean => {
@@ -29,8 +37,12 @@ const pointInRing = (point: GeometryPoint, ring: readonly GeometryPoint[]): bool
     const current = ring[index];
     const prior = ring[previous];
     if (pointOnSegment(point, prior, current)) return true;
-    const crosses = (current.z > point.z) !== (prior.z > point.z);
-    if (crosses && point.x < (prior.x - current.x) * (point.z - current.z) / (prior.z - current.z) + current.x) inside = !inside;
+    const crosses = current.z > point.z !== prior.z > point.z;
+    if (
+      crosses &&
+      point.x < ((prior.x - current.x) * (point.z - current.z)) / (prior.z - current.z) + current.x
+    )
+      inside = !inside;
   }
   return inside;
 };
@@ -40,17 +52,24 @@ const distanceSquaredToSegment = (point: GeometryPoint, start: GeometryPoint, en
   const dz = end.z - start.z;
   const lengthSquared = dx * dx + dz * dz;
   if (!lengthSquared) return (point.x - start.x) ** 2 + (point.z - start.z) ** 2;
-  const projection = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared));
+  const projection = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared),
+  );
   const nearestX = start.x + projection * dx;
   const nearestZ = start.z + projection * dz;
   return (point.x - nearestX) ** 2 + (point.z - nearestZ) ** 2;
 };
 
 /** Scores a boundary for hit-testing, including polygon holes and edge distance. */
-export const boundaryScore = (boundary: OEMBoundary, point: GeometryPoint): { id: string; inside: boolean; distance: number } => {
+export const boundaryScore = (
+  boundary: OEMBoundary,
+  point: GeometryPoint,
+): { id: string; inside: boolean; distance: number } => {
   const rings = boundary.rings.map((ring) => ring as readonly GeometryPoint[]);
-  const distances = rings.flatMap((ring) => ring.map((start, index) =>
-    distanceSquaredToSegment(point, start, ring[(index + 1) % ring.length])));
+  const distances = rings.flatMap((ring) =>
+    ring.map((start, index) => distanceSquaredToSegment(point, start, ring[(index + 1) % ring.length])),
+  );
   const insideOuter = rings.length > 0 && pointInRing(point, rings[0]);
   const insideHole = rings.slice(1).some((ring) => pointInRing(point, ring));
   return { id: boundary.id, inside: insideOuter && !insideHole, distance: Math.min(...distances, Infinity) };

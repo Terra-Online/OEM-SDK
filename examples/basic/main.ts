@@ -1,7 +1,20 @@
 import { fetchOEMJson, loadOEMManifest, resolveOEMAsset } from '@opendfieldmap/core';
 import type { OEMManifest, OEMPointType, OEMResources } from '@opendfieldmap/core';
-import { createOEMWidget, createClickPointTool, parseOEMUrlState } from '@opendfieldmap/sdk';
-import type { OEMClickPointTool, OEMCustomPoint, OEMMapClick, OEMWidget, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
+import {
+  createOEMWidget,
+  createClickPointTool,
+  parseOEMUrlPatch,
+  OEM_MAP_DEFAULTS,
+  OEM_WIDGET_CONTROL_DEFAULTS,
+} from '@opendfieldmap/sdk';
+import type {
+  OEMClickPointTool,
+  OEMCustomPoint,
+  OEMMapClick,
+  OEMWidget,
+  OEMWidgetConfig,
+  OEMWidgetState,
+} from '@opendfieldmap/sdk';
 import '@opendfieldmap/sdk/style.css';
 import { createDemoConfigPanel } from './configPanel';
 import type { DemoConfigPanel, DemoCreationConfig, DemoVersionOption } from './configPanel';
@@ -22,7 +35,7 @@ error.hidden = true;
 error.setAttribute('role', 'alert');
 app.append(widgetHost, error);
 
-const urlOptions = window.location.search ? parseOEMUrlState(window.location.search) : {};
+const urlOptions = window.location.search ? parseOEMUrlPatch(window.location.search) : {};
 const usesLocalResources = document.querySelector('script[src="/@vite/client"]') !== null;
 const stableResources: OEMResources = usesLocalResources
   ? { baseUrl: window.location.origin, manifestPath: '/channels/stable.json' }
@@ -36,13 +49,11 @@ const defaultConfig: OEMWidgetConfig = {
   center: { x: 3848, z: -5072 },
 };
 const defaultCreation: DemoCreationConfig = {
-  showRegionSelector: true,
+  ...OEM_WIDGET_CONTROL_DEFAULTS,
+  lockDrag: OEM_MAP_DEFAULTS.lockDrag,
+  lockZoom: OEM_MAP_DEFAULTS.lockZoom,
+  theme: OEM_MAP_DEFAULTS.theme,
   showFloorSelector: false,
-  horizontalSelectors: false,
-  showScaleBar: true,
-  lockDrag: false,
-  lockZoom: false,
-  theme: 'light',
 };
 const instanceIcon = new URL('../assets/instance.webp', import.meta.url).href;
 // Bump this key whenever the demo's custom-point JSON schema/content changes.
@@ -79,7 +90,10 @@ let manifest: OEMManifest;
 let versions: readonly DemoVersionOption[] = [];
 let selectedVersion: DemoVersionOption;
 let creation = { ...defaultCreation };
-let customPoints: OEMCustomPoint[] = defaultCustomPoints.map((point) => ({ ...point, position: { ...point.position } }));
+let customPoints: OEMCustomPoint[] = defaultCustomPoints.map((point) => ({
+  ...point,
+  position: { ...point.position },
+}));
 let customPointsUrl: string | undefined = defaultCustomPointsUrl;
 let clickPointMode: OEMClickPointMode = 'multiple';
 let clickTool: OEMClickPointTool | undefined;
@@ -98,7 +112,9 @@ const applyClickPointMode = (mode: OEMClickPointMode): void => {
   clickPointMode = mode;
   clickPointsPanel?.setMode(mode);
   const tool = clickTool;
-  void tool?.setMode(mode).catch(error => { if (!tool.destroyed) reportError(error); });
+  void tool?.setMode(mode).catch((error) => {
+    if (!tool.destroyed) reportError(error);
+  });
 };
 
 const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
@@ -148,7 +164,7 @@ const loadVersion = async (
   preloadedManifest?: OEMManifest,
 ): Promise<void> => {
   const resources: OEMResources = { baseUrl: stableResources.baseUrl, manifestPath: version.manifestPath };
-  const nextManifest = preloadedManifest ?? await loadOEMManifest(resources);
+  const nextManifest = preloadedManifest ?? (await loadOEMManifest(resources));
 
   widget?.destroy();
   widget = undefined;
@@ -158,9 +174,7 @@ const loadVersion = async (
   manifest = nextManifest;
   selectedVersion = version;
   const [pointTypes, mountedWidget] = await Promise.all([
-    fetchOEMJson<Record<string, OEMPointType>>(
-      resolveOEMAsset(resources.baseUrl, nextManifest.types.path),
-    ),
+    fetchOEMJson<Record<string, OEMPointType>>(resolveOEMAsset(resources.baseUrl, nextManifest.types.path)),
     mountWidget(config),
   ]);
   panel = createDemoConfigPanel(manifest, pointTypes, defaultMarkerTypes, panelCallbacks, {
@@ -219,13 +233,11 @@ const panelCallbacks = {
       if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
     });
   },
-  recreate(update: Partial<DemoCreationConfig>) {
-    creation = { ...creation, ...update };
+  configure(update: Partial<DemoCreationConfig>) {
     enqueue(async () => {
-      const config = widget ? toConfig(widget.getState()) : defaultConfig;
-      widget?.destroy();
-      widget = undefined;
-      await mountWidget(config);
+      await widget?.setOptions(update);
+      creation = { ...creation, ...update };
+      if (widget) panel?.sync(widget.getState(), creation, customPoints, customPointsUrl);
     });
   },
   selectVersion(id: string) {
@@ -262,12 +274,16 @@ const initialize = async () => {
   selectedVersion = versions[0];
   await loadVersion(selectedVersion, { ...defaultConfig, ...urlOptions }, stableManifest);
 
-  window.addEventListener('beforeunload', () => {
-    panel?.destroy();
-    customPointsPanel?.destroy();
-    clickPointsPanel?.destroy();
-    widget?.destroy();
-  }, { once: true });
+  window.addEventListener(
+    'beforeunload',
+    () => {
+      panel?.destroy();
+      customPointsPanel?.destroy();
+      clickPointsPanel?.destroy();
+      widget?.destroy();
+    },
+    { once: true },
+  );
 };
 
 void initialize().catch(reportError);

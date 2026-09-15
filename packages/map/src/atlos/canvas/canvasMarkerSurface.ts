@@ -1,6 +1,6 @@
 import L from 'leaflet';
 import { MarkerMotion, MarkerMotionPool, Motion, ease } from './canvasMarkerMotion';
-import { MarkerPainter, type MarkerArt, type Sprite, type AnimatedSprite } from './canvasMarkerPaint';
+import { MarkerPainter, type MarkerArt, type Sprite, type AnimatedSprite, type PulseLayers } from './canvasMarkerPaint';
 import { markerClasses as classes } from './canvasMarkerStyle';
 import { CanvasSpriteBatch } from './canvasSpriteBatch';
 
@@ -12,6 +12,9 @@ interface Entry {
   artDirty: boolean;
   sprite?: Sprite;
   animatedSprite?: AnimatedSprite;
+  pulseLayers?: PulseLayers;
+  pulseKeys?: [object, object, object];
+  usingPulseLayers?: boolean;
   visible?: boolean;
   stack: number;
   reveal?: Motion;
@@ -21,6 +24,8 @@ interface Ghost { marker: L.Marker; sprite: Sprite; base: L.Point; target: L.Poi
 interface Rect { x: number; y: number; width: number; height: number }
 const surfaces = new WeakMap<L.Map, CanvasMarkerSurface>();
 const CELL = 32;
+// Internal output quality floor, independent of the physical display density.
+const MIN_CANVAS_RENDER_RATIO = 2;
 const has = (element: HTMLElement, name: string) => element.classList.contains(classes[name]);
 const bounds = (entry: Entry): Rect => ({ x: entry.x - 38, y: entry.y - 54, width: entry.art.subImage ? 104 : 76, height: 94 });
 const intersects = (a: Rect, b: Rect) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -60,13 +65,15 @@ export class CanvasMarkerSurface {
   private disposed = false;
   private width = 0;
   private height = 0;
-  private ratio = window.devicePixelRatio || 1;
+  private deviceRatio = window.devicePixelRatio || 1;
+  private renderRatio = Math.max(MIN_CANVAS_RENDER_RATIO, this.deviceRatio);
   private resolution?: MediaQueryList;
   private hovered?: Entry;
   private pointer?: PointerEvent;
   private pressed?: { entry?: Entry; x: number; y: number };
   private animation?: { start: number; from: Map<Entry, L.Point>; zoom: number; center: L.LatLng };
   private canvas = document.createElement('canvas');
+  private canvasOffset?: L.Point;
   private context?: CanvasRenderingContext2D;
   private batch?: CanvasSpriteBatch;
   private pendingSwap?: { canvas: HTMLCanvasElement; batch: CanvasSpriteBatch };
@@ -86,11 +93,15 @@ export class CanvasMarkerSurface {
     // They are clipped and never used to paint a point or as a per-frame hit target.
     this.semantic.className = 'oem-canvas-semantics';
     this.semantic.style.cssText = 'position:absolute;left:-10000px;top:-10000px;width:1px;height:1px;overflow:hidden;clip-path:inset(100%);contain:strict;content-visibility:auto;pointer-events:none;';
-    this.style.textContent = '.oem-canvas-semantics *{animation:none!important;transition:none!important;will-change:auto!important;}';
-    map.getPane('markerPane')!.append(this.canvas, this.semantic, this.style);
-    // Supersample small cached artwork, not the whole viewport. Integer density avoids
-    // rounding the texture bounds and then rescaling the artwork at Windows 125/150%.
-    this.painter = new MarkerPainter(Math.max(2, Math.ceil(this.ratio)), url => {
+    // CSS animations on ::before/::after must not run alongside their Canvas copies.
+    this.style.textContent = '.oem-canvas-semantics *,.oem-canvas-semantics *::before,.oem-canvas-semantics *::after{animation:none!important;transition:none!important;will-change:auto!important;}';
+    map.getPane('markerPane')!.append(this.canvas);
+    // Keep semantic nodes under the event container, outside the animated map pane.
+    // Camera following must not move or invalidate this otherwise stationary tree.
+    map.getContainer().append(this.semantic, this.style);
+    // Both the viewport and cached artwork retain at least Retina-density pixels.
+    // Integer sprite density also avoids fractional texture-bound rounding.
+    this.painter = new MarkerPainter(Math.ceil(this.renderRatio), url => {
       for (const entry of this.entries.values()) {
         if (entry.art.image === url || entry.art.subImage === url || entry.art.subImage
           && (url === this.painter.hoverDecoration || url === this.painter.selectedDecoration)) this.invalidate(entry);
@@ -202,13 +213,14 @@ export class CanvasMarkerSurface {
   }
   private watchResolution(): void {
     this.resolution?.removeEventListener('change', this.displayChanged);
-    this.resolution = window.matchMedia?.(`(resolution: ${this.ratio}dppx)`);
+    this.resolution = window.matchMedia?.(`(resolution: ${this.deviceRatio}dppx)`);
     this.resolution?.addEventListener('change', this.displayChanged);
   }
   private displayChanged = (): void => {
     if (this.disposed) return;
-    this.ratio = window.devicePixelRatio || 1;
-    this.painter.setRatio(Math.max(2, Math.ceil(this.ratio)));
+    this.deviceRatio = window.devicePixelRatio || 1;
+    this.renderRatio = Math.max(MIN_CANVAS_RENDER_RATIO, this.deviceRatio);
+    this.painter.setRatio(Math.ceil(this.renderRatio));
     for (const entry of this.entries.values()) this.invalidate(entry);
     this.watchResolution(); this.fontsLoaded();
     this.full = true; this.request();
@@ -216,7 +228,7 @@ export class CanvasMarkerSurface {
   remove(marker: CanvasMarker, disposeEmpty = true): void {
     const entry = this.entries.get(marker);
     if (!entry) return;
-    this.batch?.release(entry);
+    this.releaseEntry(entry);
     if (this.clusterTransition && entry.visible) {
       const now = performance.now();
       const sprite = entry.sprite ?? (entry.motion.paintActive(now) ? this.painter.snapshot(entry.art, entry.motion, now)
@@ -263,6 +275,13 @@ export class CanvasMarkerSurface {
     }
     if (entry.clusterUntil && now >= entry.clusterUntil) entry.clusterUntil = undefined;
     if (entry.artDirty) {
+      // These connected images provide labels and URLs, not painted artwork.
+      // Give them intrinsic bounds so layout/inspection never has to infer sizes
+      // for thousands of otherwise unsized images. Canvas uses its own assets.
+      for (const image of inner.querySelectorAll('img')) {
+        if (!image.hasAttribute('width')) image.width = 1;
+        if (!image.hasAttribute('height')) image.height = 1;
+      }
       const image = inner.querySelector<HTMLImageElement>('img');
       const sub = inner.querySelector<HTMLElement>(`.${classes.subIcon}`);
       const background = (node?: HTMLElement | null) => node?.style.backgroundImage.match(/^url\(["']?(.*?)["']?\)$/)?.[1] ?? '';
@@ -284,21 +303,42 @@ export class CanvasMarkerSurface {
   private invalidate(entry: Entry): void {
     entry.sprite = undefined;
     entry.animatedSprite = undefined;
+    entry.pulseLayers = undefined;
     this.dirty.push(bounds(entry)); this.active.add(entry); this.request();
+  }
+  private pulseParts(entry: Entry, now: number, alpha: number): PulseLayers | undefined {
+    // Group opacity cannot be applied to overlapping layers independently.
+    // Preserve the original single-sprite path during fades and geometry changes.
+    return alpha === 1 && entry.motion.pulseOnly(now)
+      ? entry.pulseLayers ??= this.painter.pulseLayers(entry.art, entry.motion, now) : undefined;
+  }
+  private releasePulse(entry: Entry): void {
+    if (entry.pulseKeys) for (const key of entry.pulseKeys) this.batch?.release(key);
+    entry.usingPulseLayers = false;
+  }
+  private releaseEntry(entry: Entry): void {
+    this.batch?.release(entry); this.releasePulse(entry);
   }
   private updateStack(entry: Entry): void {
     const stack = entry.art.count ? 2 : entry.completed ? 0 : 1;
     if (stack !== entry.stack) { entry.stack = stack; this.reorder = true; }
   }
   private request(): void {
-    if (!this.frame && !this.disposed) this.frame = requestAnimationFrame(this.draw);
+    if (!this.frame && !this.disposed) this.frame = requestAnimationFrame(this.drawFrame);
   }
+  private drawFrame = (now: number): void => {
+    // The browser already consumed this request. Only an external synchronous
+    // draw (for example a camera move) needs to cancel a still-pending frame.
+    this.frame = 0;
+    this.draw(now);
+  };
   private fallback2D(reason: string): void {
     if (!this.batch || this.disposed) return;
     this.backendReason = reason;
     this.pendingSwap = { canvas: this.canvas, batch: this.batch };
     this.batch = undefined;
     this.canvas = this.canvas.cloneNode(false) as HTMLCanvasElement;
+    this.canvasOffset = undefined;
     this.context = this.canvas.getContext('2d')!;
     this.full = true; this.request();
   }
@@ -336,10 +376,11 @@ export class CanvasMarkerSurface {
   private draw = (now: number): void => {
     // Some embedded browsers/emulators change DPR without a resolution event.
     // Reconcile on the next paint as well; no polling timer or idle rendering needed.
-    if (!this.disposed && this.ratio !== (window.devicePixelRatio || 1)) this.displayChanged();
+    if (!this.disposed && this.deviceRatio !== (window.devicePixelRatio || 1)) this.displayChanged();
     if (this.disposed) return;
     if (this.frame) cancelAnimationFrame(this.frame);
     this.frame = 0;
+    this.painter.beginFrame(now);
     for (const entry of this.pendingMotion) {
       entry.offsetX?.to(0, now, 320); entry.offsetY?.to(0, now, 320); entry.reveal?.to(1, now, 160); entry.clusterUntil = now + 320;
     }
@@ -357,15 +398,16 @@ export class CanvasMarkerSurface {
     }
     if (this.indexDirty) this.rebuildIndex();
     const size = this.map.getSize();
-    const pixelWidth = Math.ceil(size.x * this.ratio), pixelHeight = Math.ceil(size.y * this.ratio);
+    const pixelWidth = Math.ceil(size.x * this.renderRatio), pixelHeight = Math.ceil(size.y * this.renderRatio);
     if (size.x !== this.width || size.y !== this.height || this.canvas.width !== pixelWidth || this.canvas.height !== pixelHeight) {
       this.width = size.x; this.height = size.y;
       this.canvas.width = pixelWidth; this.canvas.height = pixelHeight;
-      // Keep physical pixels 1:1 even when the CSS viewport has a fractional last pixel.
-      this.canvas.style.width = `${pixelWidth / this.ratio}px`; this.canvas.style.height = `${pixelHeight / this.ratio}px`; this.full = true;
+      // Preserve the CSS coordinate space; the browser downsamples the complete scene
+      // when physical DPR is lower than our internal rendering density.
+      this.canvas.style.width = `${pixelWidth / this.renderRatio}px`; this.canvas.style.height = `${pixelHeight / this.renderRatio}px`; this.full = true;
     }
     const offset = this.map.containerPointToLayerPoint(L.point(0, 0));
-    L.DomUtil.setPosition(this.canvas, offset);
+    if (!this.canvasOffset?.equals(offset)) { L.DomUtil.setPosition(this.canvas, offset); this.canvasOffset = offset; }
     if (this.full || this.animation || this.moving.size) {
       const origin = this.map.getPixelOrigin().add(offset);
       const scale = this.map.getZoomScale(this.map.getZoom(), 0);
@@ -391,7 +433,7 @@ export class CanvasMarkerSurface {
       for (const entry of this.ordered) {
         const visible = entry.x + (entry.art.subImage ? 66 : 38) > 0 && entry.x - 38 < this.width
           && entry.y + 40 > 0 && entry.y - 54 < this.height;
-        if (entry.visible && !visible) { this.batch?.release(entry); entry.marker.fire('viewporthide'); }
+        if (entry.visible && !visible) { this.releaseEntry(entry); entry.marker.fire('viewporthide'); }
         entry.visible = visible;
       }
       if (this.pointer && !this.pointer.buttons) this.setHovered(this.hit(this.pointer), this.pointer);
@@ -399,14 +441,15 @@ export class CanvasMarkerSurface {
       for (const entry of this.moving) if (!entry.offsetX?.active(now) && !entry.offsetY?.active(now)) this.moving.delete(entry);
     }
     for (const entry of this.active) this.dirty.push(bounds(entry));
-    if (this.dirty.length > 32) this.full = true;
-    if (this.batch && this.width > 0 && this.height > 0) {
+    if (!this.batch && this.dirty.length > 32) this.full = true;
+    const needsPaint = this.full || this.dirty.length > 0;
+    if (needsPaint && this.batch && this.width > 0 && this.height > 0) {
       try { this.paintBatch(now); }
       catch (error) { this.fallback2D(error instanceof Error ? error.message : 'GPU raster unavailable'); }
     }
-    if (!this.batch) {
+    if (needsPaint && !this.batch) {
       const ctx = this.context!;
-      ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
+      ctx.setTransform(this.renderRatio, 0, 0, this.renderRatio, 0, 0);
       // Paths are NOT part of save/restore. A previous dirty union must not survive this frame.
       ctx.beginPath();
       let candidates: Entry[];
@@ -421,18 +464,24 @@ export class CanvasMarkerSurface {
         for (const rect of this.dirty) {
           const aligned = { x: Math.floor(rect.x), y: Math.floor(rect.y), width: Math.ceil(rect.width) + 2, height: Math.ceil(rect.height) + 2 };
           ctx.rect(aligned.x, aligned.y, aligned.width, aligned.height);
-          for (const entry of this.query(aligned)) found.add(entry);
+          for (const entry of this.query(aligned)) if (intersects(bounds(entry), aligned)) found.add(entry);
         }
         ctx.clip(); ctx.clearRect(0, 0, this.width, this.height);
         ctx.beginPath();
         candidates = [...found].sort(compareEntries);
       }
+      const draw = (sprite: Sprite, x: number, y: number) => ctx.drawImage(sprite.canvas, x + sprite.x, y + sprite.y, sprite.width, sprite.height);
       for (const entry of candidates) {
         if (!entry.visible) continue;
-        ctx.globalAlpha = entry.opacity * entry.motion.opacity(now) * (entry.reveal?.value(now) ?? 1);
-        const sprite = entry.sprite ?? (entry.motion.paintActive(now) ? (entry.animatedSprite ??= this.painter.animation(entry.art, entry.motion)).render(now)
-          : entry.sprite = this.painter.sprite(entry.art, entry.motion, now));
-        ctx.drawImage(sprite.canvas, entry.x + sprite.x, entry.y + sprite.y, sprite.width, sprite.height);
+        const alpha = entry.opacity * entry.motion.opacity(now) * (entry.reveal?.value(now) ?? 1);
+        ctx.globalAlpha = alpha;
+        const parts = this.pulseParts(entry, now, alpha);
+        if (parts) {
+          if (parts.underlay) draw(parts.underlay, entry.x, entry.y);
+          draw(this.painter.pulse(entry.motion, now), entry.x, entry.y + (entry.art.noFrame ? entry.motion.shift.target : -16));
+          draw(parts.overlay, entry.x, entry.y);
+        } else draw(entry.sprite ?? (entry.motion.paintActive(now) ? (entry.animatedSprite ??= this.painter.animation(entry.art, entry.motion)).render(now)
+          : entry.sprite = this.painter.sprite(entry.art, entry.motion, now)), entry.x, entry.y);
       }
       if (this.ghosts.length) {
         const origin = this.map.getPixelOrigin().add(offset), scale = this.map.getZoomScale(this.map.getZoom(), 0);
@@ -465,19 +514,45 @@ export class CanvasMarkerSurface {
     const batch = this.batch!;
     let clip: Rect | undefined, candidates = this.ordered;
     if (!this.full && this.dirty.length) {
-      let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-      for (const rect of this.dirty) { left = Math.min(left, rect.x); top = Math.min(top, rect.y); right = Math.max(right, rect.x + rect.width); bottom = Math.max(bottom, rect.y + rect.height); }
-      clip = { x: Math.floor(left), y: Math.floor(top), width: Math.ceil(right) - Math.floor(left) + 2, height: Math.ceil(bottom) - Math.floor(top) + 2 };
-      candidates = [...this.query(clip)].sort(compareEntries);
+      let left = this.width, top = this.height, right = 0, bottom = 0;
+      for (const rect of this.dirty) {
+        const x = Math.max(0, rect.x), y = Math.max(0, rect.y);
+        const r = Math.min(this.width, rect.x + rect.width), b = Math.min(this.height, rect.y + rect.height);
+        if (r <= x || b <= y) continue;
+        left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, r); bottom = Math.max(bottom, b);
+      }
+      if (right <= left || bottom <= top) { clip = { x: 0, y: 0, width: 0, height: 0 }; candidates = []; }
+      else {
+        const area = { x: Math.floor(left), y: Math.floor(top), width: Math.ceil(right) - Math.floor(left) + 2, height: Math.ceil(bottom) - Math.floor(top) + 2 };
+        if (area.width * area.height < this.width * this.height * 0.75) {
+          clip = area;
+          // Cull coarse spatial cells precisely; dense changes reuse the existing
+          // paint order instead of sorting thousands of points every frame.
+          const found = this.query(area);
+          if (found.size > this.ordered.length / 2) candidates = this.ordered.filter(entry => entry.visible && intersects(bounds(entry), area));
+          else candidates = [...found].filter(entry => entry.visible && intersects(bounds(entry), area)).sort(compareEntries);
+        }
+      }
     }
-    batch.begin(this.canvas.width, this.canvas.height, this.ratio, candidates.length + this.ghosts.length, clip);
+    batch.begin(this.canvas.width, this.canvas.height, this.renderRatio, candidates.length + 2 * this.active.size + this.ghosts.length, clip);
     for (const entry of candidates) {
       if (!entry.visible) continue;
       const alpha = entry.opacity * entry.motion.opacity(now) * (entry.reveal?.value(now) ?? 1);
       if (alpha <= 0) continue;
-      const sprite = entry.sprite ?? (entry.motion.paintActive(now) ? (entry.animatedSprite ??= this.painter.animation(entry.art, entry.motion)).render(now)
-        : entry.sprite = this.painter.sprite(entry.art, entry.motion, now));
-      batch.add(entry, sprite, entry.x, entry.y, alpha);
+      const parts = this.pulseParts(entry, now, alpha);
+      if (parts) {
+        if (!entry.usingPulseLayers) { batch.release(entry); entry.usingPulseLayers = true; }
+        const keys = entry.pulseKeys ??= [{}, {}, {}];
+        if (parts.underlay) batch.add(keys[0], parts.underlay, entry.x, entry.y, 1);
+        batch.add(keys[1], this.painter.pulse(entry.motion, now), entry.x,
+          entry.y + (entry.art.noFrame ? entry.motion.shift.target : -16), 1);
+        batch.add(keys[2], parts.overlay, entry.x, entry.y, 1);
+      } else {
+        if (entry.usingPulseLayers) this.releasePulse(entry);
+        const sprite = entry.sprite ?? (entry.motion.paintActive(now) ? (entry.animatedSprite ??= this.painter.animation(entry.art, entry.motion)).render(now)
+          : entry.sprite = this.painter.sprite(entry.art, entry.motion, now));
+        batch.add(entry, sprite, entry.x, entry.y, alpha);
+      }
     }
     const origin = this.map.getPixelOrigin().add(this.map.containerPointToLayerPoint(L.point(0, 0))), scale = this.map.getZoomScale(this.map.getZoom(), 0);
     for (const ghost of this.ghosts) {

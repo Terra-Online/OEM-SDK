@@ -4,6 +4,10 @@
   "type": "module",
   "packageManager": "pnpm@10.5.0",
   "scripts": {
+    "lint": "eslint packages/*/src examples/basic tests scripts/*.mjs vite.config.ts vitest.config.ts",
+    "format": "prettier --write packages/*/src examples/basic tests scripts/*.mjs *.ts *.json eslint.config.mjs",
+    "format:check": "prettier --check packages/*/src examples/basic tests scripts/*.mjs *.ts *.json eslint.config.mjs",
+    "check:code": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -27,6 +31,7 @@
     "test:browser": "node scripts/verify-browser.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@opendfieldmap/core": "workspace:*",
     "@opendfieldmap/map": "workspace:*",
     "@opendfieldmap/react": "workspace:*",
@@ -36,14 +41,19 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "esbuild": "^0.25.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10",
+    "globals": "^17.12.0",
     "jsdom": "^26.1.0",
     "playwright-core": "1.58.2",
     "postcss": "^8.5.6",
     "postcss-selector-parser": "^7.1.0",
+    "prettier": "^3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sass": "^1.85.1",
     "typescript": "~5.8.3",
+    "typescript-eslint": "^8",
     "vite": "^6.2.0",
     "vitest": "^3.2.4",
     "wrangler": "^4.129.1"

@@ -1,3 +1,4 @@
+import { OEM_REGION_ALIASES } from '@opendfieldmap/sdk';
 import type { OEMCustomPoint, OEMMapClick } from '@opendfieldmap/sdk';
 import { bindPanelDragging } from './configPanel';
 
@@ -15,12 +16,9 @@ export interface DemoCustomPointsPanel {
 
 const serializePoints = (points: readonly OEMCustomPoint[]): string => JSON.stringify(points, null, 2);
 
-const REGION_CODES: Readonly<Record<string, string>> = Object.freeze({
-  Valley_4: 'VL',
-  Wuling: 'WL',
-  Dijiang: 'DJ',
-  Weekraid_1: 'ES',
-});
+const REGION_CODES: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(Object.entries(OEM_REGION_ALIASES).map(([alias, region]) => [region, alias])),
+);
 
 const formatMapContext = (click: OEMMapClick): string => {
   const { position } = click;
@@ -36,7 +34,7 @@ const parsePoints = (value: string): OEMCustomPoint[] => {
     parsed = JSON.parse(value);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
-    throw new Error(`Invalid custom points JSON: ${message}`);
+    throw new Error(`Invalid custom points JSON: ${message}`, { cause });
   }
   if (!Array.isArray(parsed)) throw new Error('Custom points JSON must be an array');
   return parsed as OEMCustomPoint[];
@@ -151,11 +149,14 @@ export function createDemoCustomPointsPanel(
       return;
     }
     setStatus('Applying…');
-    void callbacks.apply(points).then((success) => {
-      if (!success) setStatus('Apply failed', true);
-    }).catch((cause) => {
-      setStatus(cause instanceof Error ? cause.message : String(cause), true);
-    });
+    void callbacks
+      .apply(points)
+      .then((success) => {
+        if (!success) setStatus('Apply failed', true);
+      })
+      .catch((cause) => {
+        setStatus(cause instanceof Error ? cause.message : String(cause), true);
+      });
   };
 
   apply.addEventListener('click', applyEditorValue);
@@ -171,7 +172,9 @@ export function createDemoCustomPointsPanel(
     setBusy(busy) {
       element.classList.toggle('busy', busy);
       element.setAttribute('aria-busy', String(busy));
-      for (const control of body.querySelectorAll<HTMLTextAreaElement | HTMLButtonElement>('textarea, button')) {
+      for (const control of body.querySelectorAll<HTMLTextAreaElement | HTMLButtonElement>(
+        'textarea, button',
+      )) {
         control.disabled = busy;
       }
     },
@@ -182,7 +185,9 @@ export function createDemoCustomPointsPanel(
         return;
       }
       const { position, game } = value;
-      setStatus(`Map (x ${position.x.toFixed(4)}, z ${position.z.toFixed(4)}) ${formatMapContext(value)}\nGame (x ${game ? game.x.toFixed(4) : '—'}, z ${game ? game.z.toFixed(4) : '—'})`);
+      setStatus(
+        `Map (x ${position.x.toFixed(4)}, z ${position.z.toFixed(4)}) ${formatMapContext(value)}\nGame (x ${game ? game.x.toFixed(4) : '—'}, z ${game ? game.z.toFixed(4) : '—'})`,
+      );
     },
     destroy() {
       panelAnimation?.cancel();

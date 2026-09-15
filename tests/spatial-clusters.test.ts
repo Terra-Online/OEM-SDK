@@ -3,10 +3,14 @@ import { clusterPositions } from '../packages/map/src/atlos/canvas/spatialCluste
 
 describe('built-in spatial clustering', () => {
   it('groups across cell boundaries and preserves authored positions', () => {
-    const points = [{ item: 'a', x: -1, y: 0 }, { item: 'b', x: 1, y: 0 }, { item: 'c', x: 100, y: 0 }];
+    const points = [
+      { item: 'a', x: -1, y: 0 },
+      { item: 'b', x: 1, y: 0 },
+      { item: 'c', x: 100, y: 0 },
+    ];
     const before = structuredClone(points);
     const groups = clusterPositions(points, 1, 60);
-    expect(groups.map(group => group.members)).toEqual([['a', 'b'], ['c']]);
+    expect(groups.map((group) => group.members)).toEqual([['a', 'b'], ['c']]);
     expect(groups[0].x).toBe(0);
     expect(points).toEqual(before);
   });
@@ -18,10 +22,15 @@ describe('built-in spatial clustering', () => {
     expect([groups[0].x, groups[0].y]).toEqual([10, -20]);
   });
   it('splits at finer scales without losing members and is deterministic', () => {
-    const points = Array.from({ length: 500 }, (_, item) => ({ item, x: (item % 25) * 10, y: Math.floor(item / 25) * 10 }));
-    const coarse = clusterPositions(points, 1, 60), fine = clusterPositions(points, 4, 60);
+    const points = Array.from({ length: 500 }, (_, item) => ({
+      item,
+      x: (item % 25) * 10,
+      y: Math.floor(item / 25) * 10,
+    }));
+    const coarse = clusterPositions(points, 1, 60),
+      fine = clusterPositions(points, 4, 60);
     expect(fine.length).toBeGreaterThan(coarse.length);
-    expect(new Set(fine.flatMap(group => group.members)).size).toBe(points.length);
+    expect(new Set(fine.flatMap((group) => group.members)).size).toBe(points.length);
     expect(fine).toEqual(clusterPositions(points, 4, 60));
   });
 });
