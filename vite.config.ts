@@ -1,9 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+// @ts-expect-error Shared build script is plain JavaScript.
+import { compileOEMStyles } from './scripts/styles.mjs';
 
 const root = import.meta.dirname;
-const devStylesId = '\0oem-sdk-dev-styles';
+const devStylesId = '\0oem-sdk-dev-styles.css';
 const rawSvgDirectories = [
   resolve(root, 'packages/map/src/assets'),
   resolve(root, 'packages/sdk/src/assets'),
@@ -31,13 +33,18 @@ export default defineConfig(({ command }) => {
         resolveId(source) {
           return source === '@opendfieldmap/sdk/style.css' ? devStylesId : undefined;
         },
-        load(id) {
+        async load(id) {
           if (id !== devStylesId) return undefined;
-          return [
-            `import ${JSON.stringify(resolve(root, 'packages/map/node_modules/leaflet/dist/leaflet.css'))};`,
-            `import ${JSON.stringify(resolve(root, 'packages/map/src/styles/index.scss'))};`,
-            `import ${JSON.stringify(resolve(root, 'packages/sdk/src/style.scss'))};`,
-          ].join('\n');
+          const styles = await compileOEMStyles(root);
+          this.addWatchFile(resolve(root, 'packages/map/src/styles'));
+          this.addWatchFile(resolve(root, 'packages/sdk/src/style.scss'));
+          return styles.widget.replaceAll('./assets/', '/packages/map/src/styles/assets/');
+        },
+        handleHotUpdate(context) {
+          if (!context.file.endsWith('.scss')) return;
+          if (!context.file.includes('/packages/map/src/styles/') && !context.file.endsWith('/packages/sdk/src/style.scss')) return;
+          const module = context.server.moduleGraph.getModuleById(devStylesId);
+          if (module) return [module];
         },
       },
     ] : [],

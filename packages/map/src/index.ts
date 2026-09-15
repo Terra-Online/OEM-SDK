@@ -44,6 +44,8 @@ export async function createOEM(container: string | HTMLElement, options: OEMOpt
 }
 export { OEMError } from '@opendfieldmap/core';
 
-export { normalizeState as resolveOEMMapConfig } from './config';
+export { normalizeState as resolveOEMMapConfig, OEM_REGION_ALIASES } from './config';
+export { cloneConfig as snapshotOEMMapConfig, validateConfig as validateOEMMapConfig } from './config';
+export { flattenOEMMapConfig, diffOEMMapConfig, equalOEMConfigValue, OEM_MAP_CONFIG_FIELDS, OEM_MAP_CONFIG_KEYS, OEM_MAP_DEFAULTS } from './configSpec';
 export { createOEMCoordinateSnapshot, pixelToMapPosition, mapToPixelPosition, gameXZToMapPosition, pixelToGameXZPosition } from '@opendfieldmap/core';
-export type { OEMCoordinateSnapshot, OEMPixelPosition, OEMScreenPosition } from '@opendfieldmap/core';
+export type { OEMCoordinateSnapshot, OEMPixelPosition, OEMNormalizedMapPosition, OEMScreenPosition } from '@opendfieldmap/core';

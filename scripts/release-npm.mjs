@@ -43,7 +43,7 @@ if (publish && !dryRun) {
 for (const { filename, text, json } of packageData) {
   if (json.private) throw new Error(`Refusing to version private package ${json.name}`);
   if (json.version === targetVersion) continue;
-  const updated = text.replace(/(\"version\"\s*:\s*)\"[^\"]+\"/, `$1\"${targetVersion}\"`);
+  const updated = text.replace(/("version"\s*:\s*)"[^"]+"/, `$1"${targetVersion}"`);
   if (updated === text) throw new Error(`Could not update version in ${filename}`);
   await fs.writeFile(filename, updated);
 }

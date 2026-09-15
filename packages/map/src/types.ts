@@ -69,8 +69,8 @@ export type OEMPointActivation = OEMPointInteraction & {
 };
 export interface OEMCommandOptions { signal?: AbortSignal }
 export interface OEMInteractionLocks { lockDrag?: boolean; lockZoom?: boolean }
-/** Flat configuration remains supported; grouping is a separate migration. */
-export interface OEMMapConfig extends OEMInteractionLocks {
+/** Legacy flat configuration remains a supported input contract. */
+export interface OEMMapFlatConfig extends OEMInteractionLocks {
   region?: string;
   subregion?: string | null;
   floor?: string;
@@ -83,8 +83,16 @@ export interface OEMMapConfig extends OEMInteractionLocks {
   customPoints?: readonly OEMCustomPoint[];
   customPointsUrl?: string;
   zoom?: number;
-  center?: { x: number; z: number };
+  center?: { space?: 'pixel'; x: number; z: number };
   theme?: 'light' | 'dark';
+}
+export type OEMViewConfig = Pick<OEMMapFlatConfig, 'region' | 'subregion' | 'floor' | 'zoom' | 'center'>;
+export type OEMLayerConfig = Pick<OEMMapFlatConfig, 'locale' | 'markerTypes' | 'labels' | 'boundaries' | 'boundarySource' | 'markerClustering'>;
+/** Groups are optional. A defined flat field takes precedence over its grouped alias. */
+export interface OEMMapConfig extends OEMMapFlatConfig {
+  view?: OEMViewConfig;
+  layers?: OEMLayerConfig;
+  interaction?: OEMInteractionLocks;
 }
 export interface OEMMapState {
   regionId: string;

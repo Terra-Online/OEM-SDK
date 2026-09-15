@@ -1,6 +1,6 @@
-import { getOEMRegion } from '@opendfieldmap/core';
+import { getOEMRegion, getOEMDefaultFloor } from '@opendfieldmap/core';
 import type { OEMRegion, OEMSubregion } from '@opendfieldmap/core';
-import { LAYER_ICON, REGION_ICONS } from '../icons';
+import { LAYER_ICON, REGION_ICONS, GENERIC_REGION_ICON } from '../icons';
 import type { OEMFloorId, OEMRegionSelector, OEMWidgetState } from '../types';
 import { createButton, getMessages, setLabel } from './types';
 import type { Control, ControlContext } from './types';
@@ -66,13 +66,12 @@ export const createRegionControl = (context: ControlContext): Control & { elemen
     if (region.subregions.length > 1) bindPersistentPanel(regionButton, context);
     const icon = document.createElement('span');
     icon.className = 'switchIcon';
-    const markup = REGION_ICONS[region.id];
-    if (!markup) throw new Error(`Missing Atlos region icon: ${region.id}`);
+    const markup = REGION_ICONS[region.id] ?? GENERIC_REGION_ICON;
     icon.innerHTML = markup;
     regionButton.append(icon);
     const selectRegion = () => {
       const target = region.initialView;
-      apply({ region: region.id as OEMRegionSelector, subregion: null, floor: 'M', center: { x: target.x, z: target.z }, zoom: target.zoom });
+      apply({ region: region.id as OEMRegionSelector, subregion: null, floor: getOEMDefaultFloor(region), center: { x: target.x, z: target.z }, zoom: target.zoom });
     };
     regionButton.addEventListener('click', selectRegion);
     regionButton.addEventListener('keydown', (event) => {

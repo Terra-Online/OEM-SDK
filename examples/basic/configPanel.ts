@@ -1,15 +1,13 @@
+import { OEM_REGION_ALIASES } from '@opendfieldmap/sdk';
 import type { OEMManifest, OEMPointType } from '@opendfieldmap/core';
 import type { OEMBoundarySource, OEMCustomPoint, OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig, OEMWidgetState } from '@opendfieldmap/sdk';
 
 const FLOOR_ORDER = ['L4', 'L3', 'L2', 'L1', 'M', 'B1', 'B2', 'B3', 'B4'];
-const REGION_CODES: Readonly<Record<string, string>> = Object.freeze({
-  Valley_4: 'VL',
-  Wuling: 'WL',
-  Dijiang: 'DJ',
-  Weekraid_1: 'ES',
-});
+const REGION_CODES: Readonly<Record<string, string>> = Object.freeze(Object.fromEntries(
+  Object.entries(OEM_REGION_ALIASES).map(([alias, region]) => [region, alias]),
+));
 
-/** Creation-only Widget options exposed by the interactive Demo. */
+/** Dynamic official Widget options exposed by the interactive Demo. */
 export interface DemoCreationConfig {
   showRegionSelector: boolean;
   showFloorSelector: boolean;
@@ -29,7 +27,7 @@ export interface DemoVersionOption {
 
 interface DemoConfigPanelCallbacks {
   update(config: OEMWidgetConfig): void;
-  recreate(config: Partial<DemoCreationConfig>): void;
+  configure(config: Partial<DemoCreationConfig>): void;
   selectVersion?(id: string): void;
   reset(): void;
 }
@@ -712,7 +710,7 @@ export function createDemoConfigPanel(
     const value = [...boundarySources].find(([, input]) => input.checked)?.[0];
     if (value) callbacks.update({ boundarySource: value as OEMBoundarySource });
   });
-  themeSelect.addEventListener('change', () => callbacks.recreate({ theme: themeSelect.value as DemoCreationConfig['theme'] }));
+  themeSelect.addEventListener('change', () => callbacks.configure({ theme: themeSelect.value as DemoCreationConfig['theme'] }));
   versionSelect?.addEventListener('change', () => callbacks.selectVersion?.(versionSelect.value));
   zoomInput.addEventListener('input', () => updateZoomDisplay());
   zoomInput.addEventListener('change', () => callbacks.update({ zoom: Number(zoomInput.value) }));
@@ -759,12 +757,12 @@ export function createDemoConfigPanel(
     callbacks.update({ boundaries: enabled });
   });
   clustering.input.addEventListener('change', () => callbacks.update({ markerClustering: clustering.input.checked }));
-  regionSelector.input.addEventListener('change', () => callbacks.recreate({ showRegionSelector: regionSelector.input.checked }));
-  floorSelector.input.addEventListener('change', () => callbacks.recreate({ showFloorSelector: floorSelector.input.checked }));
-  horizontalSelectors.input.addEventListener('change', () => callbacks.recreate({ horizontalSelectors: horizontalSelectors.input.checked }));
-  scaleBar.input.addEventListener('change', () => callbacks.recreate({ showScaleBar: scaleBar.input.checked }));
-  lockDrag.input.addEventListener('change', () => callbacks.recreate({ lockDrag: lockDrag.input.checked }));
-  lockZoom.input.addEventListener('change', () => callbacks.recreate({ lockZoom: lockZoom.input.checked }));
+  regionSelector.input.addEventListener('change', () => callbacks.configure({ showRegionSelector: regionSelector.input.checked }));
+  floorSelector.input.addEventListener('change', () => callbacks.configure({ showFloorSelector: floorSelector.input.checked }));
+  horizontalSelectors.input.addEventListener('change', () => callbacks.configure({ horizontalSelectors: horizontalSelectors.input.checked }));
+  scaleBar.input.addEventListener('change', () => callbacks.configure({ showScaleBar: scaleBar.input.checked }));
+  lockDrag.input.addEventListener('change', () => callbacks.configure({ lockDrag: lockDrag.input.checked }));
+  lockZoom.input.addEventListener('change', () => callbacks.configure({ lockZoom: lockZoom.input.checked }));
   reset.addEventListener('click', callbacks.reset);
   copyCode.addEventListener('click', () => {
     if (!navigator.clipboard?.writeText) {

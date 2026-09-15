@@ -1,0 +1,12 @@
+node_modules/
+public/
+dist/
+artifacts/
+config/
+packages/*/dist/
+packages/map/src/atlos/
+**/assets/
+scripts/bench/
+docs/performance/
+pnpm-lock.yaml
+**/LICENSE

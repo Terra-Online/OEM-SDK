@@ -375,7 +375,6 @@ for (const [id, config] of Object.entries(regionSource)) {
       const type = normalizePointType(point);
       if (!types[type]) throw new Error(`Normalized marker type is unavailable: ${point.type} -> ${type}`);
       pointIds.add(point.id);
-      const floorId = point.tier === 0 ? 'M' : `${point.tier < 0 ? 'B' : 'L'}${Math.abs(point.tier)}`;
       // Preserve Atlos' compact tuple representation. The runtime decodes
       // tuples using the same fallback-subregion rules as Atlos' interpreter.
       if (point.subregId === subregionId) return [[point.id, point.z, point.x, point.y, point.tier, type]];

@@ -8,6 +8,8 @@ import { invalid } from './errors';
  */
 export function resolveOEMAsset(base: string, assetPath: string): string {
   if (typeof base !== 'string' || typeof assetPath !== 'string' || !assetPath.trim()) invalid('resource.path', 'Expected a relative resource path');
+  // Reject literal URL whitespace/control characters before browser normalization.
+  // eslint-disable-next-line no-control-regex
   if (/^[a-z][a-z\d+.-]*:/i.test(assetPath) || assetPath.startsWith('//') || /[\\\x00-\x20]/.test(assetPath)) {
     invalid('resource.path', 'Resource paths must be relative to their configured origin');
   }
@@ -19,4 +21,3 @@ export function resolveOEMAsset(base: string, assetPath: string): string {
   if (!['https:', 'http:'].includes(origin.protocol) || origin.username || origin.password || origin.search || origin.hash) invalid('resources.baseUrl', 'Expected an HTTP(S) resource base');
   return `${base.replace(/\/$/, '')}/${assetPath.replace(/^\//, '')}`;
 }
-

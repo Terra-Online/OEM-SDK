@@ -1,3 +1,4 @@
+// Keep OEM-owned Leaflet private-method dependencies at this adapter boundary.
 import L from 'leaflet';
 import type { OEMFloor, OEMRegion } from '@opendfieldmap/core';
 import { SmoothTileLayer } from '../atlos/smoothTileLayer';

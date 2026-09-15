@@ -1,4 +1,7 @@
 import L from 'leaflet';
+import { OEM_MAP_DEFAULTS } from '../configSpec';
+import { UpdateCoordinator } from './coordinator';
+import { ResourceRepository } from './repository';
 import {
   createOEMPointUrl,
   createOEMCoordinateSnapshot,
@@ -10,6 +13,7 @@ import {
   fetchOEMJson,
   fromOEMLeafletPosition,
   getOEMRegion,
+  getOEMDefaultFloor,
   mapToGameXZPosition,
   normalizeOEMLocale,
   resolveOEMAsset,
@@ -17,12 +21,10 @@ import {
   toOEMLeafletPosition,
 } from '@opendfieldmap/core';
 import type {
-  OEMCoordinateSnapshot,
   OEMScreenPosition,
   OEMAsset,
   OEMBoundary,
   OEMBoundarySource,
-  OEMFloor,
   OEMLabel,
   OEMLocaleMessages,
   OEMManifest,
@@ -34,8 +36,8 @@ import type {
   OEMRegion,
   OEMView,
 } from '@opendfieldmap/core';
-import type { OEM as OEMContract, OEMCustomPoint, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions, OEMResourceStates, OEMResourceState, OEMMapClick, OEMMapConfig, OEMMapState, OEMCommandOptions, OEMInteractionLocks, OEMPointInteraction, OEMPointActivation } from '../types';
-import { cloneConfig, validateConfig, normalizeState, toConfig, getPreset, resolveRegionId, hasMarkers, sameState } from '../config';
+import type { OEM as OEMContract, OEMCustomPoint, OEMEvents, OEMFeatures, OEMOptions, OEMZoomOptions, OEMResourceStates, OEMResourceState, OEMMapClick, OEMMapConfig, OEMMapState, OEMCommandOptions, OEMInteractionLocks, OEMPointInteraction } from '../types';
+import { cloneConfig, validateConfig, resolveConfigUpdate, hasMarkers, sameState } from '../config';
 import { enableSmoothWheelZoom } from '../atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from '../atlos/mapOverdrag';
 import GithubIcon from '../assets/ghicon.svg';
@@ -43,7 +45,7 @@ import { boundaryScore, parseBoundaryCollection } from './geometry';
 import { ViewportMarker } from '../atlos/canvas/markerViewport';
 import { createCanvasAwareClusterGroup } from '../atlos/canvas/canvasMarkerCluster';
 import type { CanvasClusterGroup } from '../atlos/canvas/clusterGroup';
-import { CoveredTileLayer, OEMMarker } from './layers';
+import { CoveredTileLayer, OEMMarker } from './leafletAdapter';
 import {
   BRAND_URL,
   CLUSTER_SUBCATEGORIES,
@@ -100,7 +102,7 @@ export class OEM implements OEMContract {
   private region: OEMRegion;
   private floorId = 'M';
   private features: OEMFeatures = {};
-  private boundarySource: OEMBoundarySource = 'oem';
+  private boundarySource: OEMBoundarySource = OEM_MAP_DEFAULTS.boundarySource;
   private listeners = new Map<keyof OEMEvents, Set<(payload: never) => void>>();
   private requests = new Map<OEMFeatureName, AbortController>();
   private baseTiles?: L.TileLayer;
@@ -117,14 +119,9 @@ export class OEM implements OEMContract {
   private customMarkers = new Map<string, { marker: ViewportMarker; point: OEMCustomPoint; inner: HTMLElement }>();
   private markerShells = new Map<string, HTMLElement>();
   private markerVisualTemplates = new WeakMap<OEMPointType, Map<boolean, HTMLElement>>();
-  private updates: Promise<unknown> = Promise.resolve();
-  private coordinating = 0;
+  private coordinator = new UpdateCoordinator(this.lifetime.signal, () => this.assertAlive(), () => this.emitState());
+  private repository = new ResourceRepository(this.lifetime.signal);
   private emittedState?: OEMMapState;
-  private pointIndex?: Record<string, string>;
-  private pointIndexRequest?: Promise<Record<string, string>>;
-  private pointShardRequests = new Map<string, Promise<OEMPoint[]>>();
-  private boundaryData = new Map<string, OEMBoundary[]>();
-  private boundaryDataRequests = new Map<string, Promise<OEMBoundary[]>>();
   private types: Record<string, OEMPointType> = {};
   private labels: OEMLabel[] = [];
   private visibleLabelType?: OEMLabel['type'];
@@ -147,18 +144,18 @@ export class OEM implements OEMContract {
     if (mounted.has(container)) throw new Error('This container already hosts an OEM instance');
     this.region = getOEMRegion(manifest, options.view?.regionId ?? options.regionId ?? manifest.defaultRegionId);
     this.filter = cloneFilter(options.pointFilter ?? {});
-    this.boundarySource = options.features?.boundarySource ?? 'oem';
+    this.boundarySource = options.features?.boundarySource ?? OEM_MAP_DEFAULTS.boundarySource;
     this.customPoints = new Map(this.normalizeCustomPoints(options.customPoints ?? []).map(point => [point.id, point]));
     if (options.subregionId) this.filter.subregions = [options.subregionId];
-    this.markerClustering = options.markerClustering ?? true;
-    const initialFloor = options.view?.floorId ?? options.floorId ?? 'M';
+    this.markerClustering = options.markerClustering ?? OEM_MAP_DEFAULTS.markerClustering;
+    const initialFloor = options.view?.floorId ?? options.floorId ?? getOEMDefaultFloor(this.region);
     this.validateFloor(initialFloor);
     if (options.view) this.validatePosition(options.view);
     this.locale = options.locale ?? manifest.fallbackLocale;
     this.resolvedLocale = normalizeOEMLocale(this.locale, Object.keys(manifest.locales), manifest.fallbackLocale);
     this.root = document.createElement('div');
     this.root.className = 'mapRoot';
-    this.root.dataset.theme = options.theme ?? 'light';
+    this.root.dataset.theme = options.theme ?? OEM_MAP_DEFAULTS.theme;
     container.append(this.root);
     mounted.add(container);
     try {
@@ -272,21 +269,13 @@ export class OEM implements OEMContract {
     return fromOEMLeafletPosition(latlng.lat, latlng.lng, this.region, this.floorId);
   }
   private loadBoundaryData(reference: OEMAsset): Promise<OEMBoundary[]> {
-    const cached = this.boundaryData.get(reference.path);
-    if (cached) return Promise.resolve(cached);
-    const pending = this.boundaryDataRequests.get(reference.path);
-    if (pending) return pending;
-    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, reference.path), this.lifetime.signal).then((value) => {
+    return this.repository.load(`boundary:${reference.path}`, async () => {
+      const value = await fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, reference.path), this.lifetime.signal);
       this.lifetime.signal.throwIfAborted();
-      const boundaries = parseBoundaryCollection(value, reference.path);
-      this.boundaryData.set(reference.path, boundaries);
-      return boundaries;
-    }).finally(() => {
-      if (this.boundaryDataRequests.get(reference.path) === request) this.boundaryDataRequests.delete(reference.path);
+      return parseBoundaryCollection(value, reference.path);
     });
-    this.boundaryDataRequests.set(reference.path, request);
-    return request;
   }
+
   /** Preloads OEM subregion geometry so map clicks can resolve an exact subregion. */
   async prepareSubregionBoundaries(): Promise<void> {
     if (!this.region.boundaries) return;
@@ -297,7 +286,7 @@ export class OEM implements OEMContract {
     const scale = 2 ** this.region.maxNativeZoom;
     const point = { x: x * scale, z: z * scale };
     const allowed = selected?.length ? new Set(selected) : undefined;
-    const geometries = this.region.boundaries ? this.boundaryData.get(this.region.boundaries.path) ?? [] : [];
+    const geometries = this.region.boundaries ? this.repository.peek<OEMBoundary[]>(`boundary:${this.region.boundaries.path}`) ?? [] : [];
     const scores = geometries
       .filter((boundary) => this.region.subregions.some((subregion) => subregion.id === boundary.id) && (!allowed || allowed.has(boundary.id)))
       .map((boundary) => boundaryScore(boundary, point));
@@ -348,7 +337,7 @@ export class OEM implements OEMContract {
   }
   private capturePosition(x: number, z: number): OEMMapClick {
     const subregionId = this.inferSubregionId(x, z);
-    const precise = this.region.boundaries && this.boundaryData.get(this.region.boundaries.path)?.length;
+    const precise = this.region.boundaries && this.repository.peek<OEMBoundary[]>(`boundary:${this.region.boundaries.path}`)?.length;
     const snapshot = createOEMCoordinateSnapshot({ regionId: this.region.id, x, z, floorId: this.floorId,
       ...(subregionId ? { subregionId } : {}) }, this.manifest, subregionId ? precise ? 'geometry' : 'bounds' : 'unresolved');
     return Object.freeze({ ...snapshot, position: snapshot.mapPosition, game: snapshot.gamePosition });
@@ -459,14 +448,14 @@ export class OEM implements OEMContract {
     this.baseTiles?.remove();
     this.floorTiles?.remove();
     this.floorTiles = undefined;
-    this.floorId = 'M';
+    this.floorId = getOEMDefaultFloor(this.region);
     this.map.setMaxBounds(L.latLngBounds([]));
     this.map.setMinZoom(this.region.minZoom);
     this.map.setMaxZoom(this.region.maxZoom);
     const target = view ?? this.region.initialView;
     this.map.setView(toOEMLeafletPosition(target, this.region), this.clampZoom(target.zoom), { animate: false });
     this.map.setMaxBounds(this.regionBounds());
-    this.baseTiles = this.makeTiles('M').addTo(this.map);
+    this.baseTiles = this.makeTiles(this.floorId).addTo(this.map);
     this.updatingView = false;
   }
   /** Converts the region's published pixel extent to Simple CRS bounds. */
@@ -530,7 +519,7 @@ export class OEM implements OEMContract {
     this.applyRegion();
     this.renderCustomPoints();
     this.emit('regionchange', { regionId });
-    this.emit('floorchange', { floorId: 'M' });
+    this.emit('floorchange', { floorId: this.floorId });
     this.emitView();
     void this.prepareSubregionBoundaries().catch(() => undefined);
 
@@ -544,8 +533,9 @@ export class OEM implements OEMContract {
     this.floorTiles = undefined;
     this.floorId = floorId;
     const base = this.baseTiles?.getContainer();
-    if (base) base.style.filter = floorId === 'M' ? 'brightness(1)' : 'brightness(0.5)';
-    if (floorId !== 'M') this.floorTiles = this.makeTiles(floorId).addTo(this.map);
+    const baseFloor = getOEMDefaultFloor(this.region);
+    if (base) base.style.filter = floorId === baseFloor ? 'brightness(1)' : 'brightness(0.5)';
+    if (floorId !== baseFloor) this.floorTiles = this.makeTiles(floorId).addTo(this.map);
     this.renderPoints();
     this.renderCustomPoints();
     this.emit('floorchange', { floorId });
@@ -715,40 +705,24 @@ export class OEM implements OEMContract {
   }
 
   private async loadPointIndex(): Promise<Record<string, string>> {
-    if (!this.manifest.pointIndex) return {};
-    if (this.pointIndex) return this.pointIndex;
-    if (!this.pointIndexRequest) {
-      this.pointIndexRequest = fetchOEMJson<unknown>(
-        resolveOEMAsset(this.options.resources.baseUrl, this.manifest.pointIndex.path),
-        this.lifetime.signal,
-      ).then((value) => {
-        this.lifetime.signal.throwIfAborted();
-        if (!value || typeof value !== 'object' || Array.isArray(value)) invalid('pointIndex', 'Invalid OEM point index');
-        const index = value as Record<string, string>;
-        this.pointIndex = index;
-        return index;
-      }).catch((error) => {
-        this.pointIndexRequest = undefined;
-        throw error;
-      });
-    }
-    return this.pointIndexRequest;
+    const reference = this.manifest.pointIndex;
+    if (!reference) return {};
+    return this.repository.load(`index:${reference.path}`, async () => {
+      const value = await fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, reference.path), this.lifetime.signal);
+      this.lifetime.signal.throwIfAborted();
+      if (!value || typeof value !== 'object' || Array.isArray(value)) invalid('pointIndex', 'Invalid OEM point index');
+      return value as Record<string, string>;
+    });
   }
 
   private loadPointShard(path: string): Promise<OEMPoint[]> {
-    const cached = this.pointShardRequests.get(path);
-    if (cached) return cached;
-    const request = fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, path), this.lifetime.signal).then((value) => {
+    return this.repository.load(`points:${path}`, async () => {
+      const value = await fetchOEMJson<unknown>(resolveOEMAsset(this.options.resources.baseUrl, path), this.lifetime.signal);
       this.lifetime.signal.throwIfAborted();
-      const region = this.manifest.regions.find((entry) => entry.points.some((ref) => ref.path === path));
+      const region = this.manifest.regions.find(entry => entry.points.some(ref => ref.path === path));
       if (!region || !Array.isArray(value)) invalid(path, 'Invalid OEM point shard');
       return this.decodePointShard(value, path, region);
-    }).catch((error) => {
-      if (this.pointShardRequests.get(path) === request) this.pointShardRequests.delete(path);
-      throw error;
     });
-    this.pointShardRequests.set(path, request);
-    return request;
   }
 
   private decodePointShard(value: unknown[], shardPath: string, region: OEMRegion = this.region): OEMPoint[] {
@@ -1059,15 +1033,9 @@ export class OEM implements OEMContract {
   }
   /** Every asynchronous command and Widget patch shares this queue. */
   private enqueue<T>(operation: (signal: AbortSignal) => T | Promise<T>, externalSignal?: AbortSignal): Promise<T> {
-    const signal = externalSignal ? AbortSignal.any([this.lifetime.signal, externalSignal]) : this.lifetime.signal;
-    const result = this.updates.then(async () => {
-      signal.throwIfAborted(); this.assertAlive(); this.coordinating++;
-      try { return await operation(signal); }
-      finally { this.coordinating--; if (!this.destroyed) this.emitState(); }
-    });
-    this.updates = result.catch(() => undefined);
-    return withOEMAbort(result, signal);
+    return this.coordinator.run(operation, externalSignal);
   }
+
   getState(): OEMMapState {
     const view = this.getView();
     return { regionId: view.regionId, subregionId: this.filter.subregions?.length === 1 && this.region.subregions.some(subregion => subregion.id === this.filter.subregions![0]) ? this.filter.subregions[0] : null,
@@ -1078,7 +1046,7 @@ export class OEM implements OEMContract {
       theme: this.root.dataset.theme as 'light' | 'dark', lockDrag: !!this.options.lockDrag, lockZoom: !!this.options.lockZoom };
   }
   private emitState(): void {
-    if (this.destroyed || this.coordinating) return;
+    if (this.destroyed || this.coordinator.busy) return;
     const state = this.getState();
     if (this.emittedState && sameState(state, this.emittedState)) return;
     this.emittedState = state;
@@ -1088,29 +1056,7 @@ export class OEM implements OEMContract {
     validateConfig(update); const snapshot = cloneConfig(update);
     return this.enqueue(async signal => {
       const previous = this.getState();
-      const changes = Object.fromEntries(Object.entries(snapshot).filter(([, value]) => value !== undefined)) as OEMMapConfig;
-      if (changes.subregion !== undefined) changes.subregion = changes.subregion?.trim() || null;
-      if (changes.subregion && changes.region === undefined) {
-        const owner = this.manifest.regions.find(region => region.subregions.some(sub => sub.id === changes.subregion));
-        if (!owner) invalid('options.subregion', 'Unknown subregion');
-        changes.region = owner.id;
-      }
-      const merged = { ...toConfig(previous), ...changes };
-      const regionId = resolveRegionId(this.manifest, changes.region ?? previous.regionId);
-      if (regionId !== previous.regionId) {
-        const preset = getPreset(getOEMRegion(this.manifest, regionId));
-        if (changes.floor === undefined) merged.floor = 'M';
-        if (changes.subregion === undefined) merged.subregion = null;
-        if (changes.center === undefined) merged.center = preset.center;
-        if (changes.zoom === undefined) merged.zoom = preset.zoom;
-      }
-      if (changes.subregion !== undefined && changes.subregion !== previous.subregionId) {
-        const region = getOEMRegion(this.manifest, regionId);
-        const preset = getPreset(region, region.subregions.find(sub => sub.id === changes.subregion));
-        if (changes.center === undefined) merged.center = preset.center;
-        if (changes.zoom === undefined) merged.zoom = preset.zoom;
-      }
-      const next = normalizeState(merged, this.manifest);
+      const { changes, next } = resolveConfigUpdate(previous, snapshot, this.manifest);
       const points = changes.customPointsUrl !== undefined ? await this.readCustomPoints(changes.customPointsUrl, signal)
         : changes.customPoints !== undefined ? this.normalizeCustomPoints(changes.customPoints) : undefined;
       signal.throwIfAborted();
@@ -1207,11 +1153,7 @@ export class OEM implements OEMContract {
     this.customMarkers.clear();
     this.markerShells.clear(); this.markerVisualTemplates = new WeakMap();
     this.customPointsLayer.clearLayers();
-    this.pointShardRequests.clear();
-    this.pointIndex = undefined;
-    this.pointIndexRequest = undefined;
-    this.boundaryData.clear();
-    this.boundaryDataRequests.clear();
+    this.repository.clear();
     this.labels = [];
     this.types = {};
     this.messages = {};

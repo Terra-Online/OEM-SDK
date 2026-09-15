@@ -180,7 +180,7 @@ describe('OEM runtime points', async () => {
   it('resolves overlapping subregions by pairwise interior clearance', async () => {
     const runtime = core as unknown as {
       region: OEMRegion;
-      boundaryData: Map<string, unknown>;
+      repository: { load(key: string, loader: () => Promise<unknown>): Promise<unknown> };
       inferSubregionId: (x: number, z: number) => string | undefined;
     };
     const boundaryPath = '/boundaries/overlap.json';
@@ -199,7 +199,7 @@ describe('OEM runtime points', async () => {
       { regionId: 'test', x: maxX, z: maxZ },
       { regionId: 'test', x: minX, z: maxZ },
     ];
-    runtime.boundaryData.set(boundaryPath, [
+    await runtime.repository.load(`boundary:${boundaryPath}`, async () => [
       { id: 'near-edge', rings: [ring(70, 0, 90, 160)] },
       { id: 'middle', rings: [ring(40, -20, 120, 180)] },
       { id: 'deep', rings: [ring(0, -80, 200, 240)] },
@@ -213,7 +213,7 @@ describe('OEM runtime points', async () => {
   it('does not infer a subregion outside every precise boundary', async () => {
     const runtime = core as unknown as {
       region: OEMRegion;
-      boundaryData: Map<string, unknown>;
+      repository: { load(key: string, loader: () => Promise<unknown>): Promise<unknown> };
       inferSubregionId: (x: number, z: number) => string | undefined;
     };
     const boundaryPath = '/boundaries/disjoint.json';
@@ -222,7 +222,7 @@ describe('OEM runtime points', async () => {
       boundaries: { path: boundaryPath, sha256: 'unused', bytes: 1 },
       subregions: [{ id: 'bounded', key: 'bounded', bounds: [[0, 0], [800, 800]] }],
     };
-    runtime.boundaryData.set(boundaryPath, [{
+    await runtime.repository.load(`boundary:${boundaryPath}`, async () => [{
       id: 'bounded',
       rings: [[
         { regionId: 'test', x: 0, z: 0 },
@@ -252,7 +252,7 @@ describe('OEM runtime points', async () => {
   });
 
   it('adds one custom marker for every click in multiple mode', async () => {
-    const tool = createClickPointTool(core, { mode: 'multiple', style: 'framed', icon: '/icons/pin.webp' });
+    createClickPointTool(core, { mode: 'multiple', style: 'framed', icon: '/icons/pin.webp' });
     const map = (core as unknown as { map: { fire: (event: string, payload: unknown) => void } }).map;
     map.fire('click', { latlng: { lat: -100, lng: 200 } });
     map.fire('click', { latlng: { lat: -300, lng: 400 } });

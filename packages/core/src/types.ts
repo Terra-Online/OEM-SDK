@@ -182,9 +182,11 @@ export type OEMLocaleMessages = Record<string, string>;
 
 /** Explicit published-pixel coordinate used in reusable position snapshots. */
 export interface OEMPixelPosition extends OEMPosition { space: 'pixel' }
+/** Preferred normalized coordinate contract; legacy OEMMapPosition inputs remain accepted. */
+export interface OEMNormalizedMapPosition extends OEMMapPosition { space: 'map' }
 /** A JSON-safe coordinate record independent of a live map or DOM event. */
 export interface OEMCoordinateSnapshot {
-  readonly mapPosition: Readonly<OEMMapPosition & { space: 'map' }>;
+  readonly mapPosition: Readonly<OEMNormalizedMapPosition>;
   readonly pixelPosition: Readonly<OEMPixelPosition>;
   readonly gamePosition: Readonly<OEMGameXZPosition & { space: 'game' }> | null;
   readonly context: Readonly<{ schemaVersion: 1; releaseId: string; gameVersion: string }>;

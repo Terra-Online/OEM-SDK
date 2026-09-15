@@ -1,5 +1,7 @@
 # Widget API
 
+增量說明：[分組配置、動態控制項、React ref／事件及兼容規則（簡體中文）](config-governance.zh-CN.md)。既有扁平介面繼續有效。
+
 語言：[English](api.md) · [简体中文](api.zh-CN.md) · 繁體中文（香港）
 
 ## `createOEMWidget`

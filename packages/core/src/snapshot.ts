@@ -1,5 +1,6 @@
 import type { OEMCoordinateSnapshot, OEMManifest, OEMMapPosition } from './types';
-import { getOEMRegion, fromOEMMapPosition, mapToGameXZPosition } from './index';
+import { getOEMRegion } from './manifest';
+import { fromOEMMapPosition, mapToGameXZPosition } from './coordinates';
 
 /** Capture units and release context without retaining the manifest or a renderer. */
 export function createOEMCoordinateSnapshot(

@@ -1,5 +1,7 @@
 # Widget API
 
+Configuration update: optional grouped config, dynamic official controls, and React refs/events are documented in the [third-batch migration guide (Chinese)](config-governance.zh-CN.md). Existing flat APIs remain supported.
+
 Languages: English · [简体中文](api.zh-CN.md) · [繁體中文（香港）](api.zh-HK.md)
 
 ## `createOEMWidget`

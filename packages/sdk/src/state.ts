@@ -1,4 +1,6 @@
-import type { OEMBoundarySource, OEMFloorId, OEMLocale, OEMRegionSelector, OEMWidgetConfig } from './types';
+import type { OEMBoundarySource, OEMWidgetConfig } from './types';
+import { OEM_MAP_CONFIG_FIELDS } from '@opendfieldmap/map';
+import { OEM_WIDGET_CONTROL_DEFAULTS, snapshotOEMWidgetConfig } from './config';
 
 const parseBoolean = (value: string | null): boolean | undefined => {
   if (value === null) return undefined;
@@ -34,21 +36,38 @@ const toSearchParams = (source: string): URLSearchParams => {
  * This helper is optional; createOEMWidget accepts normal named properties.
  */
 export function parseOEMUrlState(source: string | URLSearchParams): OEMWidgetConfig {
+  return parse(source, false);
+}
+
+/** Patch-safe adapter: absent URL keys never clear existing map state. */
+export function parseOEMUrlPatch(source: string | URLSearchParams): OEMWidgetConfig {
+  return snapshotOEMWidgetConfig(parse(source, true));
+}
+
+function parse(source: string | URLSearchParams, patch: boolean): OEMWidgetConfig {
   const params = typeof source === 'string' ? toSearchParams(source) : source;
-  const filter = params.get('f');
-  const centerX = parseNumber(params.get('cx'));
-  const centerZ = parseNumber(params.get('cz') ?? params.get('centerZ'));
-  return {
-    region: (params.get('r') ?? undefined) as OEMRegionSelector | undefined,
-    subregion: params.get('s'),
-    floor: (params.get('layer') ?? undefined) as OEMFloorId | undefined,
-    locale: (params.get('l') ?? undefined) as OEMLocale | undefined,
-    markerTypes: filter === '*' ? '*' : filter === null ? undefined : parseList(filter) ?? false,
-    labels: parseBoolean(params.get('labels') ?? params.get('names')),
-    boundaries: parseBoolean(params.get('boundaries') ?? params.get('boundary')),
-    boundarySource: parseBoundarySource(params.get('boundarySource')),
-    markerClustering: parseBoolean(params.get('cluster')),
-    zoom: parseNumber(params.get('z')),
-    center: centerX === undefined || centerZ === undefined ? undefined : { x: centerX, z: centerZ },
-  };
+  const result: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(OEM_MAP_CONFIG_FIELDS)) {
+    if (!('url' in field)) continue;
+    const value = field.url.map(name => params.get(name)).find(value => value !== null) ?? null;
+    switch (field.kind) {
+      case 'boolean': result[key] = parseBoolean(value); break;
+      case 'number': result[key] = parseNumber(value); break;
+      case 'string': result[key] = value ?? undefined; break;
+      case 'nullableString': result[key] = value === null ? patch ? undefined : null : value; break;
+      case 'theme': result[key] = value === 'light' || value === 'dark' ? value : undefined; break;
+      case 'boundarySource': result[key] = parseBoundarySource(value); break;
+      case 'markers': result[key] = value === '*' ? '*' : parseList(value); break;
+      case 'center': {
+        const x = parseNumber(params.get('cx')), z = parseNumber(params.get('cz') ?? params.get('centerZ'));
+        result[key] = x === undefined || z === undefined ? undefined : { x, z };
+        break;
+      }
+    }
+  }
+  for (const key of Object.keys(OEM_WIDGET_CONTROL_DEFAULTS)) {
+    const value = parseBoolean(params.get(key));
+    if (value !== undefined) result[key] = value;
+  }
+  return result as OEMWidgetConfig;
 }
