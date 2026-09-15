@@ -15,12 +15,14 @@ describe('Endfield game version resolution', () => {
   });
 
   it('reads the latest game response from a batch result', () => {
-    expect(parseLatestGameVersion({
-      proxy_rsps: [
-        { kind: 'get_latest_launcher', get_latest_launcher_rsp: { version: '1.5.0' } },
-        { kind: 'get_latest_game', get_latest_game_rsp: { version: '1.5.3' } },
-      ],
-    })).toEqual({ launcher: '1.5.3', path: '1_5_3' });
+    expect(
+      parseLatestGameVersion({
+        proxy_rsps: [
+          { kind: 'get_latest_launcher', get_latest_launcher_rsp: { version: '1.5.0' } },
+          { kind: 'get_latest_game', get_latest_game_rsp: { version: '1.5.3' } },
+        ],
+      }),
+    ).toEqual({ launcher: '1.5.3', path: '1_5_3' });
   });
 
   it('sends the launcher-compatible game request shape', async () => {
@@ -36,15 +38,17 @@ describe('Endfield game version resolution', () => {
     const [url, options] = fetchImpl.mock.calls[0];
     const body = JSON.parse(options.body);
     expect(url).toBe(GAME_VERSION_ENDPOINT);
-    expect(body.proxy_reqs).toEqual([{
-      kind: 'get_latest_game',
-      get_latest_game_req: {
-        appcode: '6LL0KJuqHBVz33WK',
-        launcher_appcode: 'abYeZZ16BPluCFyT',
-        channel: '1',
-        sub_channel: '1',
-        version: GAME_VERSION_REQUEST_BASELINE,
+    expect(body.proxy_reqs).toEqual([
+      {
+        kind: 'get_latest_game',
+        get_latest_game_req: {
+          appcode: '6LL0KJuqHBVz33WK',
+          launcher_appcode: 'abYeZZ16BPluCFyT',
+          channel: '1',
+          sub_channel: '1',
+          version: GAME_VERSION_REQUEST_BASELINE,
+        },
       },
-    }]);
+    ]);
   });
 });

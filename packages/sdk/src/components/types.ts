@@ -33,21 +33,14 @@ export const createButton = (className: string): HTMLButtonElement => {
 };
 
 /** Applies a localized accessible name to a control without embedding UI copy. */
-export const setLabel = (
-  element: HTMLElement,
-  label: string,
-): void => {
+export const setLabel = (element: HTMLElement, label: string): void => {
   element.title = label;
   element.setAttribute('aria-label', label);
 };
 
 /** Resolves a control message bundle through the manifest locale fallback. */
-export const getMessages = (
-  manifest: OEMManifest,
-  locale: string,
-): OEMControlMessages => {
-  const messages =
-    manifest.controls[locale] ?? manifest.controls[manifest.fallbackLocale];
+export const getMessages = (manifest: OEMManifest, locale: string): OEMControlMessages => {
+  const messages = manifest.controls[locale] ?? manifest.controls[manifest.fallbackLocale];
   if (!messages) throw new Error('Missing OEM control messages');
   return messages;
 };

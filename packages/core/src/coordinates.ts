@@ -1,14 +1,29 @@
-import type { OEMGamePosition, OEMGameTransform, OEMGameXZPosition, OEMMapPosition, OEMNormalizedMapPosition, OEMPixelPosition, OEMPosition, OEMRegion } from './types';
+import type {
+  OEMGamePosition,
+  OEMGameTransform,
+  OEMGameXZPosition,
+  OEMMapPosition,
+  OEMNormalizedMapPosition,
+  OEMPixelPosition,
+  OEMPosition,
+  OEMRegion,
+} from './types';
 
 /** Converts an OEM pixel position to the Simple CRS coordinates used by Leaflet. */
 export function toOEMLeafletPosition(position: OEMPosition, region: OEMRegion): [number, number] {
-  if (position.regionId !== region.id || !Number.isFinite(position.x) || !Number.isFinite(position.z)) throw new Error('Invalid OEM position');
+  if (position.regionId !== region.id || !Number.isFinite(position.x) || !Number.isFinite(position.z))
+    throw new Error('Invalid OEM position');
   const scale = 2 ** region.maxNativeZoom;
   return [position.z / scale, position.x / scale];
 }
 
 /** Converts Simple CRS coordinates back to an OEM pixel position. */
-export function fromOEMLeafletPosition(lat: number, lng: number, region: OEMRegion, floorId = 'M'): OEMPosition {
+export function fromOEMLeafletPosition(
+  lat: number,
+  lng: number,
+  region: OEMRegion,
+  floorId = 'M',
+): OEMPosition {
   const scale = 2 ** region.maxNativeZoom;
   return { regionId: region.id, x: lng * scale, z: lat * scale, floorId };
 }
@@ -45,18 +60,29 @@ export function fromOEMMapPosition(position: OEMMapPosition, region: OEMRegion):
 
 /** Converts normalized map coordinates into Leaflet Simple CRS coordinates. */
 export function toOEMLeafletMapPosition(position: OEMMapPosition): [number, number] {
-  if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.z)) throw new Error('Invalid OEM map position');
+  if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.z))
+    throw new Error('Invalid OEM map position');
   return [position.z, position.x];
 }
 
 /** Converts a retained game-space position into published map coordinates. */
-export function gameToOEMPosition(raw: OEMGamePosition, region: OEMRegion, floorId = 'M', subregionId?: string): OEMPosition {
+export function gameToOEMPosition(
+  raw: OEMGamePosition,
+  region: OEMRegion,
+  floorId = 'M',
+  subregionId?: string,
+): OEMPosition {
   if (![raw.x, raw.y, raw.z].every(Number.isFinite)) throw new Error('Invalid game position');
   return fromOEMMapPosition(gameXZToOEMPosition(raw, region, floorId, subregionId), region);
 }
 
 /** Converts horizontal game coordinates into published map coordinates. */
-export function gameXZToOEMPosition(raw: OEMGameXZPosition, region: OEMRegion, floorId = 'M', subregionId?: string): OEMMapPosition {
+export function gameXZToOEMPosition(
+  raw: OEMGameXZPosition,
+  region: OEMRegion,
+  floorId = 'M',
+  subregionId?: string,
+): OEMMapPosition {
   if (!Number.isFinite(raw.x) || !Number.isFinite(raw.z)) throw new Error('Invalid game position');
   const transform = getOEMGameTransform(region, subregionId);
   return {
@@ -69,7 +95,11 @@ export function gameXZToOEMPosition(raw: OEMGameXZPosition, region: OEMRegion, f
 }
 
 /** Converts an OEM map position to the recoverable horizontal game coordinates. */
-export function oemToGamePosition(position: OEMPosition, region: OEMRegion, subregionId?: string): OEMGameXZPosition {
+export function oemToGamePosition(
+  position: OEMPosition,
+  region: OEMRegion,
+  subregionId?: string,
+): OEMGameXZPosition {
   if (position.regionId !== region.id || !Number.isFinite(position.x) || !Number.isFinite(position.z)) {
     throw new Error('Invalid OEM position');
   }
@@ -77,7 +107,11 @@ export function oemToGamePosition(position: OEMPosition, region: OEMRegion, subr
 }
 
 /** Converts normalized OEM map coordinates into the recoverable game X/Z coordinates. */
-export function mapToGameXZPosition(position: OEMMapPosition, region: OEMRegion, subregionId?: string): OEMGameXZPosition {
+export function mapToGameXZPosition(
+  position: OEMMapPosition,
+  region: OEMRegion,
+  subregionId?: string,
+): OEMGameXZPosition {
   if (position.regionId !== region.id || !Number.isFinite(position.x) || !Number.isFinite(position.z)) {
     throw new Error('Invalid OEM map position');
   }
@@ -110,9 +144,18 @@ export function pixelToMapPosition(position: OEMPosition, region: OEMRegion): OE
 export function mapToPixelPosition(position: OEMMapPosition, region: OEMRegion): OEMPixelPosition {
   return { ...fromOEMMapPosition(position, region), space: 'pixel' };
 }
-export function gameXZToMapPosition(position: OEMGameXZPosition, region: OEMRegion, floorId = 'M', subregionId?: string): OEMNormalizedMapPosition {
+export function gameXZToMapPosition(
+  position: OEMGameXZPosition,
+  region: OEMRegion,
+  floorId = 'M',
+  subregionId?: string,
+): OEMNormalizedMapPosition {
   return { ...gameXZToOEMPosition(position, region, floorId, subregionId), space: 'map' };
 }
-export function pixelToGameXZPosition(position: OEMPosition, region: OEMRegion, subregionId?: string): OEMGameXZPosition & { space: 'game' } {
+export function pixelToGameXZPosition(
+  position: OEMPosition,
+  region: OEMRegion,
+  subregionId?: string,
+): OEMGameXZPosition & { space: 'game' } {
   return { ...oemToGamePosition(position, region, subregionId), space: 'game' };
 }

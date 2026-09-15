@@ -17,6 +17,13 @@ export function invalid(path: string, message: string): never {
 }
 
 export function resourceError(operation: string, cause: unknown): OEMError {
-  return cause instanceof OEMError ? cause : new OEMError('RESOURCE_FAILED', operation,
-    cause instanceof Error ? cause.message : String(cause), undefined, { cause });
+  return cause instanceof OEMError
+    ? cause
+    : new OEMError(
+        'RESOURCE_FAILED',
+        operation,
+        cause instanceof Error ? cause.message : String(cause),
+        undefined,
+        { cause },
+      );
 }

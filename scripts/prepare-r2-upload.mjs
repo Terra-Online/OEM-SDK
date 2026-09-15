@@ -6,27 +6,38 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const publicRoot = path.join(root, 'public');
 const outputRoot = path.join(root, 'artifacts', 'r2');
-const localConfig = JSON.parse(await fs.readFile(path.join(root, 'config/config.r2.json'), 'utf8'))?.web?.build;
+const localConfig = JSON.parse(await fs.readFile(path.join(root, 'config/config.r2.json'), 'utf8'))?.web
+  ?.build;
 const r2 = localConfig?.r2;
-if (!r2?.bucket || !r2.zoneId || !localConfig.cdn) throw new Error('Incomplete R2 deployment settings in config/config.r2.json');
+if (!r2?.bucket || !r2.zoneId || !localConfig.cdn)
+  throw new Error('Incomplete R2 deployment settings in config/config.r2.json');
 const domain = new URL(localConfig.cdn).hostname;
 
 const walk = async (directory) => {
-  const entries = (await fs.readdir(directory, { withFileTypes: true }))
-    .sort((left, right) => left.name.localeCompare(right.name));
-  const files = await Promise.all(entries.map(async (entry) => {
-    const filename = path.join(directory, entry.name);
-    return entry.isDirectory() ? walk(filename) : [filename];
-  }));
+  const entries = (await fs.readdir(directory, { withFileTypes: true })).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const filename = path.join(directory, entry.name);
+      return entry.isDirectory() ? walk(filename) : [filename];
+    }),
+  );
   return files.flat();
 };
 
 const groupDefinitions = {
-  json: { contentType: 'application/json; charset=utf-8', cacheControl: 'public, max-age=31536000, immutable' },
+  json: {
+    contentType: 'application/json; charset=utf-8',
+    cacheControl: 'public, max-age=31536000, immutable',
+  },
   webp: { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' },
   woff2: { contentType: 'font/woff2', cacheControl: 'public, max-age=31536000, immutable' },
   text: { contentType: 'text/plain; charset=utf-8', cacheControl: 'public, max-age=31536000, immutable' },
-  channel: { contentType: 'application/json; charset=utf-8', cacheControl: 'public, no-cache, must-revalidate' },
+  channel: {
+    contentType: 'application/json; charset=utf-8',
+    cacheControl: 'public, no-cache, must-revalidate',
+  },
 };
 const groups = Object.fromEntries(Object.keys(groupDefinitions).map((name) => [name, []]));
 const files = (await walk(publicRoot)).sort((left, right) => left.localeCompare(right));
@@ -79,7 +90,12 @@ const plan = {
   bytes: totalBytes,
   concurrency: r2.transfers ?? 96,
   groups: planGroups,
-  publishOrder: [...planGroups.filter((group) => group.name !== 'channel').map((group) => group.name), 'cors', 'channel', 'domain'],
+  publishOrder: [
+    ...planGroups.filter((group) => group.name !== 'channel').map((group) => group.name),
+    'cors',
+    'channel',
+    'domain',
+  ],
 };
 await fs.writeFile(path.join(outputRoot, 'plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
 console.log(JSON.stringify(plan, null, 2));

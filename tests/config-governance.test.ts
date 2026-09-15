@@ -1,18 +1,33 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { createOEMWidget, diffOEMWidgetConfig, snapshotOEMWidgetConfig, parseOEMUrlPatch, parseOEMUrlState } from '@opendfieldmap/sdk';
+import {
+  createOEMWidget,
+  diffOEMWidgetConfig,
+  snapshotOEMWidgetConfig,
+  parseOEMUrlPatch,
+  parseOEMUrlState,
+} from '@opendfieldmap/sdk';
 import type { OEMWidget } from '@opendfieldmap/sdk';
 import { pixelToMapPosition, mapToPixelPosition, toOEMMapPosition } from '@opendfieldmap/core';
 import { createManifest, json } from './fixtures';
 
 let widget: OEMWidget | undefined;
-afterEach(() => { widget?.destroy(); widget = undefined; vi.unstubAllGlobals(); document.body.replaceChildren(); });
+afterEach(() => {
+  widget?.destroy();
+  widget = undefined;
+  vi.unstubAllGlobals();
+  document.body.replaceChildren();
+});
 
 it('shares grouped precedence, replacement, null and semantic diff rules', () => {
   const before = { layers: { markerTypes: ['a', 'b'] }, interaction: { lockZoom: false } };
   expect(diffOEMWidgetConfig(before, { markerTypes: ['a', 'b'], lockZoom: undefined })).toEqual({});
-  expect(diffOEMWidgetConfig(before, { layers: { markerTypes: [] }, interaction: { lockZoom: true } })).toEqual({ markerTypes: [], lockZoom: true });
-  expect(snapshotOEMWidgetConfig({ layers: { labels: false }, labels: true, controls: { showScaleBar: false } })).toMatchObject({ labels: true, showScaleBar: false });
+  expect(
+    diffOEMWidgetConfig(before, { layers: { markerTypes: [] }, interaction: { lockZoom: true } }),
+  ).toEqual({ markerTypes: [], lockZoom: true });
+  expect(
+    snapshotOEMWidgetConfig({ layers: { labels: false }, labels: true, controls: { showScaleBar: false } }),
+  ).toMatchObject({ labels: true, showScaleBar: false });
   expect(snapshotOEMWidgetConfig({ subregion: null }).subregion).toBeNull();
   expect(() => snapshotOEMWidgetConfig({ zoom: null } as never)).toThrow('options.zoom');
   expect(() => snapshotOEMWidgetConfig({ view: { labels: false } } as never)).toThrow('options.view.labels');
@@ -21,7 +36,11 @@ it('shares grouped precedence, replacement, null and semantic diff rules', () =>
 it('keeps legacy URL resets while providing an omitted-key-preserving patch', () => {
   expect(parseOEMUrlState('?z=2').subregion).toBeNull();
   expect(parseOEMUrlPatch('?z=2').subregion).toBeUndefined();
-  expect(parseOEMUrlPatch('?theme=dark&lockZoom=1&showScaleBar=0')).toMatchObject({ theme: 'dark', lockZoom: true, showScaleBar: false });
+  expect(parseOEMUrlPatch('?theme=dark&lockZoom=1&showScaleBar=0')).toMatchObject({
+    theme: 'dark',
+    lockZoom: true,
+    showScaleBar: false,
+  });
 });
 
 it('tags preferred coordinate results without changing legacy result shapes', () => {
@@ -36,12 +55,19 @@ it('uses manifest-defined regions/floors and commits controls only after success
   manifest.defaultRegionId = manifest.regions[0].id = 'NewRegion';
   manifest.regions[0].initialView.regionId = 'NewRegion';
   manifest.regions[0].floors = [{ id: 'Deck', tileTemplate: '/tiles/{z}/{x}/{y}.webp' }];
-  vi.stubGlobal('fetch', vi.fn(async () => json({})));
-  const host = document.createElement('div'); document.body.append(host);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json({})),
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
   widget = await createOEMWidget(host, { manifest, layers: { labels: false } });
   expect(widget.getState()).toMatchObject({ regionId: 'NewRegion', floorId: 'Deck' });
   expect(host.querySelector('.regionSwitch svg')).not.toBeNull();
-  await widget.setOptions({ interaction: { lockZoom: true }, controls: { showScaleBar: false, horizontalSelectors: true } });
+  await widget.setOptions({
+    interaction: { lockZoom: true },
+    controls: { showScaleBar: false, horizontalSelectors: true },
+  });
   expect(widget.map.getState().lockZoom).toBe(true);
   expect(host.querySelector('.scaleControl')).toBeNull();
   expect(host.querySelector('.horizontalSelectors')).not.toBeNull();

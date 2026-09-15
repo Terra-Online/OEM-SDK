@@ -1,13 +1,27 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { createOEMWidget, diffOEMWidgetConfig, snapshotOEMWidgetConfig } from '@opendfieldmap/sdk';
-import type { OEMWidget as WidgetHandle, OEMWidgetConfig, OEMWidgetEvents, OEMWidgetOptions, OEMWidgetState } from '@opendfieldmap/sdk';
+import type {
+  OEMWidget as WidgetHandle,
+  OEMWidgetConfig,
+  OEMWidgetEvents,
+  OEMWidgetOptions,
+  OEMWidgetState,
+} from '@opendfieldmap/sdk';
 
 const events = {
-  onMapClick: 'click', onPointClick: 'pointclick', onPointEnter: 'pointenter', onPointLeave: 'pointleave',
-  onViewChange: 'viewchange', onRegionChange: 'regionchange', onFloorChange: 'floorchange',
-  onCustomPointsChange: 'custompointschange', onResourceChange: 'resourcechange', onLoading: 'loading',
-  onLoad: 'load', onDestroy: 'destroy',
+  onMapClick: 'click',
+  onPointClick: 'pointclick',
+  onPointEnter: 'pointenter',
+  onPointLeave: 'pointleave',
+  onViewChange: 'viewchange',
+  onRegionChange: 'regionchange',
+  onFloorChange: 'floorchange',
+  onCustomPointsChange: 'custompointschange',
+  onResourceChange: 'resourcechange',
+  onLoading: 'loading',
+  onLoad: 'load',
+  onDestroy: 'destroy',
 } as const;
 type EventProps = { [K in keyof typeof events]?: (payload: OEMWidgetEvents[(typeof events)[K]]) => void };
 export interface OEMWidgetProps extends EventProps {
@@ -32,15 +46,19 @@ export const OEMWidget = forwardRef<WidgetHandle, OEMWidgetProps>(function OEMWi
   const { options = {}, className, style } = props;
   const container = useRef<HTMLDivElement>(null);
   const active = useRef<Mount | null>(null);
-  const latest = useRef(props); latest.current = props;
+  const latest = useRef(props);
+  latest.current = props;
   const initial = useRef(options);
   const [handle, setHandle] = useState<WidgetHandle | null>(null);
   useImperativeHandle<WidgetHandle | null, WidgetHandle | null>(ref, () => handle, [handle]);
 
   const report = (error: unknown) => {
     const handler = latest.current.onError ?? latest.current.options?.onError;
-    try { handler?.(error instanceof Error ? error : new Error(String(error))); }
-    catch (cause) { console.error(cause); }
+    try {
+      handler?.(error instanceof Error ? error : new Error(String(error)));
+    } catch (cause) {
+      console.error(cause);
+    }
   };
 
   useEffect(() => {
@@ -54,29 +72,40 @@ export const OEMWidget = forwardRef<WidgetHandle, OEMWidgetProps>(function OEMWi
     void (async () => {
       mount.submitted = snapshotOEMWidgetConfig(initial.current);
       const instance = await createOEMWidget(container.current!, {
-        ...initial.current, signal: controller.signal, onReady: undefined,
-        onError: error => { if (!mount.cancelled) report(error); },
-        onStateChange: state => {
-          if (!mount.cancelled) (latest.current.onStateChange ?? latest.current.options?.onStateChange)?.(state);
+        ...initial.current,
+        signal: controller.signal,
+        onReady: undefined,
+        onError: (error) => {
+          if (!mount.cancelled) report(error);
+        },
+        onStateChange: (state) => {
+          if (!mount.cancelled)
+            (latest.current.onStateChange ?? latest.current.options?.onStateChange)?.(state);
         },
       });
-      if (controller.signal.aborted || active.current !== mount) { instance.destroy(); return; }
+      if (controller.signal.aborted || active.current !== mount) {
+        instance.destroy();
+        return;
+      }
       mount.instance = instance;
       for (const prop of Object.keys(events) as (keyof typeof events)[]) {
-        mount.off.push(instance.on(events[prop], value => {
-          if (mount.cancelled || active.current !== mount) return;
-          if (prop === 'onDestroy') setHandle(current => current === instance ? null : current);
-          const handler = latest.current[prop] as ((payload: typeof value) => void) | undefined;
-          handler?.(value);
-        }));
+        mount.off.push(
+          instance.on(events[prop], (value) => {
+            if (mount.cancelled || active.current !== mount) return;
+            if (prop === 'onDestroy') setHandle((current) => (current === instance ? null : current));
+            const handler = latest.current[prop] as ((payload: typeof value) => void) | undefined;
+            handler?.(value);
+          }),
+        );
       }
       setHandle(instance);
       const current = snapshotOEMWidgetConfig(latest.current.options ?? {});
       const patch = diffOEMWidgetConfig(mount.submitted, current);
       mount.submitted = current;
       if (Object.keys(patch).length) await instance.setOptions(patch);
-      if (!mount.cancelled && !instance.destroyed) (latest.current.onReady ?? latest.current.options?.onReady)?.(instance);
-    })().catch(error => {
+      if (!mount.cancelled && !instance.destroyed)
+        (latest.current.onReady ?? latest.current.options?.onReady)?.(instance);
+    })().catch((error) => {
       if (!controller.signal.aborted && !mount.cancelled) {
         mount.submitted = {};
         report(error);
@@ -84,11 +113,12 @@ export const OEMWidget = forwardRef<WidgetHandle, OEMWidgetProps>(function OEMWi
     });
     return () => {
       mount.cancelled = true;
-      mount.off.forEach(off => off()); controller.abort();
+      mount.off.forEach((off) => off());
+      controller.abort();
       external?.removeEventListener('abort', abort);
       mount.instance?.destroy();
       if (active.current === mount) active.current = null;
-      setHandle(current => current === mount.instance ? null : current);
+      setHandle((current) => (current === mount.instance ? null : current));
     };
   }, []);
 
@@ -100,11 +130,14 @@ export const OEMWidget = forwardRef<WidgetHandle, OEMWidgetProps>(function OEMWi
       const patch = diffOEMWidgetConfig(mount.submitted, current);
       mount.submitted = current;
       if (!Object.keys(patch).length) return;
-      void mount.instance.setOptions(patch).catch(error => {
+      void mount.instance.setOptions(patch).catch((error) => {
         if (active.current !== mount || mount.cancelled || mount.controller.signal.aborted) return;
-        mount.submitted = {}; report(error);
+        mount.submitted = {};
+        report(error);
       });
-    } catch (error) { report(error); }
+    } catch (error) {
+      report(error);
+    }
   }, [options, handle]);
 
   return <div ref={container} className={className} style={{ height: 480, ...style }} />;

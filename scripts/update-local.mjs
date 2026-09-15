@@ -8,11 +8,14 @@ const demoOnly = process.argv.includes('--demo-only');
 const publish = process.argv.includes('--publish');
 if (demoOnly && publish) throw new Error('--demo-only cannot be combined with --publish');
 
-const run = (command, args) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { cwd: root, stdio: 'inherit', env: process.env });
-  child.once('error', reject);
-  child.once('close', (code) => code === 0 ? resolve() : reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`)));
-});
+const run = (command, args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: root, stdio: 'inherit', env: process.env });
+    child.once('error', reject);
+    child.once('close', (code) =>
+      code === 0 ? resolve() : reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`)),
+    );
+  });
 
 // The demo is intentionally a separate, safe fast path. Data exports always
 // produce and validate the channel and manifest as one immutable batch.
@@ -29,8 +32,24 @@ if (demoOnly) {
 
 if (publish) {
   const plan = JSON.parse(await fs.readFile(path.join(root, 'artifacts/r2/plan.json'), 'utf8'));
-  await run(process.execPath, [path.join(root, 'scripts/publish-r2.mjs'), '--apply', '--confirm-release', plan.releaseId]);
-  await run('pnpm', ['exec', 'wrangler', 'pages', 'deploy', 'dist', '--project-name', 'oem-sdk', '--branch', 'main', '--commit-dirty=true']);
+  await run(process.execPath, [
+    path.join(root, 'scripts/publish-r2.mjs'),
+    '--apply',
+    '--confirm-release',
+    plan.releaseId,
+  ]);
+  await run('pnpm', [
+    'exec',
+    'wrangler',
+    'pages',
+    'deploy',
+    'dist',
+    '--project-name',
+    'oem-sdk',
+    '--branch',
+    'main',
+    '--commit-dirty=true',
+  ]);
   console.log(`Published data and deployed the matching Pages artifact for ${plan.releaseId}.`);
 }
 

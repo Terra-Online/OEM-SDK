@@ -15,7 +15,9 @@ export const normalizeGameVersion = (value) => {
 
 /** Reads the Endfield version from a Hypergryph batch proxy response. */
 export const parseLatestGameVersion = (payload) => {
-  const response = payload?.proxy_rsps?.find((entry) => entry?.kind === 'get_latest_game')?.get_latest_game_rsp;
+  const response = payload?.proxy_rsps?.find(
+    (entry) => entry?.kind === 'get_latest_game',
+  )?.get_latest_game_rsp;
   if (!response?.version) throw new Error('Hypergryph launcher response has no Endfield game version');
   return normalizeGameVersion(response.version);
 };
@@ -27,16 +29,18 @@ export const fetchLatestGameVersion = async (fetchImpl = fetch) => {
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
       seq: String(Date.now()),
-      proxy_reqs: [{
-        kind: 'get_latest_game',
-        get_latest_game_req: {
-          appcode: '6LL0KJuqHBVz33WK',
-          launcher_appcode: 'abYeZZ16BPluCFyT',
-          channel: '1',
-          sub_channel: '1',
-          version: GAME_VERSION_REQUEST_BASELINE,
+      proxy_reqs: [
+        {
+          kind: 'get_latest_game',
+          get_latest_game_req: {
+            appcode: '6LL0KJuqHBVz33WK',
+            launcher_appcode: 'abYeZZ16BPluCFyT',
+            channel: '1',
+            sub_channel: '1',
+            version: GAME_VERSION_REQUEST_BASELINE,
+          },
         },
-      }],
+      ],
     }),
     signal: AbortSignal.timeout(15_000),
   });
@@ -50,7 +54,7 @@ export const resolveGameVersion = async (args = process.argv.slice(2), env = pro
   const explicit = argument || env.OEM_GAME_VERSION;
   return explicit
     ? { ...normalizeGameVersion(explicit), source: argument ? 'argument' : 'environment' }
-    : { ...await fetchLatestGameVersion(), source: 'hypergryph-launcher' };
+    : { ...(await fetchLatestGameVersion()), source: 'hypergryph-launcher' };
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

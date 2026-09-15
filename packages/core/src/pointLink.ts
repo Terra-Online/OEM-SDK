@@ -9,7 +9,8 @@ const POINT_ID_TOKEN_LENGTH = 7;
 export function encodeOEMPointToken(pointId: string): string {
   if (!/^\d+$/.test(pointId)) throw new Error(`Invalid OEM point ID: ${pointId}`);
   const id = BigInt(pointId);
-  if (id >= POINT_ID_PERMUTATION_MOD) throw new Error(`OEM point ID is outside the short-link range: ${pointId}`);
+  if (id >= POINT_ID_PERMUTATION_MOD)
+    throw new Error(`OEM point ID is outside the short-link range: ${pointId}`);
   let value = (id * POINT_ID_PERMUTATION_MULTIPLIER + POINT_ID_PERMUTATION_OFFSET) % POINT_ID_PERMUTATION_MOD;
   let encoded = '';
   do {

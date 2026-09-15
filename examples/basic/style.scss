@@ -14,7 +14,9 @@
   letter-spacing: 0;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 html,
 body,
@@ -39,7 +41,9 @@ body,
   font-size: 13px;
 }
 
-.demoError[hidden] { display: none; }
+.demoError[hidden] {
+  display: none;
+}
 
 .demoPanel {
   position: fixed;
@@ -54,7 +58,9 @@ body,
   border-radius: 6px;
   color: $grey-1;
   background: rgba($white-1, 0.79);
-  box-shadow: 0 10px 28px rgba($black-0, 0.22), 0 2px 6px rgba($black-0, 0.12);
+  box-shadow:
+    0 10px 28px rgba($black-0, 0.22),
+    0 2px 6px rgba($black-0, 0.12);
   backdrop-filter: blur(8px) saturate(0.92);
   -webkit-backdrop-filter: blur(8px) saturate(0.92);
   font-family: inherit;
@@ -85,14 +91,22 @@ body,
   user-select: none;
 }
 
-.demoPanel.dragging .demoPanelSummary { cursor: grabbing; }
+.demoPanel.dragging .demoPanelSummary {
+  cursor: grabbing;
+}
 
-.demoPanelSummary::-webkit-details-marker { display: none; }
-.demoPanelSummary::marker { content: ''; }
+.demoPanelSummary::-webkit-details-marker {
+  display: none;
+}
+.demoPanelSummary::marker {
+  content: '';
+}
 
 .demoPanelSummary:focus-visible {
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1.5px rgba($primary-accent-5, 0.72), 0 2px 5px rgba($black-0, 0.1);
+  box-shadow:
+    inset 0 0 0 1.5px rgba($primary-accent-5, 0.72),
+    0 2px 5px rgba($black-0, 0.1);
   outline: 0;
 }
 
@@ -116,17 +130,21 @@ body,
   line-height: 1;
   transform: translateY(1px) rotate(0deg);
   transform-origin: center;
-  filter: drop-shadow(0 0 1px rgba($black-1, .5));
+  filter: drop-shadow(0 0 1px rgba($black-1, 0.5));
   transition: transform 0.24s $presto-curve;
 }
 
-.demoPanel.expanded .demoPanelDisclosure { transform: translateY(1px) rotate(90deg); }
+.demoPanel.expanded .demoPanelDisclosure {
+  transform: translateY(1px) rotate(90deg);
+}
 
 .demoPanelTitle {
   font-size: 14px;
   font-weight: 680;
   line-height: 1;
-  font-family: "Novecento Wide DemiBold", "Novecento Cyrillic DemiBold", "Novecento Vietnamese DemiBold", "HMSans_EN", "Geist", system-ui, sans-serif;
+  font-family:
+    'Novecento Wide DemiBold', 'Novecento Cyrillic DemiBold', 'Novecento Vietnamese DemiBold', 'HMSans_EN',
+    'Geist', system-ui, sans-serif;
 }
 
 .demoPanelBody {
@@ -168,7 +186,9 @@ body,
   font-size: 13px;
   font-weight: 650;
   line-height: 1;
-  font-family: "Novecento Wide Medium", "Novecento Cyrillic Medium", "Novecento Vietnamese Medium", "HMSans_EN", "Geist", system-ui, sans-serif;
+  font-family:
+    'Novecento Wide Medium', 'Novecento Cyrillic Medium', 'Novecento Vietnamese Medium', 'HMSans_EN', 'Geist',
+    system-ui, sans-serif;
 }
 
 .demoSectionGrid {
@@ -184,7 +204,9 @@ body,
   gap: 5px;
 }
 
-.demoField.full { grid-column: 1 / -1; }
+.demoField.full {
+  grid-column: 1 / -1;
+}
 
 .demoBoundaryControls {
   min-width: 0;
@@ -201,7 +223,10 @@ body,
 }
 
 .demoBoundarySourceChoices {
-  transition: opacity 0.2s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    opacity 0.2s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .demoPanel label,
@@ -237,7 +262,9 @@ body,
   background: rgba($white-0, 0.72);
   font: inherit;
   outline: 0;
-  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .demoPanel select:hover,
@@ -251,7 +278,9 @@ body,
 .demoPanel select:focus-visible,
 .demoPanel input:focus-visible,
 .demoPanel button:focus-visible {
-  box-shadow: 0 0 0 1.5px rgba($primary-accent-5, 0.72), 0 3px 7px rgba($black-0, 0.16);
+  box-shadow:
+    0 0 0 1.5px rgba($primary-accent-5, 0.72),
+    0 3px 7px rgba($black-0, 0.16);
   outline: 0;
 }
 
@@ -282,7 +311,9 @@ body,
   border-bottom: 1.5px solid $grey-1;
   pointer-events: none;
   transform: translateY(-70%) rotate(45deg);
-  transition: border-color 0.18s ease, transform 0.18s $presto-curve;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s $presto-curve;
 }
 
 .demoSelectControl:focus-within .demoSelectDisclosure {
@@ -319,16 +350,22 @@ body,
   outline: 0;
 }
 
-.demoNumberControl input:focus-visible { box-shadow: none; }
+.demoNumberControl input:focus-visible {
+  box-shadow: none;
+}
 
 .demoNumberControl:focus-within {
   background: rgba($white-0, 0.8);
-  box-shadow: 0 0 0 1.5px rgba($primary-accent-5, 0.72), 0 3px 7px rgba($black-0, 0.16);
+  box-shadow:
+    0 0 0 1.5px rgba($primary-accent-5, 0.72),
+    0 3px 7px rgba($black-0, 0.16);
 }
 
 .demoNumberControl.scrubbing {
   background: rgba($white-0, 0.92);
-  box-shadow: 0 0 0 1.5px rgba($primary-accent-5, 0.72), 0 3px 7px rgba($black-0, 0.16);
+  box-shadow:
+    0 0 0 1.5px rgba($primary-accent-5, 0.72),
+    0 3px 7px rgba($black-0, 0.16);
 }
 
 .demoNumberControl input::-webkit-inner-spin-button,
@@ -337,7 +374,9 @@ body,
   appearance: none;
 }
 
-.demoNumberControl input[type='number'] { appearance: textfield; }
+.demoNumberControl input[type='number'] {
+  appearance: textfield;
+}
 
 .demoRange {
   height: 2rem;
@@ -349,7 +388,10 @@ body,
   border: 1px solid rgba($white-0, 0.58);
   border-radius: 5px;
   background: rgba($white-0, 0.72);
-  transition: background-color 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  transition:
+    background-color 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
 }
 
 .demoRange:hover {
@@ -360,7 +402,9 @@ body,
 .demoRange:focus-within {
   border-color: rgba($primary-accent-5, 0.62);
   background: rgba($white-0, 0.8);
-  box-shadow: 0 0 0 1.5px rgba($primary-accent-5, 0.72), 0 3px 7px rgba($black-0, 0.16);
+  box-shadow:
+    0 0 0 1.5px rgba($primary-accent-5, 0.72),
+    0 3px 7px rgba($black-0, 0.16);
 }
 
 .demoRangeTrack {
@@ -380,13 +424,21 @@ body,
   outline: 0;
 }
 
-.demoRange input[type='range']:focus-visible { box-shadow: none; }
+.demoRange input[type='range']:focus-visible {
+  box-shadow: none;
+}
 
 .demoRange input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(to right, $primary-accent-5 0 var(--demoRangeProgress), rgba($grey-2, 0.48) var(--demoRangeProgress) 100%);
-  box-shadow: inset 0 1px 1px rgba($black-0, 0.16), 0 0 0 rgba($primary-accent-5, 0);
+  background: linear-gradient(
+    to right,
+    $primary-accent-5 0 var(--demoRangeProgress),
+    rgba($grey-2, 0.48) var(--demoRangeProgress) 100%
+  );
+  box-shadow:
+    inset 0 1px 1px rgba($black-0, 0.16),
+    0 0 0 rgba($primary-accent-5, 0);
 }
 
 .demoRange input[type='range']::-webkit-slider-thumb {
@@ -430,7 +482,9 @@ body,
   border: 2px solid rgba($white-0, 0.96);
   border-radius: 4px;
   background: $primary-accent-5;
-  box-shadow: 1px 1px 0 rgba($primary-accent-6, 0.5), 2px 3px 6px rgba($black-0, 0.28);
+  box-shadow:
+    1px 1px 0 rgba($primary-accent-6, 0.5),
+    2px 3px 6px rgba($black-0, 0.28);
   pointer-events: none;
   transform: translate(-50%, -50%) rotate(45deg);
 }
@@ -445,7 +499,9 @@ body,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .demoRange { transition-duration: 0.01ms !important; }
+  .demoRange {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .demoSegments {
@@ -478,7 +534,9 @@ body,
   gap: 5px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .demoSegments label:hover {
@@ -498,7 +556,9 @@ body,
   transition: color 0.2s ease;
 }
 
-.demoSegments input:checked + span { color: $grey-1; }
+.demoSegments input:checked + span {
+  color: $grey-1;
+}
 
 .demoSegments input:disabled + span {
   color: $dim-1;
@@ -546,7 +606,9 @@ body,
   background: rgba($white-0, 0.46);
   cursor: pointer;
   transform: rotate(45deg);
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease;
 }
 
 .demoSegments input::before,
@@ -574,7 +636,9 @@ body,
   transform: scale(1);
 }
 
-.demoMarkerPicker { min-width: 0; }
+.demoMarkerPicker {
+  min-width: 0;
+}
 
 .demoMarkerTrigger {
   display: flex;
@@ -591,17 +655,26 @@ body,
   border-right: 1.5px solid $grey-1;
   border-bottom: 1.5px solid $grey-1;
   transform: translateY(-2px) rotate(45deg);
-  transition: border-color 0.18s ease, transform 0.2s $presto-curve;
+  transition:
+    border-color 0.18s ease,
+    transform 0.2s $presto-curve;
 }
 
-.demoMarkerPicker.open .demoMarkerDisclosure { transform: translateY(2px) rotate(225deg); }
-.demoMarkerTrigger:focus-visible .demoMarkerDisclosure { border-color: $primary-accent-6; }
+.demoMarkerPicker.open .demoMarkerDisclosure {
+  transform: translateY(2px) rotate(225deg);
+}
+.demoMarkerTrigger:focus-visible .demoMarkerDisclosure {
+  border-color: $primary-accent-6;
+}
 
 .demoMarkerMenu {
   max-height: 0;
   overflow: hidden;
   opacity: 0;
-  transition: max-height 0.22s $presto-curve, opacity 0.16s ease, margin-top 0.22s $presto-curve;
+  transition:
+    max-height 0.22s $presto-curve,
+    opacity 0.16s ease,
+    margin-top 0.22s $presto-curve;
 }
 
 .demoMarkerPicker.open .demoMarkerMenu {
@@ -616,7 +689,9 @@ body,
   appearance: none;
 }
 
-.demoMarkerSearch::-webkit-search-cancel-button { display: none; }
+.demoMarkerSearch::-webkit-search-cancel-button {
+  display: none;
+}
 
 .demoMarkerOptions {
   max-height: 137px;
@@ -643,7 +718,9 @@ body,
   background: rgba($white-0, 0.72);
   box-shadow: 0 2px 5px rgba($black-0, 0.1);
 }
-.demoMarkerOption[hidden] { display: none; }
+.demoMarkerOption[hidden] {
+  display: none;
+}
 
 .demoMarkerOption span {
   min-width: 0;
@@ -656,7 +733,9 @@ body,
   transition: opacity 0.2s ease;
 }
 
-.demoMarkerPicker.disabled { opacity: 0.56; }
+.demoMarkerPicker.disabled {
+  opacity: 0.56;
+}
 
 .demoReset {
   min-width: 48px;
@@ -669,7 +748,11 @@ body,
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
 }
 
 .demoReset:hover,
@@ -680,7 +763,10 @@ body,
   outline: 0;
 }
 
-.demoReset:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba($black-0, 0.1); }
+.demoReset:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba($black-0, 0.1);
+}
 
 .demoCodeSection {
   margin-top: 10px;
@@ -714,7 +800,11 @@ body,
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
 }
 
 .demoCopy:hover,
@@ -726,10 +816,16 @@ body,
   outline: 0;
 }
 
-.demoCopy:active { transform: translateY(1px) scale(0.98); box-shadow: 0 1px 2px rgba($primary-accent-7, 0.18); }
+.demoCopy:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: 0 1px 2px rgba($primary-accent-7, 0.18);
+}
 
 .demoCopy:disabled,
-.demoReset:disabled { box-shadow: none; transform: none; }
+.demoReset:disabled {
+  box-shadow: none;
+  transform: none;
+}
 
 .demoCode {
   display: block;
@@ -746,7 +842,7 @@ body,
   color: $grey-1;
   background: rgba($white-0, 0.52);
   font-family: var(--demo-font-code);
-  font-size:10px;
+  font-size: 10px;
   line-height: 1.55;
   white-space: pre;
   outline: 0;
@@ -786,7 +882,9 @@ body,
   white-space: pre;
   outline: 0;
   box-shadow: 0 0 4px rgba($black-0, 0.12);
-  transition: background-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .demoCustomPointsCode:hover {
@@ -796,7 +894,9 @@ body,
 
 .demoCustomPointsCode:focus-visible {
   background: rgba($white-0, 0.8);
-  box-shadow: 0 0 0 1.5px rgba($primary-accent-5, 0.72), 0 3px 7px rgba($black-0, 0.16);
+  box-shadow:
+    0 0 0 1.5px rgba($primary-accent-5, 0.72),
+    0 3px 7px rgba($black-0, 0.16);
 }
 
 .demoCustomPointsActions {
@@ -817,7 +917,11 @@ body,
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
 }
 
 .demoApply:hover,
@@ -828,7 +932,10 @@ body,
   outline: 0;
 }
 
-.demoApply:active { transform: translateY(1px) scale(0.98); box-shadow: 0 1px 2px rgba($primary-accent-7, 0.18); }
+.demoApply:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: 0 1px 2px rgba($primary-accent-7, 0.18);
+}
 
 .demoCustomPointsStatus {
   min-height: 16px;
@@ -839,7 +946,9 @@ body,
   white-space: pre-line;
 }
 
-.demoCustomPointsStatus.failed { color: $primary-accent-7; }
+.demoCustomPointsStatus.failed {
+  color: $primary-accent-7;
+}
 
 .demoPanel :disabled {
   cursor: not-allowed;
@@ -859,5 +968,4 @@ body,
     right: 1rem;
     width: min(292px, max(180px, calc(100vw - 5rem)));
   }
-
 }

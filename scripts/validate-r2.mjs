@@ -13,7 +13,9 @@ const preflight = args.includes('--preflight');
 const planPath = path.resolve(root, planArgument ?? 'artifacts/r2/plan.json');
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const readJson = async (filename) => JSON.parse(await fs.readFile(filename, 'utf8'));
-const fail = (message) => { throw new Error(message); };
+const fail = (message) => {
+  throw new Error(message);
+};
 
 const config = await readJson(path.join(root, 'config/config.r2.json'));
 const buildConfig = config?.web?.build;
@@ -23,28 +25,38 @@ const bucket = process.env.OEM_R2_BUCKET ?? r2Config?.bucket ?? plan.bucket;
 const endpointValue = process.env.OEM_R2_ENDPOINT ?? r2Config?.endpoint;
 const accessKeyId = process.env.OEM_R2_ACCESS_KEY_ID ?? r2Config?.accessKeyId;
 const accessKeySecret = process.env.OEM_R2_ACCESS_KEY_SECRET ?? r2Config?.accessKeySecret;
-if (!bucket || !endpointValue || !accessKeyId || !accessKeySecret) fail('R2 validation credentials are incomplete');
+if (!bucket || !endpointValue || !accessKeyId || !accessKeySecret)
+  fail('R2 validation credentials are incomplete');
 let endpoint;
-try { endpoint = new URL(endpointValue); } catch { fail('Invalid R2 S3 endpoint'); }
+try {
+  endpoint = new URL(endpointValue);
+} catch {
+  fail('Invalid R2 S3 endpoint');
+}
 if (endpoint.protocol !== 'https:' || !endpoint.hostname.endsWith('.r2.cloudflarestorage.com')) {
   fail('R2 S3 endpoint must be an HTTPS Cloudflare R2 endpoint');
 }
 if (bucket !== plan.bucket) fail('R2 bucket does not match the prepared release plan');
 if (!plan.domain || !plan.releaseId || !plan.gameVersion) fail('R2 release plan is incomplete');
 
-const runCommand = (command, commandArgs, env) => new Promise((resolve, reject) => {
-  const child = spawn(command, commandArgs, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let stdout = '';
-  let stderr = '';
-  child.stdout.setEncoding('utf8');
-  child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => { stdout += chunk; });
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
-  child.on('error', reject);
-  child.on('close', (code) => code === 0
-    ? resolve({ stdout, stderr })
-    : reject(new Error(`rclone check failed with code ${code}`)));
-});
+const runCommand = (command, commandArgs, env) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, commandArgs, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (code) =>
+      code === 0 ? resolve({ stdout, stderr }) : reject(new Error(`rclone check failed with code ${code}`)),
+    );
+  });
 
 const remoteName = 'oemvalidate';
 const remoteRoot = `${remoteName}:${bucket}`;
@@ -58,7 +70,13 @@ const rcloneEnv = {
   [`RCLONE_CONFIG_${remoteName.toUpperCase()}_REGION`]: r2Config?.region ?? 'auto',
 };
 const checkArguments = [
-  'check', 'public', remoteRoot, '--one-way', '--size-only', '--fast-list', '--s3-no-check-bucket',
+  'check',
+  'public',
+  remoteRoot,
+  '--one-way',
+  '--size-only',
+  '--fast-list',
+  '--s3-no-check-bucket',
 ];
 if (preflight) checkArguments.push('--exclude', 'channels/stable.json');
 await runCommand(rclone, checkArguments, rcloneEnv);
@@ -71,8 +89,13 @@ if (!manifestReference?.path || !manifestReference?.sha256 || !Number.isInteger(
   fail('Stable channel manifest reference is incomplete');
 }
 const validateResourcePath = (resourcePath) => {
-  if (typeof resourcePath !== 'string' || !resourcePath.startsWith('/') || resourcePath.split('/').includes('..') ||
-    /^[a-z][a-z\d+.-]*:/i.test(resourcePath) || resourcePath.startsWith('//')) {
+  if (
+    typeof resourcePath !== 'string' ||
+    !resourcePath.startsWith('/') ||
+    resourcePath.split('/').includes('..') ||
+    /^[a-z][a-z\d+.-]*:/i.test(resourcePath) ||
+    resourcePath.startsWith('//')
+  ) {
     fail(`Unsafe published resource path: ${resourcePath}`);
   }
 };
@@ -96,9 +119,10 @@ const expectedContentType = (resourcePath) => {
   if (resourcePath.endsWith('.txt')) return 'text/plain';
   fail(`Unknown published resource type: ${resourcePath}`);
 };
-const expectedCacheControl = (resourcePath) => resourcePath === '/channels/stable.json'
-  ? ['no-cache', 'must-revalidate']
-  : ['max-age=31536000', 'immutable'];
+const expectedCacheControl = (resourcePath) =>
+  resourcePath === '/channels/stable.json'
+    ? ['no-cache', 'must-revalidate']
+    : ['max-age=31536000', 'immutable'];
 const checkHeaders = (resourcePath, response) => {
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
   if (!contentType.startsWith(expectedContentType(resourcePath))) {
@@ -106,10 +130,12 @@ const checkHeaders = (resourcePath, response) => {
   }
   const cacheControl = response.headers.get('cache-control')?.toLowerCase() ?? '';
   for (const directive of expectedCacheControl(resourcePath)) {
-    if (!cacheControl.includes(directive)) fail(`Unexpected Cache-Control for ${resourcePath}: ${cacheControl || '<missing>'}`);
+    if (!cacheControl.includes(directive))
+      fail(`Unexpected Cache-Control for ${resourcePath}: ${cacheControl || '<missing>'}`);
   }
   const contentLength = response.headers.get('content-length');
-  if (contentLength !== null && !/^\d+$/.test(contentLength)) fail(`Invalid Content-Length for ${resourcePath}`);
+  if (contentLength !== null && !/^\d+$/.test(contentLength))
+    fail(`Invalid Content-Length for ${resourcePath}`);
 };
 
 const headObject = async (resourcePath, query = '') => {
@@ -154,7 +180,8 @@ for (const region of localManifest.regions ?? []) {
   addReference(region.gameBoundaries);
 }
 
-if (!preflight) await getObject('/channels/stable.json', localChannelBytes.byteLength, hash(localChannelBytes));
+if (!preflight)
+  await getObject('/channels/stable.json', localChannelBytes.byteLength, hash(localChannelBytes));
 for (const reference of references.values()) {
   const localPath = path.join(publicRoot, reference.path.replace(/^\//, ''));
   const localBytes = await fs.readFile(localPath);
@@ -164,7 +191,9 @@ for (const reference of references.values()) {
   await getObject(reference.path, reference.bytes, reference.sha256);
 }
 
-const typeData = JSON.parse((await fs.readFile(path.join(publicRoot, localManifest.types.path.replace(/^\//, '')))).toString());
+const typeData = JSON.parse(
+  (await fs.readFile(path.join(publicRoot, localManifest.types.path.replace(/^\//, '')))).toString(),
+);
 const iconPaths = new Set();
 for (const type of Object.values(typeData)) {
   if (type?.icon) iconPaths.add(type.icon);
@@ -184,7 +213,10 @@ for (const region of localManifest.regions ?? []) {
       if (!range?.length) continue;
       const tileX = range[0];
       const tileY = row[0];
-      const tilePath = floor.tileTemplate.replace('{z}', zoom).replace('{x}', String(tileX)).replace('{y}', tileY);
+      const tilePath = floor.tileTemplate
+        .replace('{z}', zoom)
+        .replace('{x}', String(tileX))
+        .replace('{y}', tileY);
       const version = floor.tileVersions?.[zoom]?.[tileY]?.[0];
       candidate = { path: tilePath, query: version ? `?v=${version}` : '' };
       break;
@@ -194,13 +226,19 @@ for (const region of localManifest.regions ?? []) {
 }
 for (const [tilePath, query] of tileChecks) await headObject(tilePath, query);
 
-console.log(JSON.stringify({
-  releaseId: localManifest.releaseId,
-  gameVersion: localManifest.gameVersion,
-  remoteObjectsChecked: plan.objects,
-  hashedAssetsChecked: references.size + 1,
-  iconHeadersChecked: iconPaths.size,
-  tileHeadersChecked: tileChecks.size,
-  channelChecked: !preflight,
-  browserSmokeTest: false,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      releaseId: localManifest.releaseId,
+      gameVersion: localManifest.gameVersion,
+      remoteObjectsChecked: plan.objects,
+      hashedAssetsChecked: references.size + 1,
+      iconHeadersChecked: iconPaths.size,
+      tileHeadersChecked: tileChecks.size,
+      channelChecked: !preflight,
+      browserSmokeTest: false,
+    },
+    null,
+    2,
+  ),
+);

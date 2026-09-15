@@ -1,6 +1,9 @@
 import type { OEMFloor, OEMRegion } from '@opendfieldmap/core';
 
-export interface OEMTileLookup { covered: boolean; version?: string }
+export interface OEMTileLookup {
+  covered: boolean;
+  version?: string;
+}
 
 export const lookupOEMTile = (
   coverage: OEMRegion['coverage'],

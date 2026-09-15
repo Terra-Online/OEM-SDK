@@ -21,7 +21,8 @@ await fs.rm(output, { recursive: true, force: true });
 const sha256 = (content) => createHash('sha256').update(content).digest('hex');
 const pointIdLimit = 1n << 36n;
 const sourceFiles = {};
-const includeLicensedNovecento = process.env.OEM_INCLUDE_LICENSED_NOVECENTO === '1' || args.includes('--include-licensed-novecento');
+const includeLicensedNovecento =
+  process.env.OEM_INCLUDE_LICENSED_NOVECENTO === '1' || args.includes('--include-licensed-novecento');
 const read = async (relative) => {
   const bytes = await fs.readFile(path.join(source, relative));
   sourceFiles[relative] = sha256(bytes);
@@ -49,16 +50,19 @@ const transformGamePoint = (region, x, z) => ({
   z: (z * region.gameTransform.scaleZ + region.gameTransform.offsetZ) * 2 ** region.maxNativeZoom,
 });
 const pointKey = ([x, z]) => `${x},${z}`;
-const simplifyRing = (ring) => ring.filter((point, index) => {
-  const previous = ring[(index + ring.length - 1) % ring.length];
-  const next = ring[(index + 1) % ring.length];
-  return (previous[0] - point[0]) * (next[1] - point[1]) !==
-    (previous[1] - point[1]) * (next[0] - point[0]);
-});
-const ringArea = (ring) => ring.reduce((area, point, index) => {
-  const next = ring[(index + 1) % ring.length];
-  return area + point[0] * next[1] - next[0] * point[1];
-}, 0) / 2;
+const simplifyRing = (ring) =>
+  ring.filter((point, index) => {
+    const previous = ring[(index + ring.length - 1) % ring.length];
+    const next = ring[(index + 1) % ring.length];
+    return (
+      (previous[0] - point[0]) * (next[1] - point[1]) !== (previous[1] - point[1]) * (next[0] - point[0])
+    );
+  });
+const ringArea = (ring) =>
+  ring.reduce((area, point, index) => {
+    const next = ring[(index + 1) % ring.length];
+    return area + point[0] * next[1] - next[0] * point[1];
+  }, 0) / 2;
 const mergeLevelGrids = (levelId, grids) => {
   const edges = new Map();
   const addEdge = (start, end) => {
@@ -97,7 +101,9 @@ const mergeLevelGrids = (levelId, grids) => {
   }
   const mergedArea = Math.abs(rings.reduce((area, ring) => area + ringArea(ring), 0));
   if (Math.abs(mergedArea - grids.length) > 1e-9) {
-    throw new Error(`Merged game boundary changed grid coverage: ${levelId} (${mergedArea} vs ${grids.length})`);
+    throw new Error(
+      `Merged game boundary changed grid coverage: ${levelId} (${mergedArea} vs ${grids.length})`,
+    );
   }
   return rings.sort((left, right) => Math.abs(ringArea(right)) - Math.abs(ringArea(left)));
 };
@@ -106,10 +112,12 @@ const levelToGameBoundaries = (region, level) => {
   if (grids.some((grid) => !Number.isInteger(grid.x) || !Number.isInteger(grid.z))) {
     throw new Error(`Invalid level grid coordinates: ${level.id}`);
   }
-  const rect = level.rectLeftBottom && level.rectRightTop
-    ? [level.rectLeftBottom.x, level.rectLeftBottom.y, level.rectRightTop.x, level.rectRightTop.y]
-    : undefined;
-  if (rect && rect.some((value) => !Number.isFinite(value))) throw new Error(`Invalid level rectangle: ${level.id}`);
+  const rect =
+    level.rectLeftBottom && level.rectRightTop
+      ? [level.rectLeftBottom.x, level.rectLeftBottom.y, level.rectRightTop.x, level.rectRightTop.y]
+      : undefined;
+  if (rect && rect.some((value) => !Number.isFinite(value)))
+    throw new Error(`Invalid level rectangle: ${level.id}`);
   if (rect && grids.length) {
     const gridBounds = [
       Math.min(...grids.map((grid) => grid.x * GAME_GRID_SIZE)),
@@ -118,21 +126,28 @@ const levelToGameBoundaries = (region, level) => {
       Math.max(...grids.map((grid) => (grid.z + 1) * GAME_GRID_SIZE)),
     ];
     if (gridBounds.some((value, index) => value !== rect[index])) {
-      throw new Error(`Level grid rectangle mismatch: ${level.id} (${gridBounds.join(',')} vs ${rect.join(',')})`);
+      throw new Error(
+        `Level grid rectangle mismatch: ${level.id} (${gridBounds.join(',')} vs ${rect.join(',')})`,
+      );
     }
   }
   return {
     id: level.id,
-    rings: mergeLevelGrids(level.id, grids).map((ring) => ring.map(([x, z]) =>
-      transformGamePoint(region, x * GAME_GRID_SIZE, z * GAME_GRID_SIZE))),
+    rings: mergeLevelGrids(level.id, grids).map((ring) =>
+      ring.map(([x, z]) => transformGamePoint(region, x * GAME_GRID_SIZE, z * GAME_GRID_SIZE)),
+    ),
   };
 };
 const walk = async (directory) => {
   const entries = await fs.readdir(directory, { withFileTypes: true });
-  const files = await Promise.all(entries.sort((left, right) => left.name.localeCompare(right.name)).map(async (entry) => {
-    const filename = path.join(directory, entry.name);
-    return entry.isDirectory() ? walk(filename) : [filename];
-  }));
+  const files = await Promise.all(
+    entries
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map(async (entry) => {
+        const filename = path.join(directory, entry.name);
+        return entry.isDirectory() ? walk(filename) : [filename];
+      }),
+  );
   return files.flat();
 };
 const copyTree = async (relative) => {
@@ -152,23 +167,68 @@ const { applyMarkerOverrides } = await import(pathToFileURL(path.join(source, ov
 const regionCodes = { Valley_4: 'VL', Wuling: 'WL', Dijiang: 'DJ', Weekraid_1: 'ES' };
 const gameTransforms = {
   Valley_4: { scaleX: 0.4687511298, scaleZ: 0.4687511298, offsetX: 519.6990737, offsetZ: -479.9101599 },
-  Wuling: { scaleX: 0.41269532778614415, scaleZ: 0.4126650261801654, offsetX: 953.3837664516041, offsetZ: -954.8108221139345 },
-  Dijiang: { scaleX: 2.817109225144681, scaleZ: 2.8369668977222067, offsetX: 481.07581876506237, offsetZ: -528.2046998395613 },
-  Weekraid_1: { scaleX: 2.1236893194106514, scaleZ: 2.1398455301912183, offsetX: 613.9427764351295, offsetZ: -898.0955173659895 },
+  Wuling: {
+    scaleX: 0.41269532778614415,
+    scaleZ: 0.4126650261801654,
+    offsetX: 953.3837664516041,
+    offsetZ: -954.8108221139345,
+  },
+  Dijiang: {
+    scaleX: 2.817109225144681,
+    scaleZ: 2.8369668977222067,
+    offsetX: 481.07581876506237,
+    offsetZ: -528.2046998395613,
+  },
+  Weekraid_1: {
+    scaleX: 2.1236893194106514,
+    scaleZ: 2.1398455301912183,
+    offsetX: 613.9427764351295,
+    offsetZ: -898.0955173659895,
+  },
 };
 const subregionGameTransforms = {
-  WL_2: { scaleX: 0.3821317314759548, scaleZ: 0.3886861967050555, offsetX: 939.0266106648364, offsetZ: -961.708480136474 },
-  WL_4: { scaleX: 0.35366404675795343, scaleZ: 0.3343953142019082, offsetX: 229.24501263356927, offsetZ: -1439.4211280688035 },
+  WL_2: {
+    scaleX: 0.3821317314759548,
+    scaleZ: 0.3886861967050555,
+    offsetX: 939.0266106648364,
+    offsetZ: -961.708480136474,
+  },
+  WL_4: {
+    scaleX: 0.35366404675795343,
+    scaleZ: 0.3343953142019082,
+    offsetX: 229.24501263356927,
+    offsetZ: -1439.4211280688035,
+  },
 };
-const regionNames = { Valley_4: '四号谷地', Wuling: '武陵', Dijiang: '帝江号', Weekraid_1: 'Etchspace Salvage' };
+const regionNames = {
+  Valley_4: '四号谷地',
+  Wuling: '武陵',
+  Dijiang: '帝江号',
+  Weekraid_1: 'Etchspace Salvage',
+};
 const labels = await read('src/data/map/label/labels.json');
-const subregions = [...await read('src/data/map/subregionData/VL.json'), ...await read('src/data/map/subregionData/WL.json')];
+const subregions = [
+  ...(await read('src/data/map/subregionData/VL.json')),
+  ...(await read('src/data/map/subregionData/WL.json')),
+];
 const subregionsById = new Map(subregions.map((subregion) => [subregion.id, subregion]));
-const discoveredTileFiles = (await walk(path.join(source, 'public/clips'))).filter((filename) => filename.endsWith('.webp'));
+const discoveredTileFiles = (await walk(path.join(source, 'public/clips'))).filter((filename) =>
+  filename.endsWith('.webp'),
+);
 const activeRegionIds = new Set(Object.keys(regionSource));
-const tileFiles = discoveredTileFiles.filter((filename) => activeRegionIds.has(path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]));
-const ignoredTileRegions = [...new Set(discoveredTileFiles.filter((filename) => !activeRegionIds.has(path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]))
-  .map((filename) => path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]))];
+const tileFiles = discoveredTileFiles.filter((filename) =>
+  activeRegionIds.has(path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]),
+);
+const ignoredTileRegions = [
+  ...new Set(
+    discoveredTileFiles
+      .filter(
+        (filename) =>
+          !activeRegionIds.has(path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]),
+      )
+      .map((filename) => path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]),
+  ),
+];
 const tileIndex = [];
 const coverage = {};
 const tileVersions = {};
@@ -182,9 +242,9 @@ for (const filename of tileFiles) {
   const match = tileName.match(/^(-?\d+)_(-?\d+)(?:_([a-z]\d+))?\.webp$/);
   const [, tileX, tileY, suffix] = match;
   const floorId = suffix?.toUpperCase() ?? 'M';
-  const rows = ((coverage[regionId] ??= {})[zoom] ??= {})[floorId] ??= {};
+  const rows = (((coverage[regionId] ??= {})[zoom] ??= {})[floorId] ??= {});
   (rows[tileY] ??= []).push(Number(tileX));
-  const versionRows = ((tileVersions[regionId] ??= {})[zoom] ??= {})[floorId] ??= {};
+  const versionRows = (((tileVersions[regionId] ??= {})[zoom] ??= {})[floorId] ??= {});
   (versionRows[tileY] ??= {})[tileX] = tileHash.slice(0, 7);
   const floorSuffix = floorId === 'M' ? '' : `_${floorId.toLowerCase()}`;
   const target = `tiles/${gameVersion}/${regionId}/${zoom}/${tileX}/${tileY}${floorSuffix}.webp`;
@@ -208,9 +268,12 @@ for (const [regionId, zooms] of Object.entries(coverage)) {
     }
   }
 }
-const floorTileVersions = (regionId, floorId) => Object.fromEntries(Object.entries(tileVersions[regionId] ?? {})
-  .filter(([, floors]) => floors[floorId])
-  .map(([zoom, floors]) => [zoom, floors[floorId]]));
+const floorTileVersions = (regionId, floorId) =>
+  Object.fromEntries(
+    Object.entries(tileVersions[regionId] ?? {})
+      .filter(([, floors]) => floors[floorId])
+      .map(([zoom, floors]) => [zoom, floors[floorId]]),
+  );
 const fonts = [];
 const fontLicenses = [];
 let fontLicense;
@@ -221,19 +284,36 @@ const exportFont = async ({ relative, family, weight, weightRange, namespace = '
   const filename = path.basename(relative);
   const fontPath = `/fonts/${namespace}/${digest}/${filename}`;
   await write(fontPath.slice(1), content);
-  fonts.push({ path: fontPath, sha256: digest, bytes: content.byteLength, family, weight, weightRange, style: 'normal' });
+  fonts.push({
+    path: fontPath,
+    sha256: digest,
+    bytes: content.byteLength,
+    family,
+    weight,
+    weightRange,
+    style: 'normal',
+  });
 };
 // HarmonyOS Sans is the Atlos Latin/UI face and may be redistributed with the
 // software when its license notice is retained. It is a variable font, so keep
 // the complete weight axis available to consumers.
-await exportFont({ relative: 'src/assets/fonts/Harmony/HMSans.woff2', family: 'HMSans_EN', weight: 400, weightRange: [100, 900] });
+await exportFont({
+  relative: 'src/assets/fonts/Harmony/HMSans.woff2',
+  family: 'HMSans_EN',
+  weight: 400,
+  weightRange: [100, 900],
+});
 const harmonyLicenseRelative = 'src/assets/fonts/LICENSE/Harmony OS Sans/Harmony OS Sans - License.txt';
 const harmonyLicenseContent = await fs.readFile(path.join(source, harmonyLicenseRelative));
 const harmonyLicenseHash = sha256(harmonyLicenseContent);
 sourceFiles[harmonyLicenseRelative] = harmonyLicenseHash;
 const harmonyLicensePath = `/fonts/harmony/${harmonyLicenseHash}/LICENSE.txt`;
 await write(harmonyLicensePath.slice(1), harmonyLicenseContent);
-fontLicenses.push({ path: harmonyLicensePath, sha256: harmonyLicenseHash, bytes: harmonyLicenseContent.byteLength });
+fontLicenses.push({
+  path: harmonyLicensePath,
+  sha256: harmonyLicenseHash,
+  bytes: harmonyLicenseContent.byteLength,
+});
 
 if (includeLicensedNovecento) {
   // These are the Wide faces used by Atlos. The Cyrillic and Vietnamese files
@@ -249,9 +329,15 @@ if (includeLicensedNovecento) {
     { filename: 'NWMed+Viet.woff2', family: 'Novecento Vietnamese Medium', weight: 500 },
   ];
   for (const font of novecentoFiles) {
-    await exportFont({ relative: `src/assets/fonts/Novecento/${font.filename}`, family: font.family, weight: font.weight, namespace: 'novecento' });
+    await exportFont({
+      relative: `src/assets/fonts/Novecento/${font.filename}`,
+      family: font.family,
+      weight: font.weight,
+      namespace: 'novecento',
+    });
   }
-  const licenseRelative = 'src/assets/fonts/LICENSE/Novecento Sans/Synthview Type Design - Webfont License 1.0.0.txt';
+  const licenseRelative =
+    'src/assets/fonts/LICENSE/Novecento Sans/Synthview Type Design - Webfont License 1.0.0.txt';
   const licenseContent = await fs.readFile(path.join(source, licenseRelative));
   const licenseHash = sha256(licenseContent);
   sourceFiles[licenseRelative] = licenseHash;
@@ -297,11 +383,20 @@ for (const [key, type] of Object.entries(rawTypes)) {
     continue;
   }
   sourceTypeAliases.set(key, key);
-  types[key] = { key, category: type.category, noFrame: type.noFrame, icon: await icon(type.icon ?? key),
-    subIcon: type.subIcon ? await icon(type.subIcon, true) : undefined };
+  types[key] = {
+    key,
+    category: type.category,
+    noFrame: type.noFrame,
+    icon: await icon(type.icon ?? key),
+    subIcon: type.subIcon ? await icon(type.subIcon, true) : undefined,
+  };
 }
 types.npc = { key: 'npc', category: { main: 'npc', sub: 'npc' }, icon: await icon('mission_npc') };
-types.files = { key: 'files', category: { main: 'files', sub: 'archives' }, icon: await icon('prts_read_note') };
+types.files = {
+  key: 'files',
+  category: { main: 'files', sub: 'archives' },
+  icon: await icon('prts_read_note'),
+};
 if (missingIcons.length) throw new Error(`Unresolved Atlos icons: ${missingIcons.join(', ')}`);
 const directTypeAliases = new Map([
   ['racing_npc', 'npc'],
@@ -334,42 +429,77 @@ for (const [id, config] of Object.entries(regionSource)) {
     ? { x: config.boundsOffset.x, z: -(config.boundsOffset.y + config.dimensions[1]) }
     : { x: 0, z: -config.dimensions[1] };
   const region = {
-    id, name: regionNames[id] ?? id, locales: {}, dimensions: config.dimensions, boundsOffset,
+    id,
+    name: regionNames[id] ?? id,
+    locales: {},
+    dimensions: config.dimensions,
+    boundsOffset,
     gameTransform: gameTransforms[id],
-    tileSize: config.tileSize, minZoom: 0, maxNativeZoom: config.maxZoom,
+    tileSize: config.tileSize,
+    minZoom: 0,
+    maxNativeZoom: config.maxZoom,
     maxZoom: config.maxZoom + (['Valley_4', 'Wuling'].includes(id) ? 1.5 : 1),
-    initialView: { regionId: id, floorId: 'M', x: boundsOffset.x + config.dimensions[0] / 2 + config.initialOffset.x,
-      z: -(config.boundsOffset?.y ?? 0) - config.dimensions[1] / 2 - config.initialOffset.y, zoom: config.initialZoom },
-    floors: ['M', ...config.layers ?? []].map((floorId) => ({
+    initialView: {
+      regionId: id,
+      floorId: 'M',
+      x: boundsOffset.x + config.dimensions[0] / 2 + config.initialOffset.x,
+      z: -(config.boundsOffset?.y ?? 0) - config.dimensions[1] / 2 - config.initialOffset.y,
+      zoom: config.initialZoom,
+    },
+    floors: ['M', ...(config.layers ?? [])].map((floorId) => ({
       id: floorId,
       tileTemplate: `/tiles/${gameVersion}/${id}/{z}/{x}/{y}${floorId === 'M' ? '' : `_${floorId.toLowerCase()}`}.webp`,
       tileVersions: floorTileVersions(id, floorId),
     })),
     subregions: config.subregions.map((subregionId) => {
       const subregion = subregionsById.get(subregionId);
-      const bounds = subregion?.bounds?.length >= 2
-        ? [[subregion.bounds[0][0], -subregion.bounds[1][1]], [subregion.bounds[1][0], -subregion.bounds[0][1]]]
-        : undefined;
-      return { id: subregionId, key: subregion?.name ?? subregionId, bounds,
-        gameTransform: subregionGameTransforms[subregionId] };
+      const bounds =
+        subregion?.bounds?.length >= 2
+          ? [
+              [subregion.bounds[0][0], -subregion.bounds[1][1]],
+              [subregion.bounds[1][0], -subregion.bounds[0][1]],
+            ]
+          : undefined;
+      return {
+        id: subregionId,
+        key: subregion?.name ?? subregionId,
+        bounds,
+        gameTransform: subregionGameTransforms[subregionId],
+      };
     }),
-    points: [], coverage: coverage[id] ?? {},
+    points: [],
+    coverage: coverage[id] ?? {},
   };
   for (const subregionId of config.subregions) {
     const raw = await read(`src/data/marker/data/${subregionId}.json`);
     const normalized = raw.map((entry) => {
-      const value = Array.isArray(entry) ? { id: entry[0], z: entry[1], x: entry[2], y: entry[3], tier: entry[4], type: entry[5] } : entry;
-      return { ...value, id: String(value.id), z: value.z ?? value.pos?.[0] ?? 0, x: value.x ?? value.pos?.[1] ?? 0,
-        y: value.y ?? value.pos?.[2] ?? 0, tier: value.tier ?? 0, subregId: value.subregId ?? subregionId, type: value.type ?? '' };
+      const value = Array.isArray(entry)
+        ? { id: entry[0], z: entry[1], x: entry[2], y: entry[3], tier: entry[4], type: entry[5] }
+        : entry;
+      return {
+        ...value,
+        id: String(value.id),
+        z: value.z ?? value.pos?.[0] ?? 0,
+        x: value.x ?? value.pos?.[1] ?? 0,
+        y: value.y ?? value.pos?.[2] ?? 0,
+        tier: value.tier ?? 0,
+        subregId: value.subregId ?? subregionId,
+        type: value.type ?? '',
+      };
     });
     const corrected = applyMarkerOverrides(normalized, overrides, { subregionId });
     const points = corrected.flatMap((point) => {
       if (!point.id || pointIds.has(point.id)) throw new Error(`Duplicate/invalid point ID: ${point.id}`);
-      if (!/^\d+$/.test(point.id) || BigInt(point.id) >= pointIdLimit) throw new Error(`Point ID cannot use an OEM short link: ${point.id}`);
-      if (![point.x, point.y, point.z, point.tier].every(Number.isFinite)) throw new Error(`Invalid coordinates: ${point.id}`);
+      if (!/^\d+$/.test(point.id) || BigInt(point.id) >= pointIdLimit)
+        throw new Error(`Point ID cannot use an OEM short link: ${point.id}`);
+      if (![point.x, point.y, point.z, point.tier].every(Number.isFinite))
+        throw new Error(`Invalid coordinates: ${point.id}`);
       if (point.id === '2800000983' || point.type === 'cv_wall') {
-        excludedPoints.push({ id: point.id, type: point.type || null,
-          reason: point.type === 'cv_wall' ? 'unsupported-collision-volume' : 'missing-type' });
+        excludedPoints.push({
+          id: point.id,
+          type: point.type || null,
+          reason: point.type === 'cv_wall' ? 'unsupported-collision-volume' : 'missing-type',
+        });
         return [];
       }
       const type = normalizePointType(point);
@@ -378,8 +508,17 @@ for (const [id, config] of Object.entries(regionSource)) {
       // Preserve Atlos' compact tuple representation. The runtime decodes
       // tuples using the same fallback-subregion rules as Atlos' interpreter.
       if (point.subregId === subregionId) return [[point.id, point.z, point.x, point.y, point.tier, type]];
-      return [{ id: point.id, z: point.z, x: point.x, y: point.y, tier: point.tier,
-        subregId: point.subregId, type }];
+      return [
+        {
+          id: point.id,
+          z: point.z,
+          x: point.x,
+          y: point.y,
+          tier: point.tier,
+          subregId: point.subregId,
+          type,
+        },
+      ];
     });
     const ref = await versionedObject('marker', `points/${subregionId}.json`, points);
     region.points.push(ref);
@@ -391,31 +530,45 @@ for (const [id, config] of Object.entries(regionSource)) {
   }
   const code = regionCodes[id];
   const regionLabels = Object.values(labels.regions[code]?.labels ?? {}).map((label) => ({
-    id: label.id, type: label.type,
+    id: label.id,
+    type: label.type,
     position: { regionId: id, x: label.point[0], z: -label.point[1] },
     textKey: `${code}.sub.${label.sub === '__root__' ? '' : `${label.sub}.`}${label.type === 'sub' ? 'name' : `site.${label.site}`}`,
   }));
   region.labels = await versionedObject('map', `labels/${id}.json`, regionLabels);
-  const boundaries = subregions.filter((subregion) => config.subregions.includes(subregion.id)).map((subregion) => {
-    const rings = subregion.polygon?.length
-      ? subregion.polygon
-      : subregion.bounds?.length >= 2
-        ? [[
-            [subregion.bounds[0][0], subregion.bounds[0][1]],
-            [subregion.bounds[1][0], subregion.bounds[0][1]],
-            [subregion.bounds[1][0], subregion.bounds[1][1]],
-            [subregion.bounds[0][0], subregion.bounds[1][1]],
-          ]]
-        : [];
-    return { id: subregion.id, rings: rings.map((ring) => ring.map(([pixelX, pixelZ]) => ({ x: pixelX, z: -pixelZ }))) };
-  }).filter((boundary) => boundary.rings.length);
-  region.boundaries = await versionedObject('map', `boundaries/${id}.json`, { count: boundaries.length, boundaries });
+  const boundaries = subregions
+    .filter((subregion) => config.subregions.includes(subregion.id))
+    .map((subregion) => {
+      const rings = subregion.polygon?.length
+        ? subregion.polygon
+        : subregion.bounds?.length >= 2
+          ? [
+              [
+                [subregion.bounds[0][0], subregion.bounds[0][1]],
+                [subregion.bounds[1][0], subregion.bounds[0][1]],
+                [subregion.bounds[1][0], subregion.bounds[1][1]],
+                [subregion.bounds[0][0], subregion.bounds[1][1]],
+              ],
+            ]
+          : [];
+      return {
+        id: subregion.id,
+        rings: rings.map((ring) => ring.map(([pixelX, pixelZ]) => ({ x: pixelX, z: -pixelZ }))),
+      };
+    })
+    .filter((boundary) => boundary.rings.length);
+  region.boundaries = await versionedObject('map', `boundaries/${id}.json`, {
+    count: boundaries.length,
+    boundaries,
+  });
   const gameMapId = gameMapIds[id];
   if (!gameMapId) throw new Error(`AKEData map ID is missing: ${id}`);
   const mapConfig = await readAKEData(`Json/MapConfig/${gameMapId}.json`);
   const levelIds = [...(mapConfig.levelStrIds ?? [])];
   if (!levelIds.length) throw new Error(`MapConfig levelStrIds is missing: ${gameMapId}`);
-  const levels = await Promise.all(levelIds.map((levelId) => readAKEData(`Json/LevelConfig/${levelId}.json`)));
+  const levels = await Promise.all(
+    levelIds.map((levelId) => readAKEData(`Json/LevelConfig/${levelId}.json`)),
+  );
   const gameBoundaries = levels.map((level) => levelToGameBoundaries(region, level));
   region.gameBoundaries = await versionedObject('map', `boundaries/${id}.game.json`, {
     count: gameBoundaries.length,
@@ -452,8 +605,19 @@ for (const filename of (await fs.readdir(path.join(source, 'src/locale/data/regi
   const zoomInLabel = uiMessages.settings?.shortcuts?.zoomIn;
   const zoomOutLabel = uiMessages.settings?.shortcuts?.zoomOut;
   const brandName = uiMessages.meta?.title;
-  const termsOfService = locale === 'en-US' ? 'Terms of Services' : locale === 'zh-CN' ? '服务条款' : locale === 'zh-HK' ? '服務條款' : uiMessages.tos?.title;
-  if (![layerLabel, zoomInLabel, zoomOutLabel, brandName, termsOfService].every((value) => typeof value === 'string' && value.length > 0)) {
+  const termsOfService =
+    locale === 'en-US'
+      ? 'Terms of Services'
+      : locale === 'zh-CN'
+        ? '服务条款'
+        : locale === 'zh-HK'
+          ? '服務條款'
+          : uiMessages.tos?.title;
+  if (
+    ![layerLabel, zoomInLabel, zoomOutLabel, brandName, termsOfService].every(
+      (value) => typeof value === 'string' && value.length > 0,
+    )
+  ) {
     throw new Error(`Missing Atlos control messages for locale: ${locale}`);
   }
   controls[locale] = {
@@ -478,7 +642,11 @@ for (const region of regions) {
     for (const [locale, messages] of Object.entries(localeBundles)) {
       const name = messages[`${prefix}.name`];
       const short = messages[`${prefix}.short`];
-      if (typeof name === 'string') localized[locale] = { name, short: typeof short === 'string' && short.trim() ? short : subregion.key };
+      if (typeof name === 'string')
+        localized[locale] = {
+          name,
+          short: typeof short === 'string' && short.trim() ? short : subregion.key,
+        };
     }
     if (Object.keys(localized).length) subregion.locales = localized;
   }
@@ -497,8 +665,12 @@ const finalizeReleasePaths = (value) => {
   }
   return value;
 };
-for (const value of [regions, types, pointIndex, typeRef, pointIndexRef, locales]) finalizeReleasePaths(value);
-for (const [name, value, ref] of [['type.json', types, typeRef], ['point-index.json', pointIndex, pointIndexRef]]) {
+for (const value of [regions, types, pointIndex, typeRef, pointIndexRef, locales])
+  finalizeReleasePaths(value);
+for (const [name, value, ref] of [
+  ['type.json', types, typeRef],
+  ['point-index.json', pointIndex, pointIndexRef],
+]) {
   const bytes = JSON.stringify(value);
   await write(`marker/${gameVersion}/${releasePlaceholder}/${name}`, bytes);
   ref.sha256 = sha256(bytes);
@@ -511,25 +683,92 @@ for (const namespace of ['marker', 'map']) {
   );
 }
 const manifest = {
-  schemaVersion: SCHEMA_VERSION, gameVersion, releaseId, generatedAt: new Date().toISOString(), defaultRegionId: 'Valley_4',
-  regions, types: typeRef, pointIndex: pointIndexRef, fonts, fontLicense, fontLicenses, locales, controls, fallbackLocale: 'en-US',
-  source: { repository: 'Atlos', commit: execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    usage: 'Local development snapshot only. SDK AGPL-3.0; asset redistribution permission must be confirmed separately.' },
+  schemaVersion: SCHEMA_VERSION,
+  gameVersion,
+  releaseId,
+  generatedAt: new Date().toISOString(),
+  defaultRegionId: 'Valley_4',
+  regions,
+  types: typeRef,
+  pointIndex: pointIndexRef,
+  fonts,
+  fontLicense,
+  fontLicenses,
+  locales,
+  controls,
+  fallbackLocale: 'en-US',
+  source: {
+    repository: 'Atlos',
+    commit: execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    usage:
+      'Local development snapshot only. SDK AGPL-3.0; asset redistribution permission must be confirmed separately.',
+  },
 };
 const manifestPath = `/releases/${releaseId}/manifest.json`;
 let manifestBytes = JSON.stringify(manifest);
-try { manifestBytes = await fs.readFile(path.join(publicOutput, manifestPath.slice(1))); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+try {
+  manifestBytes = await fs.readFile(path.join(publicOutput, manifestPath.slice(1)));
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
 await write(manifestPath.slice(1), manifestBytes);
-await write('channels/stable.json', JSON.stringify({ manifest: { path: manifestPath, sha256: sha256(manifestBytes), bytes: Buffer.byteLength(manifestBytes) } }));
+await write(
+  'channels/stable.json',
+  JSON.stringify({
+    manifest: { path: manifestPath, sha256: sha256(manifestBytes), bytes: Buffer.byteLength(manifestBytes) },
+  }),
+);
 await fs.rm(publicOutput, { recursive: true, force: true });
 await fs.rename(output, publicOutput);
 await fs.mkdir(path.join(root, 'artifacts'), { recursive: true });
-await fs.writeFile(path.join(root, 'artifacts/export-report.json'), JSON.stringify({ releaseId, gameVersion,
-  launcherVersion: resolvedGameVersion.launcher, versionSource: resolvedGameVersion.source, tileContentHash, tileCount: tileIndex.length,
-  pointCount: pointIds.size, typeCount: Object.keys(types).length, stats, missingIcons, aliasedIcons, excludedPoints, ignoredTileRegions,
-  ignoredTileCount: discoveredTileFiles.length - tileFiles.length, novecentoFontsIncluded: includeLicensedNovecento,
-  akeDataRoot, gameBoundaryStats, sourceFiles, sourceReadOnly: true, cloudflareChanges: false }, null, 2));
-console.log(JSON.stringify({ releaseId, gameVersion, launcherVersion: resolvedGameVersion.launcher,
-  versionSource: resolvedGameVersion.source, tiles: tileIndex.length, points: pointIds.size, missingIcons: missingIcons.length, aliasedIcons,
-  typeCount: Object.keys(types).length, excludedPoints, ignoredTileRegions, gameBoundaryStats,
-  novecentoFontsIncluded: includeLicensedNovecento, output: publicOutput }, null, 2));
+await fs.writeFile(
+  path.join(root, 'artifacts/export-report.json'),
+  JSON.stringify(
+    {
+      releaseId,
+      gameVersion,
+      launcherVersion: resolvedGameVersion.launcher,
+      versionSource: resolvedGameVersion.source,
+      tileContentHash,
+      tileCount: tileIndex.length,
+      pointCount: pointIds.size,
+      typeCount: Object.keys(types).length,
+      stats,
+      missingIcons,
+      aliasedIcons,
+      excludedPoints,
+      ignoredTileRegions,
+      ignoredTileCount: discoveredTileFiles.length - tileFiles.length,
+      novecentoFontsIncluded: includeLicensedNovecento,
+      akeDataRoot,
+      gameBoundaryStats,
+      sourceFiles,
+      sourceReadOnly: true,
+      cloudflareChanges: false,
+    },
+    null,
+    2,
+  ),
+);
+console.log(
+  JSON.stringify(
+    {
+      releaseId,
+      gameVersion,
+      launcherVersion: resolvedGameVersion.launcher,
+      versionSource: resolvedGameVersion.source,
+      tiles: tileIndex.length,
+      points: pointIds.size,
+      missingIcons: missingIcons.length,
+      aliasedIcons,
+      typeCount: Object.keys(types).length,
+      excludedPoints,
+      ignoredTileRegions,
+      gameBoundaryStats,
+      novecentoFontsIncluded: includeLicensedNovecento,
+      output: publicOutput,
+    },
+    null,
+    2,
+  ),
+);

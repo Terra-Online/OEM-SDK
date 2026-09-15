@@ -18,7 +18,7 @@ export function getOEMRegion(manifest: OEMManifest, id: string): OEMRegion {
 }
 /** Preserve M for existing releases, otherwise use the manifest's first floor. */
 export function getOEMDefaultFloor(region: OEMRegion): string {
-  return region.floors.find(floor => floor.id === 'M')?.id ?? region.floors[0]?.id ?? 'M';
+  return region.floors.find((floor) => floor.id === 'M')?.id ?? region.floors[0]?.id ?? 'M';
 }
 
 /** Applies OEM language fallback rules to a requested locale. */
@@ -37,8 +37,12 @@ export function normalizeOEMLocale(requested: string, available: string[], fallb
 export async function fetchOEMJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   try {
-    const response = await withOEMAbort(fetch(url, { signal, credentials: 'omit', headers: { Accept: 'application/json' } }), signal);
-    if (!response.ok) throw resourceError('fetch', new Error(`Static resource failed (${response.status}): ${url}`));
+    const response = await withOEMAbort(
+      fetch(url, { signal, credentials: 'omit', headers: { Accept: 'application/json' } }),
+      signal,
+    );
+    if (!response.ok)
+      throw resourceError('fetch', new Error(`Static resource failed (${response.status}): ${url}`));
     return await withOEMAbort(response.json() as Promise<T>, signal);
   } catch (error) {
     signal?.throwIfAborted();
@@ -48,8 +52,13 @@ export async function fetchOEMJson<T>(url: string, signal?: AbortSignal): Promis
 
 /** Loads a trusted manifest and checks only its schema compatibility. */
 export async function loadOEMManifest(resources: OEMResources, signal?: AbortSignal): Promise<OEMManifest> {
-  const value = await fetchOEMJson<OEMManifest | { manifest: { path: string } }>(resolveOEMAsset(resources?.baseUrl, resources?.manifestPath), signal);
-  return checkOEMManifestVersion(value && typeof value === 'object' && 'manifest' in value
-    ? await fetchOEMJson<OEMManifest>(resolveOEMAsset(resources.baseUrl, value.manifest?.path), signal)
-    : value);
+  const value = await fetchOEMJson<OEMManifest | { manifest: { path: string } }>(
+    resolveOEMAsset(resources?.baseUrl, resources?.manifestPath),
+    signal,
+  );
+  return checkOEMManifestVersion(
+    value && typeof value === 'object' && 'manifest' in value
+      ? await fetchOEMJson<OEMManifest>(resolveOEMAsset(resources.baseUrl, value.manifest?.path), signal)
+      : value,
+  );
 }

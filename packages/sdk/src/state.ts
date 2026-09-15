@@ -17,7 +17,14 @@ const parseNumber = (value: string | null): number | undefined => {
 
 const parseList = (value: string | null): string[] | undefined => {
   if (value === null) return undefined;
-  return [...new Set(value.split(',').map((entry) => entry.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  ];
 };
 
 const parseBoundarySource = (value: string | null): OEMBoundarySource | undefined =>
@@ -49,17 +56,32 @@ function parse(source: string | URLSearchParams, patch: boolean): OEMWidgetConfi
   const result: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(OEM_MAP_CONFIG_FIELDS)) {
     if (!('url' in field)) continue;
-    const value = field.url.map(name => params.get(name)).find(value => value !== null) ?? null;
+    const value = field.url.map((name) => params.get(name)).find((value) => value !== null) ?? null;
     switch (field.kind) {
-      case 'boolean': result[key] = parseBoolean(value); break;
-      case 'number': result[key] = parseNumber(value); break;
-      case 'string': result[key] = value ?? undefined; break;
-      case 'nullableString': result[key] = value === null ? patch ? undefined : null : value; break;
-      case 'theme': result[key] = value === 'light' || value === 'dark' ? value : undefined; break;
-      case 'boundarySource': result[key] = parseBoundarySource(value); break;
-      case 'markers': result[key] = value === '*' ? '*' : parseList(value); break;
+      case 'boolean':
+        result[key] = parseBoolean(value);
+        break;
+      case 'number':
+        result[key] = parseNumber(value);
+        break;
+      case 'string':
+        result[key] = value ?? undefined;
+        break;
+      case 'nullableString':
+        result[key] = value === null ? (patch ? undefined : null) : value;
+        break;
+      case 'theme':
+        result[key] = value === 'light' || value === 'dark' ? value : undefined;
+        break;
+      case 'boundarySource':
+        result[key] = parseBoundarySource(value);
+        break;
+      case 'markers':
+        result[key] = value === '*' ? '*' : parseList(value);
+        break;
       case 'center': {
-        const x = parseNumber(params.get('cx')), z = parseNumber(params.get('cz') ?? params.get('centerZ'));
+        const x = parseNumber(params.get('cx')),
+          z = parseNumber(params.get('cz') ?? params.get('centerZ'));
         result[key] = x === undefined || z === undefined ? undefined : { x, z };
         break;
       }

@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const packageNames = ['core', 'map', 'sdk', 'react'];
 const args = process.argv.slice(2);
-const targetVersion = args.find((arg) => arg.startsWith('--version='))?.slice('--version='.length)
-  ?? args.find((arg) => !arg.startsWith('--'));
+const targetVersion =
+  args.find((arg) => arg.startsWith('--version='))?.slice('--version='.length) ??
+  args.find((arg) => !arg.startsWith('--'));
 const publish = args.includes('--publish');
 const dryRun = args.includes('--dry-run');
 const tagArgument = args.find((arg) => arg.startsWith('--tag='))?.slice('--tag='.length);
@@ -22,11 +23,13 @@ const tag = tagArgument ?? inferredTag;
 if (!/^[a-z0-9][a-z0-9._-]*$/.test(tag)) throw new Error(`Invalid npm dist-tag: ${tag}`);
 
 const packageFiles = packageNames.map((name) => path.join(root, 'packages', name, 'package.json'));
-const packageData = await Promise.all(packageFiles.map(async (filename) => ({
-  filename,
-  text: await fs.readFile(filename, 'utf8'),
-  json: JSON.parse(await fs.readFile(filename, 'utf8')),
-})));
+const packageData = await Promise.all(
+  packageFiles.map(async (filename) => ({
+    filename,
+    text: await fs.readFile(filename, 'utf8'),
+    json: JSON.parse(await fs.readFile(filename, 'utf8')),
+  })),
+);
 const names = packageData.map(({ json }) => json.name);
 if (new Set(names).size !== names.length) throw new Error('Workspace package names must be unique');
 
@@ -54,19 +57,35 @@ run('pnpm', ['check']);
 run('pnpm', ['pack:release']);
 
 if (publish) {
-  const publishArgs = ['-r', 'publish', '--tag', tag, '--access', 'public', '--no-git-checks', '--report-summary'];
+  const publishArgs = [
+    '-r',
+    'publish',
+    '--tag',
+    tag,
+    '--access',
+    'public',
+    '--no-git-checks',
+    '--report-summary',
+  ];
   if (dryRun) publishArgs.push('--dry-run');
   run('pnpm', publishArgs);
   if (!dryRun) {
     for (const name of names) {
-      if (tag !== 'latest') run('npm', ['dist-tag', 'add', `${name}@${targetVersion}`, 'latest', `--registry=${registry}`]);
-      const distTags = JSON.parse(read('npm', ['view', name, 'dist-tags', '--json', `--registry=${registry}`]));
+      if (tag !== 'latest')
+        run('npm', ['dist-tag', 'add', `${name}@${targetVersion}`, 'latest', `--registry=${registry}`]);
+      const distTags = JSON.parse(
+        read('npm', ['view', name, 'dist-tags', '--json', `--registry=${registry}`]),
+      );
       if (distTags[tag] !== targetVersion || distTags.latest !== targetVersion) {
-        throw new Error(`npm dist-tag verification failed for ${name}: expected ${tag} and latest to point to ${targetVersion}`);
+        throw new Error(
+          `npm dist-tag verification failed for ${name}: expected ${tag} and latest to point to ${targetVersion}`,
+        );
       }
     }
   }
-  console.log(`${dryRun ? 'Validated' : 'Published'} ${names.join(', ')} at ${targetVersion} with dist-tags ${[tag, 'latest'].filter((value, index, values) => values.indexOf(value) === index).join(' and ')}.`);
+  console.log(
+    `${dryRun ? 'Validated' : 'Published'} ${names.join(', ')} at ${targetVersion} with dist-tags ${[tag, 'latest'].filter((value, index, values) => values.indexOf(value) === index).join(' and ')}.`,
+  );
 } else {
   console.log(`Prepared ${names.join(', ')} at ${targetVersion}; tarballs are in artifacts/npm.`);
   console.log(`Publish with: pnpm release:npm --version=${targetVersion} --publish --tag=${tag}`);

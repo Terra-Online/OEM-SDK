@@ -27,7 +27,10 @@ export interface OEMMapPosition {
 }
 
 /** A horizontal map offset in the published region coordinate system. */
-export interface OEMMapOffset { x: number; z: number }
+export interface OEMMapOffset {
+  x: number;
+  z: number;
+}
 
 /** A game-space position retained alongside its rendered map position. */
 export interface OEMGamePosition {
@@ -45,10 +48,15 @@ export interface OEMGameXZPosition {
 }
 
 /** A pixel position relative to the map host element. */
-export interface OEMScreenPosition { x: number; y: number }
+export interface OEMScreenPosition {
+  x: number;
+  y: number;
+}
 
 /** A map position with a fractional zoom level. */
-export interface OEMView extends OEMPosition { zoom: number }
+export interface OEMView extends OEMPosition {
+  zoom: number;
+}
 
 /** An inclusive rectangular extent in region pixel coordinates. */
 export type OEMPixelBounds = [[number, number], [number, number]];
@@ -62,7 +70,11 @@ export interface OEMGameTransform {
 }
 
 /** A versioned static asset reference with integrity metadata. */
-export interface OEMAsset { path: string; sha256: string; bytes: number }
+export interface OEMAsset {
+  path: string;
+  sha256: string;
+  bytes: number;
+}
 
 /** A published floor and its tile URL template. Versions align with covered x coordinates in each row. */
 export interface OEMFloor {
@@ -162,17 +174,35 @@ export interface OEMPointType {
   category: { main: string; sub: string };
 }
 /** Client-side point filtering applied to loaded region data. */
-export interface OEMPointFilter { types?: string[]; subregions?: string[]; floorOnly?: boolean }
+export interface OEMPointFilter {
+  types?: string[];
+  subregions?: string[];
+  floorOnly?: boolean;
+}
 
 /** A non-interactive localized map label. */
-export interface OEMLabel { id: string; type: 'site' | 'sub'; position: OEMPosition; textKey: string }
+export interface OEMLabel {
+  id: string;
+  type: 'site' | 'sub';
+  position: OEMPosition;
+  textKey: string;
+}
 
 /** One coordinate in a boundary asset; the owning region comes from its manifest reference. */
-export interface OEMBoundaryPoint { x: number; z: number }
+export interface OEMBoundaryPoint {
+  x: number;
+  z: number;
+}
 /** A non-interactive region boundary composed of one or more rings. */
-export interface OEMBoundary { id: string; rings: OEMBoundaryPoint[][] }
+export interface OEMBoundary {
+  id: string;
+  rings: OEMBoundaryPoint[][];
+}
 /** Published boundary file shared by OEM and game-derived boundary sources. */
-export interface OEMBoundaryCollection { count: number; boundaries: OEMBoundary[] }
+export interface OEMBoundaryCollection {
+  count: number;
+  boundaries: OEMBoundary[];
+}
 
 /** Selects the source used for the optional boundary layer. */
 export type OEMBoundarySource = 'oem' | 'game';
@@ -181,9 +211,13 @@ export type OEMBoundarySource = 'oem' | 'game';
 export type OEMLocaleMessages = Record<string, string>;
 
 /** Explicit published-pixel coordinate used in reusable position snapshots. */
-export interface OEMPixelPosition extends OEMPosition { space: 'pixel' }
+export interface OEMPixelPosition extends OEMPosition {
+  space: 'pixel';
+}
 /** Preferred normalized coordinate contract; legacy OEMMapPosition inputs remain accepted. */
-export interface OEMNormalizedMapPosition extends OEMMapPosition { space: 'map' }
+export interface OEMNormalizedMapPosition extends OEMMapPosition {
+  space: 'map';
+}
 /** A JSON-safe coordinate record independent of a live map or DOM event. */
 export interface OEMCoordinateSnapshot {
   readonly mapPosition: Readonly<OEMNormalizedMapPosition>;

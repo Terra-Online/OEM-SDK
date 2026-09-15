@@ -1,6 +1,14 @@
 import type { OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
 export type { OEMBoundarySource } from '@opendfieldmap/core';
-import type { OEMCustomPoint, OEMFeatureName, OEMResourceStates, OEMEvents, OEMMapAPI, OEMMapState, OEMMapConfig } from '@opendfieldmap/map';
+import type {
+  OEMCustomPoint,
+  OEMFeatureName,
+  OEMResourceStates,
+  OEMEvents,
+  OEMMapAPI,
+  OEMMapState,
+  OEMMapConfig,
+} from '@opendfieldmap/map';
 
 /** Stable top-level region identifiers published by OEM. */
 export type OEMRegionId = 'Valley_4' | 'Wuling' | 'Dijiang' | 'Weekraid_1' | (string & {});
@@ -98,7 +106,10 @@ export interface OEMWidget {
   clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
-  on<Event extends keyof OEMWidgetEvents>(event: Event, handler: (payload: OEMWidgetEvents[Event]) => void): () => void;
+  on<Event extends keyof OEMWidgetEvents>(
+    event: Event,
+    handler: (payload: OEMWidgetEvents[Event]) => void,
+  ): () => void;
   resize(): void;
   destroy(): void;
 }

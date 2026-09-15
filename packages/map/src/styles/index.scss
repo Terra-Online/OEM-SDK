@@ -48,8 +48,12 @@
   transition: background-color 0.3s $moderato-curve;
 }
 
-.mapRoot.overdrag::before { background: var(--mapPatternErrorBg); }
-.mapRoot img.leaflet-tile { mix-blend-mode: normal; }
+.mapRoot.overdrag::before {
+  background: var(--mapPatternErrorBg);
+}
+.mapRoot img.leaflet-tile {
+  mix-blend-mode: normal;
+}
 
 .mapRoot .attribution {
   position: absolute;
