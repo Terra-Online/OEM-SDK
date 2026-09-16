@@ -1,18 +1,48 @@
 {
   "name": "@opendfieldmap/sdk",
-  "version": "0.2.3-beta",
+  "version": "0.3.0-beta",
   "description": "Embeddable Open Endfield Map widget",
   "type": "module",
   "license": "AGPL-3.0-only",
-  "files": ["dist", "README.md", "LICENSE"],
-  "sideEffects": ["**/*.css"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
-    ".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"},
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
     "./style.css": "./dist/style.css"
   },
   "dependencies": {
     "@opendfieldmap/core": "workspace:^",
     "@opendfieldmap/map": "workspace:^"
   },
-  "publishConfig": {"access": "public"}
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "arknights",
+    "endfield",
+    "arknights-endfield",
+    "opendfieldmap",
+    "oem-sdk",
+    "widget",
+    "interactive-map",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Terra-Online/OEM-SDK.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/Terra-Online/OEM-SDK/tree/main/packages/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Terra-Online/OEM-SDK/issues"
+  }
 }
