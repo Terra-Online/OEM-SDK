@@ -2,6 +2,10 @@
 
 Framework-independent map runtime for **Open Endfield Map**, an Arknights: Endfield map toolkit. Use its public behavior API to build your own host controls while retaining official map and marker visuals. For built-in region, floor and scale controls, use [@opendfieldmap/sdk](https://www.npmjs.com/package/@opendfieldmap/sdk).
 
+![Open Endfield Map preview in the official Widget demo](https://raw.githubusercontent.com/Terra-Online/OEM-SDK/main/docs/assets/preview.webp)
+
+[Try the live Widget demo](https://sdk.opendfieldmap.org/demo/). The preview includes the SDK's official controls; this package provides the underlying map runtime.
+
 ```bash
 npm install @opendfieldmap/map
 ```

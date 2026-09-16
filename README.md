@@ -124,3 +124,7 @@ The demo build is application-only; it does not bundle map tiles or data.
 - [Static Resource Protocol](docs/cdn-design.md) · [简体中文](docs/cdn-design.zh-CN.md) · [繁體中文](docs/cdn-design.zh-HK.md)
 - [Package and NPM Release Structure](docs/npm-release.md) · [简体中文](docs/npm-release.zh-CN.md) · [繁體中文](docs/npm-release.zh-HK.md)
 - [Terms of Services](https://blog.opendfieldmap.org/docs/tos#intellectual-property-and-copyright)
+
+<p align="center">
+  <img src="docs/assets/brand.png" width="300" alt="Powered By Open Endfield Map">
+</p>
