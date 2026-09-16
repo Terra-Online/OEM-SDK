@@ -11,7 +11,6 @@
   ├─ @opendfieldmap/core
   └─ @opendfieldmap/map
        ├─ leaflet
-       ├─ leaflet.markercluster
        └─ trackpad-input
 
 @opendfieldmap/react
@@ -50,8 +49,8 @@ npm 套件使用 SemVer，並與以下版本獨立：
 使用發佈助手可以同步四個公開套件的版本、執行檢查並按依賴順序發佈：
 
 ```bash
-pnpm release:npm --version=0.2.3-beta
-pnpm release:npm --version=0.2.3-beta --publish --tag=beta
+pnpm release:npm --version=0.3.0-beta
+pnpm release:npm --version=0.3.0-beta --publish --tag=beta
 ```
 
 上傳成功後，助手會把 `latest` 移到本次版本，並從 registry 校驗指定 tag 與 `latest` 均已生效。加入 `--dry-run` 可以驗證發佈操作，但不會上傳或修改 dist-tag。

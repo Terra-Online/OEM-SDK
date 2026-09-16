@@ -6,6 +6,7 @@
   "license": "AGPL-3.0-only",
   "files": [
     "dist",
+    "README.md",
     "LICENSE"
   ],
   "sideEffects": [
@@ -28,5 +29,24 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "keywords": [
+    "arknights",
+    "endfield",
+    "arknights-endfield",
+    "opendfieldmap",
+    "oem-sdk",
+    "canvas",
+    "interactive-map",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Terra-Online/OEM-SDK.git",
+    "directory": "packages/map"
+  },
+  "homepage": "https://github.com/Terra-Online/OEM-SDK/tree/main/packages/map#readme",
+  "bugs": {
+    "url": "https://github.com/Terra-Online/OEM-SDK/issues"
   }
 }

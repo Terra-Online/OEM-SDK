@@ -4,10 +4,44 @@
   "description": "React lifecycle wrapper for the Open Endfield Map widget",
   "type": "module",
   "license": "AGPL-3.0-only",
-  "files": ["dist", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "sideEffects": false,
-  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
-  "dependencies": {"@opendfieldmap/sdk": "workspace:^"},
-  "publishConfig": {"access": "public"},
-  "peerDependencies": {"react": ">=18 <20"}
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@opendfieldmap/sdk": "workspace:^"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "react": ">=18 <20"
+  },
+  "keywords": [
+    "arknights",
+    "endfield",
+    "arknights-endfield",
+    "opendfieldmap",
+    "oem-sdk",
+    "react",
+    "react-component",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Terra-Online/OEM-SDK.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/Terra-Online/OEM-SDK/tree/main/packages/react#readme",
+  "bugs": {
+    "url": "https://github.com/Terra-Online/OEM-SDK/issues"
+  }
 }
