@@ -170,7 +170,13 @@ describe('reusable position records', () => {
     clickMap();
     expect(api.getCustomPoints()).toEqual([]);
     const snapshot = handler.mock.calls[0][0] as OEMCoordinateSnapshot;
-    expect(snapshot.context).toEqual({ schemaVersion: 1, gameVersion: '1_5_3', releaseId: 'test-release' });
+    expect(snapshot.context).toEqual({
+      schemaVersion: 1,
+      gameVersion: '1_5_3',
+      gameBuild: '10506507-7',
+      gameVersionLabel: '1.5.3 (10506507-7)',
+      releaseId: 'test-release',
+    });
     const serialized = JSON.stringify(snapshot);
     api.destroy();
     const saved = JSON.parse(serialized) as OEMCoordinateSnapshot;

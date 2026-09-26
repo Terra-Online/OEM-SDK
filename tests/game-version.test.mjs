@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   fetchLatestGameVersion,
+  formatGameVersionLabel,
   GAME_VERSION_ENDPOINT,
   GAME_VERSION_REQUEST_BASELINE,
+  normalizeGameBuild,
   normalizeGameVersion,
   parseLatestGameVersion,
 } from '../scripts/game-version.mjs';
@@ -12,6 +14,12 @@ describe('Endfield game version resolution', () => {
     expect(normalizeGameVersion('1.5.3')).toEqual({ launcher: '1.5.3', path: '1_5_3' });
     expect(normalizeGameVersion('01_05_003')).toEqual({ launcher: '1.5.3', path: '1_5_3' });
     expect(() => normalizeGameVersion('1.5')).toThrow('Invalid Endfield game version');
+  });
+
+  it('combines the launcher version with an AKEData build label', () => {
+    expect(normalizeGameBuild('10506507-7')).toBe('10506507-7');
+    expect(formatGameVersionLabel('1_5_3', '10506507-7')).toBe('1.5.3 (10506507-7)');
+    expect(() => normalizeGameBuild('../10506507-7')).toThrow('Invalid Endfield data build');
   });
 
   it('reads the latest game response from a batch result', () => {

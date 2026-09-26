@@ -28,19 +28,20 @@ The channel is a small updateable pointer. The schema v1 release manifest select
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.game.json
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
+/tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
+/tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
 /fonts/harmony/{sha256}/HMSans.woff2
 /fonts/novecento/{sha256}/{filename}.woff2
 ```
 
-`gameVersion` uses the path-safe form of the game version, such as `1_5_3`.
+`gameVersion` uses the path-safe form of the game version, such as `1_5_3`, and `gameBuild` is the resource build, such as `10506507-7`.
+`gameBuild` records the AKEData main-resource build, and `gameVersionLabel` combines both for display, such as `1.5.3 (10506507-7)`.
 `releaseId` makes the manifest, marker data, labels, and boundaries immutable.
 Marker images are shared content-addressed assets under `/marker/assets/{sha256}/`; releases reference them without duplicating them.
 `type.json` preserves regular marker types and exposes all source NPC and archive entries as the aggregate `npc` and `files` types respectively.
-Tile object paths remain stable within a game version. The SDK adds a short
+Tile object paths remain stable within a game build. The SDK adds a short
 content-derived `v` value for each tile, so unchanged tiles retain their CDN
-cache key across releases and only changed tiles return to origin. Omitting
+cache key across releases with the same build and only changed tiles return to origin. Builds with the same game version use separate object prefixes. Omitting
 `v` addresses the latest object at that stable path. Main-floor tile names have
 no floor suffix; additional floors use a lowercase suffix such as `_l1`.
 
@@ -59,6 +60,8 @@ OEM and game boundary files share the same readable collection shape: `{ count, 
 Published release directories are immutable. Tile objects are updated in place before the stable channel changes; per-tile `v` values prevent stale CDN reuse.
 
 ## R2 Release Validation
+
+`pnpm version:game` pairs the launcher version with the latest AKEData commit whose subject is a numeric build ID such as `10506507-7`. Set `OEM_GAME_BUILD` to label a manually pinned AKEData snapshot.
 
 Run `pnpm update:local` to export and validate data, build the demo, and prepare one deterministic R2 plan. The generated plan records channel and manifest hashes, so `pnpm deploy:data -- --confirm-release <releaseId>` refuses stale or mixed batches. `pnpm update:demo` is the only standalone demo path; it never changes the manifest or channel. After publication, the publisher runs `pnpm validate:r2`. It compares every local object with the R2 bucket by size, fetches all manifest-declared assets through the configured CDN, verifies their bytes and SHA-256 values, and checks `Content-Type`, `Cache-Control`, and representative tile headers. It does not open a browser or perform an online smoke test.
 

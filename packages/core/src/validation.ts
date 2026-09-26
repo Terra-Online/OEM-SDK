@@ -31,6 +31,18 @@ export function validateOEMManifest(value: unknown): OEMManifest {
   if (!isObject(value) || value.schemaVersion !== OEM_SCHEMA_VERSION)
     invalid('manifest.schemaVersion', 'Unsupported or invalid OEM manifest');
   if (!isText(value.releaseId) || !isText(value.gameVersion)) invalid('manifest', 'Missing release identity');
+  if (
+    value.gameBuild !== undefined &&
+    (typeof value.gameBuild !== 'string' || !/^\d+-\d+$/.test(value.gameBuild))
+  )
+    invalid('manifest.gameBuild', 'Invalid AKEData build');
+  if (
+    value.gameVersionLabel !== undefined &&
+    (typeof value.gameVersionLabel !== 'string' ||
+      value.gameVersionLabel !== `${String(value.gameVersion).replaceAll('_', '.')} (${value.gameBuild})`)
+  ) {
+    invalid('manifest.gameVersionLabel', 'Combined game and data version does not match');
+  }
   if (!Array.isArray(value.regions) || !value.regions.length) invalid('manifest.regions', 'Expected regions');
   const ids = new Set<string>();
   for (const [index, region] of value.regions.entries()) {

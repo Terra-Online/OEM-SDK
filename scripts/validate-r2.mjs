@@ -103,7 +103,12 @@ validateResourcePath(manifestReference.path);
 const manifestPath = path.join(publicRoot, manifestReference.path.replace(/^\//, ''));
 const localManifestBytes = await fs.readFile(manifestPath);
 const localManifest = JSON.parse(localManifestBytes.toString());
-if (localManifest.releaseId !== plan.releaseId || localManifest.gameVersion !== plan.gameVersion) {
+if (
+  localManifest.releaseId !== plan.releaseId ||
+  localManifest.gameVersion !== plan.gameVersion ||
+  localManifest.gameBuild !== plan.gameBuild ||
+  localManifest.gameVersionLabel !== plan.gameVersionLabel
+) {
   fail('Local manifest does not match the prepared release plan');
 }
 
@@ -231,6 +236,8 @@ console.log(
     {
       releaseId: localManifest.releaseId,
       gameVersion: localManifest.gameVersion,
+      gameBuild: localManifest.gameBuild,
+      gameVersionLabel: localManifest.gameVersionLabel,
       remoteObjectsChecked: plan.objects,
       hashedAssetsChecked: references.size + 1,
       iconHeadersChecked: iconPaths.size,

@@ -84,6 +84,8 @@ const plan = {
   zoneId: r2.zoneId,
   releaseId: manifest.releaseId,
   gameVersion: manifest.gameVersion,
+  gameBuild: manifest.gameBuild,
+  gameVersionLabel: manifest.gameVersionLabel,
   channelSha256: createHash('sha256').update(channelBytes).digest('hex'),
   manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
   objects: files.length,

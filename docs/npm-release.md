@@ -42,6 +42,7 @@ Package versions use SemVer. They are independent from:
 
 - manifest `schemaVersion`, currently `1`;
 - `gameVersion`, which groups static paths by game version;
+- `gameBuild`, which identifies the resource build hash value;
 - `releaseId`, which identifies one manifest and its immutable data objects within that game version.
 
 A package release may support multiple game-data releases through the same schema. Tiles use stable object paths with per-tile content versions so unchanged cache keys survive a data release.

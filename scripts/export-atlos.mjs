@@ -12,8 +12,10 @@ const GAME_GRID_SIZE = 128;
 const args = process.argv.slice(2);
 const sourceArg = args.find((argument) => !argument.startsWith('--'));
 const source = path.resolve(sourceArg ?? path.join(root, '../Atlos/talos'));
-const resolvedGameVersion = await resolveGameVersion(args);
+const resolvedGameVersion = await resolveGameVersion(args, process.env, akeDataRoot);
 const gameVersion = resolvedGameVersion.path;
+const gameBuild = resolvedGameVersion.gameBuild;
+const gameVersionLabel = resolvedGameVersion.gameVersionLabel;
 const releasePlaceholder = '__release__';
 const publicOutput = path.join(root, 'public');
 const output = path.join(root, '.export-tmp');
@@ -247,7 +249,7 @@ for (const filename of tileFiles) {
   const versionRows = (((tileVersions[regionId] ??= {})[zoom] ??= {})[floorId] ??= {});
   (versionRows[tileY] ??= {})[tileX] = tileHash.slice(0, 7);
   const floorSuffix = floorId === 'M' ? '' : `_${floorId.toLowerCase()}`;
-  const target = `tiles/${gameVersion}/${regionId}/${zoom}/${tileX}/${tileY}${floorSuffix}.webp`;
+  const target = `tiles/${gameVersion}/${gameBuild}/${regionId}/${zoom}/${tileX}/${tileY}${floorSuffix}.webp`;
   await write(target, content);
 }
 const tileContentHash = sha256(JSON.stringify(tileIndex));
@@ -448,7 +450,7 @@ for (const [id, config] of Object.entries(regionSource)) {
     },
     floors: ['M', ...(config.layers ?? [])].map((floorId) => ({
       id: floorId,
-      tileTemplate: `/tiles/${gameVersion}/${id}/{z}/{x}/{y}${floorId === 'M' ? '' : `_${floorId.toLowerCase()}`}.webp`,
+      tileTemplate: `/tiles/${gameVersion}/${gameBuild}/${id}/{z}/{x}/{y}${floorId === 'M' ? '' : `_${floorId.toLowerCase()}`}.webp`,
       tileVersions: floorTileVersions(id, floorId),
     })),
     subregions: config.subregions.map((subregionId) => {
@@ -653,7 +655,7 @@ for (const region of regions) {
 }
 const pointIndexRef = await versionedObject('marker', 'point-index.json', pointIndex);
 const typeRef = await versionedObject('marker', 'type.json', types);
-const releaseId = `atlos-${sha256(JSON.stringify({ schemaVersion: SCHEMA_VERSION, gameVersion, regions, types: typeRef, pointIndex: pointIndexRef, locales, controls, fonts, fontLicense, fontLicenses, tileContentHash })).slice(0, 7)}`;
+const releaseId = `atlos-${sha256(JSON.stringify({ schemaVersion: SCHEMA_VERSION, gameVersion, gameBuild, regions, types: typeRef, pointIndex: pointIndexRef, locales, controls, fonts, fontLicense, fontLicenses, tileContentHash })).slice(0, 7)}`;
 const placeholderPathSegment = `/${gameVersion}/${releasePlaceholder}/`;
 const releasePathSegment = `/${gameVersion}/${releaseId}/`;
 const finalizeReleasePaths = (value) => {
@@ -685,6 +687,8 @@ for (const namespace of ['marker', 'map']) {
 const manifest = {
   schemaVersion: SCHEMA_VERSION,
   gameVersion,
+  gameBuild,
+  gameVersionLabel,
   releaseId,
   generatedAt: new Date().toISOString(),
   defaultRegionId: 'Valley_4',
@@ -700,6 +704,7 @@ const manifest = {
   source: {
     repository: 'Atlos',
     commit: execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    akeDataCommit: execFileSync('git', ['-C', akeDataRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
     usage:
       'Local development snapshot only. SDK AGPL-3.0; asset redistribution permission must be confirmed separately.',
   },
@@ -727,8 +732,12 @@ await fs.writeFile(
     {
       releaseId,
       gameVersion,
+      gameBuild,
+      gameVersionLabel,
       launcherVersion: resolvedGameVersion.launcher,
       versionSource: resolvedGameVersion.source,
+      buildSource: resolvedGameVersion.buildSource,
+      buildCommit: resolvedGameVersion.buildCommit,
       tileContentHash,
       tileCount: tileIndex.length,
       pointCount: pointIds.size,
@@ -755,8 +764,11 @@ console.log(
     {
       releaseId,
       gameVersion,
+      gameBuild,
+      gameVersionLabel,
       launcherVersion: resolvedGameVersion.launcher,
       versionSource: resolvedGameVersion.source,
+      buildSource: resolvedGameVersion.buildSource,
       tiles: tileIndex.length,
       points: pointIds.size,
       missingIcons: missingIcons.length,

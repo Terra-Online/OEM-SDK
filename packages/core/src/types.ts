@@ -136,6 +136,10 @@ export interface OEMManifest {
   schemaVersion: typeof OEM_SCHEMA_VERSION;
   /** Path-safe Endfield game version, for example 1_5_3. */
   gameVersion: string;
+  /** AKEData main resource build, for example 10506507-7. */
+  gameBuild?: string;
+  /** Human-readable combined game and data version. */
+  gameVersionLabel?: string;
   releaseId: string;
   generatedAt: string;
   defaultRegionId: string;
@@ -223,7 +227,13 @@ export interface OEMCoordinateSnapshot {
   readonly mapPosition: Readonly<OEMNormalizedMapPosition>;
   readonly pixelPosition: Readonly<OEMPixelPosition>;
   readonly gamePosition: Readonly<OEMGameXZPosition & { space: 'game' }> | null;
-  readonly context: Readonly<{ schemaVersion: 1; releaseId: string; gameVersion: string }>;
+  readonly context: Readonly<{
+    schemaVersion: 1;
+    releaseId: string;
+    gameVersion: string;
+    gameBuild?: string;
+    gameVersionLabel?: string;
+  }>;
   subregionResolution: 'provided' | 'geometry' | 'bounds' | 'unresolved';
   gameResolution: 'resolved' | 'subregion-unresolved' | 'transform-unavailable';
 }

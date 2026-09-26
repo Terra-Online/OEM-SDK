@@ -71,6 +71,18 @@ const cases: [string, (m: OEMManifest) => void][] = [
       m.regions[0].initialView.regionId = 'unknown';
     },
   ],
+  [
+    'game build',
+    (m) => {
+      m.gameBuild = '../10506507-7';
+    },
+  ],
+  [
+    'game version label',
+    (m) => {
+      m.gameVersionLabel = '1.5.3 (9885010-4)';
+    },
+  ],
 ];
 describe('runtime wire validation', () => {
   it.each(cases)('rejects malformed %s with a field path', (_, mutate) => {

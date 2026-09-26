@@ -4,6 +4,8 @@ import type { OEMManifest } from '@opendfieldmap/core';
 export const createManifest = (): OEMManifest => ({
   schemaVersion: 1,
   gameVersion: '1_5_3',
+  gameBuild: '10506507-7',
+  gameVersionLabel: '1.5.3 (10506507-7)',
   releaseId: 'test-release',
   generatedAt: '2026-09-11T00:00:00Z',
   defaultRegionId: 'Valley_4',

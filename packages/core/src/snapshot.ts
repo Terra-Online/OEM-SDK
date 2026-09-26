@@ -34,6 +34,8 @@ export function createOEMCoordinateSnapshot(
       schemaVersion: 1 as const,
       releaseId: manifest.releaseId,
       gameVersion: manifest.gameVersion,
+      ...(manifest.gameBuild ? { gameBuild: manifest.gameBuild } : {}),
+      ...(manifest.gameVersionLabel ? { gameVersionLabel: manifest.gameVersionLabel } : {}),
     }),
     subregionResolution,
     gameResolution,

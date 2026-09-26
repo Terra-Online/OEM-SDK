@@ -116,6 +116,8 @@ const manifest = await readRef(channel.manifest);
 if (
   manifest.schemaVersion !== SCHEMA_VERSION ||
   !/^\d+_\d+_\d+$/.test(manifest.gameVersion) ||
+  !/^\d+-\d+$/.test(manifest.gameBuild) ||
+  manifest.gameVersionLabel !== `${manifest.gameVersion.replaceAll('_', '.')} (${manifest.gameBuild})` ||
   !/^atlos-[0-9a-f]{7}$/.test(manifest.releaseId) ||
   manifest.releaseId !== path.basename(path.dirname(channel.manifest.path))
 )
@@ -123,7 +125,7 @@ if (
 const releaseRoot = `${manifest.gameVersion}/${manifest.releaseId}`;
 const markerRoot = `/marker/${releaseRoot}`;
 const mapRoot = `/map/${releaseRoot}`;
-const tileRootPath = `/tiles/${manifest.gameVersion}`;
+const tileRootPath = `/tiles/${manifest.gameVersion}/${manifest.gameBuild}`;
 const requirePath = (value, expected) => {
   if (value !== expected) fail(`Unexpected versioned resource path: ${value}`);
 };
@@ -344,7 +346,7 @@ const tileIndex = await Promise.all(
 );
 tileIndex.sort((left, right) => left.relative.localeCompare(right.relative));
 const tileContentHash = hash(JSON.stringify(tileIndex));
-for (const namespace of ['tiles', 'marker', 'map']) {
+for (const namespace of ['marker', 'map']) {
   const versions = await fs.readdir(path.join(publicRoot, namespace), { withFileTypes: true });
   const versionDirectories = versions
     .filter((entry) => entry.isDirectory() && entry.name !== 'assets')
@@ -355,6 +357,16 @@ for (const namespace of ['tiles', 'marker', 'map']) {
   if (versionDirectories.length > 1) {
     warn(`Historical ${namespace} version directories are present: ${versionDirectories.join(', ')}`);
   }
+}
+const tileVersionRoot = path.join(publicRoot, 'tiles', manifest.gameVersion);
+const tileBuildDirectories = (await fs.readdir(tileVersionRoot, { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name);
+if (!tileBuildDirectories.includes(manifest.gameBuild)) {
+  fail(`Missing tiles build directory: ${manifest.gameVersion}/${manifest.gameBuild}`);
+}
+if (tileBuildDirectories.length > 1) {
+  warn(`Historical tiles build directories are present: ${tileBuildDirectories.join(', ')}`);
 }
 for (const namespace of ['marker', 'map']) {
   const releases = await fs.readdir(path.join(publicRoot, namespace, manifest.gameVersion), {
@@ -382,6 +394,8 @@ const report = await readJson(path.join(root, 'artifacts/export-report.json'));
 if (
   report.releaseId !== manifest.releaseId ||
   report.gameVersion !== manifest.gameVersion ||
+  report.gameBuild !== manifest.gameBuild ||
+  report.gameVersionLabel !== manifest.gameVersionLabel ||
   report.tileContentHash !== tileContentHash ||
   report.tileCount !== tileFiles.length ||
   report.pointCount !== pointCount ||
@@ -410,6 +424,8 @@ console.log(
     {
       releaseId: manifest.releaseId,
       gameVersion: manifest.gameVersion,
+      gameBuild: manifest.gameBuild,
+      gameVersionLabel: manifest.gameVersionLabel,
       regions: manifest.regions.length,
       locales: localeEntries.length,
       points: pointCount,
