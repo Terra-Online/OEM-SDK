@@ -30,6 +30,7 @@ export interface DemoCreationConfig {
 export interface DemoVersionOption {
   id: string;
   label: string;
+  baseUrl: string;
   manifestPath: string;
 }
 
@@ -309,7 +310,7 @@ const createWidgetCode = (
   if (version?.manifestPath !== undefined && version.manifestPath !== '/channels/stable.json') {
     lines.unshift(
       '  resources: {',
-      "    baseUrl: 'https://data.opendfieldmap.org',",
+      `    baseUrl: ${quote(version.baseUrl)},`,
       `    manifestPath: ${quote(version.manifestPath)},`,
       '  },',
     );

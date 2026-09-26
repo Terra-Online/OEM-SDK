@@ -28,13 +28,13 @@ channel 是可更新的小型指標。schema v1 release manifest 選擇一套完
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.game.json
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
+/tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
+/tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
 /fonts/harmony/{sha256}/HMSans.woff2
 /fonts/novecento/{sha256}/{filename}.woff2
 ```
 
-`gameVersion` 使用路徑安全形式，例如 `1_5_3`。`releaseId` 令 manifest、點位、地名和邊界保持不可變。`type.json` 保留一般點位類型，並將來源資料中的全部 NPC 和檔案條目分別統一為 `npc` 與 `files` 兩種聚合類型。瓦片物件路徑在同一遊戲版本內保持穩定，SDK 為每張瓦片附加由內容產生的短 `v` 值；未變更的瓦片可跨 release 重用 CDN 快取，只有變更的瓦片需要回源。不帶 `v` 時會存取該穩定路徑下的最新物件。主層瓦片檔名不帶樓層後綴，其他樓層使用 `_l1` 這類小寫檔名後綴。
+`gameVersion` 使用路徑安全形式，例如 `1_5_3`；`gameBuild` 記錄資源 build，例如 `10506507-7`；`gameVersionLabel` 將兩者組合用於顯示，例如 `1.5.3 (10506507-7)`。`releaseId` 令 manifest、點位、地名和邊界保持不可變。`type.json` 保留一般點位類型，並將來源資料中的全部 NPC 和檔案條目分別統一為 `npc` 與 `files` 兩種聚合類型。瓦片物件路徑在同一 build 內保持穩定；同一遊戲版本的不同 build 使用不同的物件前綴，避免互相覆蓋；同 build 的不同 release 可重用 CDN 快取，只有變更的瓦片需要回源。不帶 `v` 時會存取該穩定路徑下的最新物件。主層瓦片檔名不帶樓層後綴，其他樓層使用 `_l1` 這類小寫檔名後綴。
 
 使用方只需設定 `baseUrl` 和 `manifestPath`，不應自行拼接單一內容路徑。
 
@@ -51,6 +51,8 @@ OEM 和 Game 邊界檔案統一使用可讀的 `{ count, boundaries }` 集合結
 已發佈的 release 目錄不可覆蓋。瓦片物件會在 stable channel 切換前原位更新；單一瓦片 `v` 值可避免 CDN 重用過期內容。
 
 ## R2 發佈校驗
+
+`pnpm version:game` 會將啟動器版本與 AKEData 中最近一個提交標題為數字 build ID（例如 `10506507-7`）的提交配對。手動固定 AKEData 快照時，可設定 `OEM_GAME_BUILD` 指定 build。
 
 執行 `pnpm deploy:data -- --confirm-release <releaseId>` 後，發佈腳本會自動執行 `pnpm validate:r2`。該校驗會用大小比較確認本地物件已全部進入 R2，透過設定的 CDN 取得 manifest 宣告的全部資產，驗證內容位元組與 SHA-256，並檢查 `Content-Type`、`Cache-Control` 和代表性瓦片的回應標頭。它不會開啟瀏覽器，也不會執行線上煙測。
 

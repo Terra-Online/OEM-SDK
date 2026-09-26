@@ -244,7 +244,7 @@ Custom-point reads return copies. Upsert adds or updates IDs while retaining unt
 
 `on()` returns an unsubscribe function. Events include `click`, `pointclick`, `pointenter`, `pointleave`, `statechange`, `viewchange`, `regionchange`, `floorchange`, `custompointschange`, `resourcechange`, `loading`, `load`, `error`, and `destroy`.
 
-Map clicks never add points implicitly. Each click contains immutable `mapPosition` (`space: 'map'`), `pixelPosition` (`space: 'pixel'`), `gamePosition` (`space: 'game'` or `null`), and `context: { schemaVersion, releaseId, gameVersion }`. Snapshots are JSON-safe and remain usable after destruction. Compatibility fields `position` and `game` refer to the map and game positions.
+Map clicks never add points implicitly. Each click contains immutable `mapPosition` (`space: 'map'`), `pixelPosition` (`space: 'pixel'`), `gamePosition` (`space: 'game'` or `null`), and `context: { schemaVersion, releaseId, gameVersion, gameBuild?, gameVersionLabel? }`. `gameVersionLabel` combines the launcher version and build, for example `1.5.3 (10506507-7)`. Snapshots are JSON-safe and remain usable after destruction. Compatibility fields `position` and `game` refer to the map and game positions.
 
 `subregionResolution` is `provided`, `geometry`, `bounds`, or `unresolved`. If a subregion-specific transform is needed but only a bounds inference is available, or transform metadata is missing, game coordinates are `null`; `gameResolution` explains why. Clicks never infer game height.
 

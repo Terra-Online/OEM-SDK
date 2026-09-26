@@ -42,6 +42,7 @@ npm 包使用 SemVer，并与以下版本独立：
 
 - manifest `schemaVersion`，当前为 `1`；
 - `gameVersion`，用于按游戏版本组织静态路径；
+- `gameBuild`，用于标识资源 build 哈希值；
 - `releaseId`，标识该游戏版本内一份 manifest 及其不可变数据对象。
 
 同一 npm 包版本可以通过相同 schema 支持多个游戏数据 release。瓦片使用稳定对象路径和单瓦片内容版本，使未变化的缓存键可跨数据 release 复用。

@@ -244,7 +244,7 @@ unsubscribe();
 
 `on()` 傳回取消訂閱函數，事件包括 `click`、`pointclick`、`pointenter`、`pointleave`、`statechange`、`viewchange`、`regionchange`、`floorchange`、`custompointschange`、`resourcechange`、`loading`、`load`、`error`、`destroy`。
 
-地圖點擊不會自動加點。點擊包含唯讀的 `mapPosition`（`space: 'map'`）、`pixelPosition`（`space: 'pixel'`）、`gamePosition`（`space: 'game'` 或 `null`），以及 `context: { schemaVersion, releaseId, gameVersion }`。快照可序列化為 JSON，銷毀地圖後仍可保存及計算。相容欄位 `position`／`game` 分別指向地圖／遊戲座標。
+地圖點擊不會自動加點。點擊包含唯讀的 `mapPosition`（`space: 'map'`）、`pixelPosition`（`space: 'pixel'`）、`gamePosition`（`space: 'game'` 或 `null`），以及 `context: { schemaVersion, releaseId, gameVersion, gameBuild?, gameVersionLabel? }。`gameVersionLabel` 組合啟動器版本和 build，例如 `1.5.3 (10506507-7)`。快照可序列化為 JSON，銷毀地圖後仍可保存及計算。相容欄位 `position`／`game` 分別指向地圖／遊戲座標。
 
 `subregionResolution` 為 `provided`、`geometry`、`bounds` 或 `unresolved`。若需要子地區轉換但僅能靠包圍盒推測，或缺少轉換參數，遊戲座標為 `null`，由 `gameResolution` 說明原因。二維點擊不推斷遊戲高度。
 

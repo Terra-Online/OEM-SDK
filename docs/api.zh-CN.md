@@ -258,7 +258,7 @@ await widget.map.removeCustomPoints(['saved-location']);
 
 `on()` 返回取消订阅函数。支持 `click`、`pointclick`、`pointenter`、`pointleave`、`statechange`、`regionchange`、`floorchange`、`viewchange`、`custompointschange`、`resourcechange`、`loading`、`load`、`error`、`destroy`。
 
-地图空白点击只提供数据，不自动加点。`click` 包含只读的 `mapPosition`（`space: 'map'`）、`pixelPosition`（`space: 'pixel'`）、`gamePosition`（`space: 'game'` 或 `null`），以及 `context: { schemaVersion, releaseId, gameVersion }`。这些快照不引用地图或 DOM，可在销毁实例后继续序列化、保存和计算。兼容字段 `position`／`game` 分别指向地图／游戏坐标。
+地图空白点击只提供数据，不自动加点。`click` 包含只读的 `mapPosition`（`space: 'map'`）、`pixelPosition`（`space: 'pixel'`）、`gamePosition`（`space: 'game'` 或 `null`），以及 `context: { schemaVersion, releaseId, gameVersion, gameBuild?, gameVersionLabel? }`。`gameVersionLabel` 组合启动器版本和build，例如 `1.5.3 (10506507-7)`。这些快照不引用地图或 DOM，可在销毁实例后继续序列化、保存和计算。兼容字段 `position`／`game` 分别指向地图／游戏坐标。
 
 `subregionResolution` 为 `provided`、`geometry`、`bounds` 或 `unresolved`。需要子地区转换但只能通过包围盒推测，或没有转换参数时，`gamePosition` 返回 `null`，原因由 `gameResolution` 表达。二维点击不推断游戏高度。
 

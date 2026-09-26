@@ -40,6 +40,11 @@ const usesLocalResources = document.querySelector('script[src="/@vite/client"]')
 const stableResources: OEMResources = usesLocalResources
   ? { baseUrl: window.location.origin, manifestPath: '/channels/stable.json' }
   : { baseUrl: 'https://data.opendfieldmap.org', manifestPath: '/channels/stable.json' };
+const historicalResources: OEMResources = {
+  baseUrl: 'https://data.opendfieldmap.org',
+  manifestPath: '/releases/atlos-43b8a25/manifest.json',
+};
+const historicalBuild = '9885010-4';
 const defaultMarkerTypes = ['aurylene', 'crate_i', 'crate_ii', 'crate_iii', 'cratesurprise', 'cratelocked'];
 const defaultConfig: OEMWidgetConfig = {
   region: 'VL',
@@ -133,7 +138,7 @@ const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
 
 const mountWidget = async (config: OEMWidgetConfig): Promise<OEMWidget> => {
   const resources: OEMResources = {
-    baseUrl: stableResources.baseUrl,
+    baseUrl: selectedVersion.baseUrl,
     manifestPath: selectedVersion.manifestPath,
   };
   widget = await createOEMWidget(widgetHost, {
@@ -163,7 +168,7 @@ const loadVersion = async (
   config: OEMWidgetConfig,
   preloadedManifest?: OEMManifest,
 ): Promise<void> => {
-  const resources: OEMResources = { baseUrl: stableResources.baseUrl, manifestPath: version.manifestPath };
+  const resources: OEMResources = { baseUrl: version.baseUrl, manifestPath: version.manifestPath };
   const nextManifest = preloadedManifest ?? (await loadOEMManifest(resources));
 
   widget?.destroy();
@@ -266,9 +271,16 @@ const initialize = async () => {
   const stableManifest = await loadOEMManifest(stableResources);
   versions = [
     {
-      id: stableManifest.gameVersion,
-      label: stableManifest.gameVersion.replaceAll('_', '.'),
+      id: stableManifest.releaseId,
+      label: stableManifest.gameVersionLabel ?? stableManifest.gameVersion.replaceAll('_', '.'),
+      baseUrl: stableResources.baseUrl,
       manifestPath: stableResources.manifestPath,
+    },
+    {
+      id: 'atlos-43b8a25',
+      label: `1.5.3 (${historicalBuild})`,
+      baseUrl: historicalResources.baseUrl,
+      manifestPath: historicalResources.manifestPath,
     },
   ];
   selectedVersion = versions[0];

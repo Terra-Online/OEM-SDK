@@ -28,13 +28,13 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.game.json
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
-/tiles/{gameVersion}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
+/tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
+/tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
 /fonts/harmony/{sha256}/HMSans.woff2
 /fonts/novecento/{sha256}/{filename}.woff2
 ```
 
-`gameVersion` 使用路径安全形式，例如 `1_5_3`。`releaseId` 使 manifest、点位、地名和边界保持不可变。`type.json` 保留常规点位类型，并将源数据中的全部 NPC 和档案条目分别统一为 `npc` 与 `files` 两种聚合类型。瓦片对象路径在同一游戏版本内保持稳定，SDK 为每张瓦片追加由内容生成的短 `v` 值；未变化的瓦片可跨 release 复用 CDN 缓存，只有变化的瓦片需要回源。不带 `v` 时会访问该稳定路径下的最新对象。主层瓦片文件名不带楼层后缀，其他楼层使用 `_l1` 这类小写文件名后缀。
+`gameVersion` 使用路径安全形式，例如 `1_5_3`；`gameBuild` 记录资源 build，例如 `10506507-7`；`gameVersionLabel` 将两者组合用于展示，例如 `1.5.3 (10506507-7)`。`releaseId` 使 manifest、点位、地名和边界保持不可变。`type.json` 保留常规点位类型，并将源数据中的全部 NPC 和档案条目分别统一为 `npc` 与 `files` 两种聚合类型。瓦片对象路径在同一 build 内保持稳定，SDK 为每张瓦片追加由内容生成的短 `v` 值；同一游戏版本的不同 build 使用不同的对象前缀，避免相互覆盖；同 build 的不同 release 可复用 CDN 缓存，只有变化的瓦片需要回源。不带 `v` 时会访问该稳定路径下的最新对象。主层瓦片文件名不带楼层后缀，其他楼层使用 `_l1` 这类小写文件名后缀。
 
 使用方只需配置 `baseUrl` 和 `manifestPath`，不应自行拼接单个内容路径。
 
@@ -51,6 +51,8 @@ OEM 和 Game 边界文件统一使用可读的 `{ count, boundaries }` 集合结
 已经发布的 release 目录不可覆盖。瓦片对象会在 stable channel 切换前原位更新；单瓦片 `v` 值可避免 CDN 复用过期内容。
 
 ## R2 发布校验
+
+`pnpm version:game` 会将启动器版本与 AKEData 中最近一个提交标题为数字 build ID（例如 `10506507-7`）的提交配对。为手动固定的 AKEData 快照指定 build 时，设置 `OEM_GAME_BUILD`。
 
 执行 `pnpm update:local` 会在本地以一个确定性批次完成数据导出、校验、demo 构建和 R2 计划生成。计划会记录 channel 与 manifest 哈希；`pnpm deploy:data -- --confirm-release <releaseId>` 遇到过期或混用批次会拒绝发布。`pnpm update:demo` 是唯一可单独更新 demo 的入口，不会修改 manifest 或 channel。发布后脚本会自动运行 `pnpm validate:r2`：用大小比较确认本地对象已全部进入 R2，通过配置的 CDN 获取 manifest 声明的全部资产，验证内容字节与 SHA-256，并检查 `Content-Type`、`Cache-Control` 和代表性瓦片的响应头。它不会打开浏览器，也不会执行线上烟测。
 
