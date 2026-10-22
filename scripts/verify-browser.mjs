@@ -111,6 +111,10 @@ try {
       { source, id },
     );
   const publishedPosition = await targetPoint('published', '2100500004');
+  // Semantic nodes mount before the first Canvas frame builds its hit index.
+  // Wait for an actual pointer hit before testing the default link action.
+  await page.mouse.move(publishedPosition.x, publishedPosition.y);
+  await page.waitForFunction(() => document.querySelector('.mapRoot')?.style.cursor === 'pointer');
   const [popup] = await Promise.all([
     context.waitForEvent('page', { timeout: 5000 }),
     page.mouse.click(publishedPosition.x, publishedPosition.y),
