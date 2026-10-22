@@ -1,4 +1,5 @@
 export * from './types';
+export * from './behavior';
 export * from './pointLink';
 export * from './errors';
 export { withOEMAbort } from './abort';

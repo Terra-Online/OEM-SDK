@@ -218,13 +218,13 @@ unsubscribe();
 
 可選圖層失敗會通知 `onError`，但會保留底圖，也不會拒絕整個配置更新。再次明確開啟同一失敗圖層亦會重試。`retry()` 完成表示本輪請求已結束，是否成功須讀取資源狀態。建立期間的事件不會重播，建立後亦應讀取狀態。
 
-無效配置或必要自訂點資料載入失敗會拒絕更新，不提交該次配置。Widget 更新與地圖寫入共用順序佇列，應使用 `await`；點位寫入不再隱式取消先前請求，可用 `map.loadCustomPoints(url, { signal })` 明確取消。銷毀或取消建立會停止 SDK 等待的請求，遲到回應不會更新實例。取消使用 `AbortError`，呼叫方明確提供的取消原因則予以保留。
+無效配置或必要自訂點資料載入失敗會拒絕更新，不提交該次配置。Widget 更新、地圖配置與自訂點寫入共用順序佇列，應使用 `await`；點位寫入不再隱式取消先前請求，可用 `map.loadCustomPoints(url, { signal })` 明確取消。銷毀或取消建立會停止 SDK 等待的請求，遲到回應不會更新實例。取消使用 `AbortError`，呼叫方明確提供的取消原因則予以保留。
 
 靜態資源按可信的匯出資料讀取，初始化只做常數時間的 schema 版本檢查，不掃描 Manifest 內容或逐筆校驗點位、標籤、字典和邊界。完整資料格式、雜湊、位元組數及瓦片索引一致性由匯出校驗負責；排查外部 Manifest 時可主動呼叫 core 套件的 `validateOEMManifest()`。宿主配置與自訂點仍進行必要的輸入檢查。子地區邊界在背景預載，不阻塞建立；完成前點擊採用既有的包圍盒回退。`OEMError` 可從 SDK、map 或 core 匯入，包含 `code`、`operation` 及可用時的欄位 `path`。
 
 ## 共用行為 API（第二批）
 
-`createOEM()` 傳回 `OEMMapAPI`，Widget 透過 `widget.map` 提供相同介面，不暴露 Leaflet 或 DOM。地圖寫入與 Widget 更新共用順序佇列，直接操作地圖亦會同步官方控件及 Widget 狀態。讀取、訂閱、`resize()` 和 `destroy()` 為同步操作。
+`createOEM()` 傳回 `OEMMapAPI`，Widget 透過 `widget.map` 提供相同介面，不暴露 Leaflet 或 DOM。地圖配置、自訂點寫入與 Widget 更新共用順序佇列，直接操作地圖亦會同步官方控件及 Widget 狀態。讀取、訂閱、`resize()` 和 `destroy()` 為同步操作。
 
 | 能力 | API |
 | --- | --- |
@@ -286,3 +286,19 @@ tool.destroy();    // 停止訂閱和待處理的加點，保留已有點
 | 直接讀取 `click.game.x` | 先檢查 `gamePosition !== null` 或 `gameResolution` |
 
 顏色、字體、圖示尺寸與錨點維持官方規格，不提供主題變數、字體替換、樣式插槽或任意渲染器入口。
+
+## 點位行為圖層
+
+`widget.loadBehavior(id)` 及 `widget.map.loadBehavior(id)` 傳回獨立副本 `OEMBehavior[]`，按發布版本的點位索引定位並按子區域延遲載入、快取。支援關聯連線、蝴蝶路線、三氣泡解鎖組和開放或閉合軌跡；選取關聯寶箱亦可取得完整蝴蝶路線。
+
+```ts
+const records = await widget.loadBehavior(pointId);
+await widget.setBehaviorPoint(pointId, { animate: true, flow: true });
+await widget.setBehaviorPoint(null); // 清空圖層並停止播放。
+```
+
+點位須屬於目前地區，跨區須先明確切換地區。行為選取獨立於配置佇列，新的選取、`null` 或切區會即時取消舊選取；銷毀會停止播放及等待。`animate` 和 `flow` 預設均為 `true`，兩者設為 `false` 可靜態顯示。切層保留目前行為。命令完成代表場景已安裝，毋須等待動畫結束。載入或格式錯誤會拒絕並觸發 `error`，再次呼叫可重試。兩個方法均支援 `signal`，取消呼叫方等待不會破壞共用的資源請求。
+
+SDK 不會自動選取或攔截點位點擊。宿主可將詳情面板或 `pointclick` 連接至上述方法；取代原有點位連結時呼叫 `event.preventDefault()`。自訂點沒有發布的行為資料。舊 manifest 缺少 `behaviors`、未知點位或子區域沒有側車檔時，傳回空陣列並清空顯示。安裝新程式碼不會自動補充既有資料版本。
+
+幾何座標沿用歸一化地圖 `[z, x]`，不是發布像素或遊戲座標，使用 `map.project({ regionId, z, x })` 投影。Core 提供 `OEMBehavior`、`OEMBehaviorCatalog`、`decodeOEMBehaviors(rows, catalog)` 和 `findOEMBehaviors(records, pointId)`，可獨立讀取資料。解碼要求 schema 6 / `tuple-v1`，無效記錄會明確報錯。

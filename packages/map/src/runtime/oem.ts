@@ -19,8 +19,11 @@ import {
   resolveOEMAsset,
   toOEMLeafletMapPosition,
   toOEMLeafletPosition,
+  decodeOEMBehaviors,
+  findOEMBehaviors,
 } from '@opendfieldmap/core';
 import type {
+  OEMBehavior,
   OEMScreenPosition,
   OEMAsset,
   OEMBoundary,
@@ -51,7 +54,9 @@ import type {
   OEMCommandOptions,
   OEMInteractionLocks,
   OEMPointInteraction,
+  OEMBehaviorOptions,
 } from '../types';
+import type { BehaviorCanvasLayer } from '../atlos/behavior/BehaviorCanvasLayer';
 import { cloneConfig, validateConfig, resolveConfigUpdate, hasMarkers, sameState } from '../config';
 import { enableSmoothWheelZoom } from '../atlos/smoothWheelZoom';
 import { isMapOverdragged, toMapBounds } from '../atlos/mapOverdrag';
@@ -182,6 +187,8 @@ export class OEM implements OEMContract {
   private overdragFrame?: number;
   private overdragged = false;
   private wheel!: ReturnType<typeof enableSmoothWheelZoom>;
+  private behaviorLayer?: BehaviorCanvasLayer;
+  private behaviorRequest?: AbortController;
 
   constructor(
     private container: HTMLElement,
@@ -677,6 +684,7 @@ export class OEM implements OEMContract {
     this.assertAlive();
     const region = getOEMRegion(this.manifest, regionId);
     if (region === this.region) return;
+    this.resetBehavior();
     this.cancelRequests();
     this.region = region;
     this.points = [];
@@ -953,6 +961,107 @@ export class OEM implements OEMContract {
       if (point) return clonePoint(point);
     }
     return undefined;
+  }
+
+  private async readBehavior(point: OEMPoint): Promise<OEMBehavior[]> {
+    const catalog = this.manifest.behaviors;
+    if (!catalog) return [];
+    decodeOEMBehaviors([], catalog);
+    const reference = Object.hasOwn(catalog.files, point.subregionId)
+      ? catalog.files[point.subregionId]
+      : undefined;
+    if (!reference) return [];
+    const records = await this.repository.load(`behavior:${reference.path}`, async () => {
+      const value = await fetchOEMJson<unknown>(
+        resolveOEMAsset(this.options.resources.baseUrl, reference.path),
+        this.lifetime.signal,
+      );
+      return decodeOEMBehaviors(value, catalog);
+    });
+    return findOEMBehaviors(records, point.id);
+  }
+
+  async loadBehavior(pointId: string, options?: OEMCommandOptions): Promise<OEMBehavior[]> {
+    this.assertAlive();
+    if (typeof pointId !== 'string' || !pointId.trim()) invalid('pointId', 'Expected a published point ID');
+    const signal = options?.signal
+      ? AbortSignal.any([this.lifetime.signal, options.signal])
+      : this.lifetime.signal;
+    signal.throwIfAborted();
+    if (!this.manifest.behaviors) return [];
+    return withOEMAbort(
+      (async () => {
+        const point = await this.loadPoint(pointId.trim());
+        signal.throwIfAborted();
+        const records = point ? await this.readBehavior(point) : [];
+        signal.throwIfAborted();
+        return structuredClone(records);
+      })(),
+      signal,
+    );
+  }
+
+  private resetBehavior(): void {
+    this.behaviorRequest?.abort();
+    this.behaviorRequest = undefined;
+    this.behaviorLayer?.remove();
+    this.behaviorLayer = undefined;
+  }
+
+  async setBehaviorPoint(pointId: string | null, options: OEMBehaviorOptions = {}): Promise<void> {
+    this.assertAlive();
+    if (pointId !== null && (typeof pointId !== 'string' || !pointId.trim()))
+      invalid('pointId', 'Expected a published point ID or null');
+    for (const key of ['animate', 'flow'] as const)
+      if (options[key] !== undefined && typeof options[key] !== 'boolean') invalid(key, 'Expected boolean');
+    const animate = options.animate ?? true;
+    const flow = options.flow ?? true;
+    options.signal?.throwIfAborted();
+    this.resetBehavior();
+    if (pointId === null || !this.manifest.behaviors) return;
+    const request = new AbortController();
+    this.behaviorRequest = request;
+    const signal = AbortSignal.any([
+      this.lifetime.signal,
+      request.signal,
+      ...(options.signal ? [options.signal] : []),
+    ]);
+    const regionId = this.region.id;
+    try {
+      // Selection loading stays outside the command queue: clearing, changing
+      // regions or selecting again must not wait for a slow sidecar response.
+      const point = await withOEMAbort(this.loadPoint(pointId.trim()), signal);
+      if (!point) return;
+      if (point.regionId !== regionId) invalid('pointId', 'Display behavior in the current region');
+      const records = await withOEMAbort(this.readBehavior(point), signal);
+      if (!records.length) return;
+      const { createBehaviorCanvasLayer } = await withOEMAbort(
+        import('../atlos/behavior/BehaviorCanvasLayer'),
+        signal,
+      );
+      const { emptyBehaviorScene, renderRecord } = await withOEMAbort(
+        import('../atlos/behavior/behaviorScene'),
+        signal,
+      );
+      signal.throwIfAborted();
+      const scene = emptyBehaviorScene();
+      for (const record of records) renderRecord(scene, record, point.id);
+      const icon = this.manifest.behaviors.unlockIcon;
+      this.behaviorLayer = createBehaviorCanvasLayer(
+        icon ? resolveOEMAsset(this.options.resources.baseUrl, icon) : undefined,
+      );
+      this.behaviorLayer.addTo(this.map).setScene(scene, animate, flow);
+    } catch (error) {
+      if (request.signal.aborted && !this.lifetime.signal.aborted) return;
+      this.behaviorLayer?.remove();
+      this.behaviorLayer = undefined;
+      if (signal.aborted) throw error;
+      const failure = resourceError('load.behavior', error);
+      this.emit('error', failure);
+      throw failure;
+    } finally {
+      if (this.behaviorRequest === request) this.behaviorRequest = undefined;
+    }
   }
 
   private async loadPointIndex(): Promise<Record<string, string>> {
@@ -1378,7 +1487,7 @@ export class OEM implements OEMContract {
       }).addTo(this.labelsLayer);
     }
   }
-  /** Every asynchronous command and Widget patch shares this queue. */
+  /** Serializes configuration commands and Widget patches. */
   private enqueue<T>(
     operation: (signal: AbortSignal) => T | Promise<T>,
     externalSignal?: AbortSignal,
@@ -1592,6 +1701,7 @@ export class OEM implements OEMContract {
     this.destroyed = true;
     this.emit('destroy', undefined);
     this.lifetime.abort(this.options.signal?.reason);
+    this.resetBehavior();
     this.cancelRequests();
     if (this.overdragFrame !== undefined) cancelAnimationFrame(this.overdragFrame);
     this.observer?.disconnect();

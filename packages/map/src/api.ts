@@ -31,6 +31,8 @@ const methods: Record<Exclude<keyof OEMMapAPI, 'manifest' | 'destroyed'>, true> 
   clearCustomPoints: true,
   getPoint: true,
   loadPoint: true,
+  loadBehavior: true,
+  setBehaviorPoint: true,
   project: true,
   unproject: true,
   on: true,

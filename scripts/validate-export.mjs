@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { decodeOEMBehaviors } from './atlos-behaviors.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const SCHEMA_VERSION = 1;
@@ -132,6 +133,26 @@ const requirePath = (value, expected) => {
 const requirePrefix = (value, expected) => {
   if (!value.startsWith(`${expected}/`)) fail(`Unexpected versioned resource path: ${value}`);
 };
+const behaviorRecords = [];
+if (manifest.behaviors !== undefined) {
+  const catalog = manifest.behaviors;
+  decodeOEMBehaviors([], catalog);
+  if (!catalog.files || typeof catalog.files !== 'object' || Array.isArray(catalog.files))
+    fail('Invalid behavior sidecar references');
+  const subregions = new Set(
+    manifest.regions.flatMap((region) => region.subregions.map((subregion) => subregion.id)),
+  );
+  for (const [subregionId, ref] of Object.entries(catalog.files)) {
+    if (!subregions.has(subregionId)) fail(`Unknown behavior subregion: ${subregionId}`);
+    requirePath(ref.path, `${markerRoot}/behavior/${subregionId}.json`);
+    behaviorRecords.push(...decodeOEMBehaviors(await readRef(ref), catalog));
+  }
+  if (catalog.unlockIcon !== undefined) {
+    validatePath(catalog.unlockIcon);
+    requirePrefix(catalog.unlockIcon, '/marker/assets');
+    await fs.access(path.join(publicRoot, catalog.unlockIcon));
+  }
+}
 if (Object.prototype.hasOwnProperty.call(manifest, 'attribution'))
   fail('Legacy attribution text must not be published');
 if (
@@ -333,6 +354,11 @@ for (const region of manifest.regions) {
   }
 }
 if (Object.keys(pointIndex).length !== pointCount) fail('Point index cardinality mismatch');
+for (const record of behaviorRecords) {
+  if (!ids.has(record.anchorId)) fail(`Unknown behavior anchor: ${record.anchorId}`);
+  if (record.kind === 'relation' && !ids.has(record.targetId))
+    fail(`Unknown behavior relation target: ${record.targetId}`);
+}
 
 const tileRoot = path.join(publicRoot, tileRootPath);
 const tileFiles = (await walk(tileRoot)).filter((filename) => filename.endsWith('.webp'));

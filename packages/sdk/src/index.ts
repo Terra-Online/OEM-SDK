@@ -19,6 +19,10 @@ export {
 } from '@opendfieldmap/core';
 export type {
   OEMBoundarySource,
+  OEMBehavior,
+  OEMBehaviorPoint,
+  OEMBehaviorCatalog,
+  OEMBehaviorLayout,
   OEMGamePosition,
   OEMGameTransform,
   OEMGameXZPosition,
@@ -30,6 +34,7 @@ export type {
 } from '@opendfieldmap/core';
 export type {
   OEMClickPointOptions,
+  OEMBehaviorOptions,
   OEMCustomPoint,
   OEMMapClick,
   OEMFeatureName,

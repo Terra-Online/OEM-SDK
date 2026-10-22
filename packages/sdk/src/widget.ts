@@ -7,7 +7,14 @@ import {
 } from '@opendfieldmap/core';
 import type { OEMManifest, OEMResources } from '@opendfieldmap/core';
 import { createOEM, resolveOEMMapConfig } from '@opendfieldmap/map';
-import type { OEM, OEMCustomPoint, OEMFeatureName, OEMResourceStates } from '@opendfieldmap/map';
+import type {
+  OEM,
+  OEMCustomPoint,
+  OEMFeatureName,
+  OEMResourceStates,
+  OEMBehaviorOptions,
+  OEMCommandOptions,
+} from '@opendfieldmap/map';
 import { mountControls } from './components';
 import type { Control } from './components/types';
 import { installFonts } from './fonts';
@@ -148,6 +155,14 @@ class Widget implements OEMWidget {
   loadPoint(id: string) {
     this.assertAlive();
     return this.map.loadPoint(id);
+  }
+  loadBehavior(id: string, options?: OEMCommandOptions) {
+    this.assertAlive();
+    return this.map.loadBehavior(id, options);
+  }
+  setBehaviorPoint(id: string | null, options?: OEMBehaviorOptions): Promise<void> {
+    this.assertAlive();
+    return this.map.setBehaviorPoint(id, options);
   }
   on<Event extends keyof OEMWidgetEvents>(
     event: Event,

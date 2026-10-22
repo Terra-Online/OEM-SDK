@@ -1,4 +1,5 @@
 import type {
+  OEMBehavior,
   OEMCoordinateSnapshot,
   OEMScreenPosition,
   OEMBoundarySource,
@@ -82,6 +83,11 @@ export type OEMPointActivation = OEMPointInteraction & {
 };
 export interface OEMCommandOptions {
   signal?: AbortSignal;
+}
+/** Playback for the selected point's authored behavior, independent of the camera. */
+export interface OEMBehaviorOptions extends OEMCommandOptions {
+  animate?: boolean;
+  flow?: boolean;
 }
 export interface OEMInteractionLocks {
   lockDrag?: boolean;
@@ -200,6 +206,10 @@ export interface OEMMapAPI {
   clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
+  /** Load behavior for a published point in any region without changing the map. */
+  loadBehavior(pointId: string, options?: OEMCommandOptions): Promise<OEMBehavior[]>;
+  /** Display behavior in the current region. Null clears it; the latest selection wins. */
+  setBehaviorPoint(pointId: string | null, options?: OEMBehaviorOptions): Promise<void>;
   setMarkerClustering(enabled: boolean): Promise<void>;
   resize(): void;
   on<Event extends keyof OEMEvents>(event: Event, handler: (payload: OEMEvents[Event]) => void): () => void;

@@ -1,4 +1,4 @@
-import type { OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
+import type { OEMBehavior, OEMManifest, OEMPoint, OEMResources } from '@opendfieldmap/core';
 export type { OEMBoundarySource } from '@opendfieldmap/core';
 import type {
   OEMCustomPoint,
@@ -8,6 +8,8 @@ import type {
   OEMMapAPI,
   OEMMapState,
   OEMMapConfig,
+  OEMBehaviorOptions,
+  OEMCommandOptions,
 } from '@opendfieldmap/map';
 
 /** Stable top-level region identifiers published by OEM. */
@@ -106,6 +108,8 @@ export interface OEMWidget {
   clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
+  loadBehavior(pointId: string, options?: OEMCommandOptions): Promise<OEMBehavior[]>;
+  setBehaviorPoint(pointId: string | null, options?: OEMBehaviorOptions): Promise<void>;
   on<Event extends keyof OEMWidgetEvents>(
     event: Event,
     handler: (payload: OEMWidgetEvents[Event]) => void,

@@ -47,13 +47,17 @@ map.destroy();
 
 The low-level creation contract remains `OEMOptions` (`regionId`, `floorId`, `features`, `pointFilter`, and the original `OEMView`). Grouped `view/layers/interaction` configuration applies to `map.update()`; do not substitute the grouped update shape for the constructor's `view`.
 
-Updates share one queue. Await writes before reading their completed state. Defined flat fields override grouped fields; omitted/undefined fields preserve state, arrays replace, and only `subregion` accepts `null` to clear. Optional layer failures are reported through resource state and errors; check `getResourceState()` and use `retry()` as needed. Destroying aborts instance work; repeated `destroy()` is safe.
+Configuration and custom-point updates share one queue. Await writes before reading their completed state. Defined flat fields override grouped fields; omitted/undefined fields preserve state, arrays replace, and only `subregion` accepts `null` to clear. Optional layer failures are reported through resource state and errors; check `getResourceState()` and use `retry()` as needed. Destroying aborts instance work; repeated `destroy()` is safe.
 
 Click subscriptions do not add points. Snapshots contain tagged map/pixel coordinates, available game coordinates, release context and resolution status; game coordinates can be `null`. Subscribe to `pointclick` separately and call `preventDefault()` to replace a point's default link action.
 
 Custom points use normalized map `{ x, z }` positions and support image URLs with official `framed` or `no-frame` styles. View centers use published pixels. Official colors, fonts, dimensions and anchors are fixed; there are no public renderer or theme-variable hooks. Official light/dark themes remain supported.
 
 ESM with TypeScript declarations; import is SSR-safe, creation requires a browser. Dispose the instance on unmount. Static content is loaded from the configured manifest/CDN, separately from the npm package.
+
+`loadBehavior(pointId)` reads optional release sidecars without changing the view. `setBehaviorPoint(pointId, { animate?, flow?, signal? })` displays the selected point’s authored behavior in the current region; `setBehaviorPoint(null)` clears it. Selection is independent of the configuration queue and the latest selection wins. Region changes clear the layer; floor changes retain it. Both methods are opt-in, leave default point links intact, and accept older manifests without behavior data. See the API guide for cancellation and retry semantics.
+
+After building, `node scripts/verify-behavior.mjs` checks real Canvas geometry, animation and disposal in Chrome.
 
 ## Documentation
 

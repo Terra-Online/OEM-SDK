@@ -1,3 +1,5 @@
+import type { OEMBehaviorCatalog } from './behavior';
+
 /** Current static manifest schema accepted by OEM clients. */
 export const OEM_SCHEMA_VERSION = 1 as const;
 
@@ -146,6 +148,8 @@ export interface OEMManifest {
   regions: OEMRegion[];
   types: OEMAsset;
   pointIndex?: OEMAsset;
+  /** Optional behavior sidecars; older releases omit this field. */
+  behaviors?: OEMBehaviorCatalog;
   fonts?: OEMFontAsset[];
   fontLicense?: OEMAsset;
   fontLicenses?: OEMAsset[];

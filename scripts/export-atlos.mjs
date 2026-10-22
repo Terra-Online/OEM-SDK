@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveGameVersion } from './game-version.mjs';
 import { getControlMessages } from './atlos-controls.mjs';
+import { exportAtlosBehaviors } from './atlos-behaviors.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const akeDataRoot = path.resolve(process.env.AKEDATA_ROOT ?? path.join(root, '../../Preview Repos/AKEData'));
@@ -631,7 +632,8 @@ for (const region of regions) {
 }
 const pointIndexRef = await versionedObject('marker', 'point-index.json', pointIndex);
 const typeRef = await versionedObject('marker', 'type.json', types);
-const releaseId = `atlos-${sha256(JSON.stringify({ schemaVersion: SCHEMA_VERSION, gameVersion, gameBuild, regions, types: typeRef, pointIndex: pointIndexRef, locales, controls, fonts, fontLicense, fontLicenses, tileContentHash })).slice(0, 7)}`;
+const behaviors = await exportAtlosBehaviors({ read, versionedObject, icon, regions });
+const releaseId = `atlos-${sha256(JSON.stringify({ schemaVersion: SCHEMA_VERSION, gameVersion, gameBuild, regions, types: typeRef, pointIndex: pointIndexRef, behaviors, locales, controls, fonts, fontLicense, fontLicenses, tileContentHash })).slice(0, 7)}`;
 const placeholderPathSegment = `/${gameVersion}/${releasePlaceholder}/`;
 const releasePathSegment = `/${gameVersion}/${releaseId}/`;
 const finalizeReleasePaths = (value) => {
@@ -643,7 +645,7 @@ const finalizeReleasePaths = (value) => {
   }
   return value;
 };
-for (const value of [regions, types, pointIndex, typeRef, pointIndexRef, locales])
+for (const value of [regions, types, pointIndex, typeRef, pointIndexRef, behaviors, locales])
   finalizeReleasePaths(value);
 for (const [name, value, ref] of [
   ['type.json', types, typeRef],
@@ -671,6 +673,7 @@ const manifest = {
   regions,
   types: typeRef,
   pointIndex: pointIndexRef,
+  behaviors,
   fonts,
   fontLicense,
   fontLicenses,
