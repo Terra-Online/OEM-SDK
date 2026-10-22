@@ -91,7 +91,30 @@ try {
   await page.evaluate(() => window.ready);
   const published = page.locator('[data-oem-point^="published:"]');
   await published.waitFor({ state: 'visible', timeout: 3000 });
-  const [popup] = await Promise.all([context.waitForEvent('page', { timeout: 5000 }), published.click()]);
+  // Canvas markers keep their semantic nodes offscreen. Exercise pointer input
+  // at the public projection instead of clicking that clipped compatibility tree.
+  const targetPoint = (source, id) =>
+    page.evaluate(
+      ({ source, id }) => {
+        const api = window.api;
+        let position;
+        if (source === 'custom') position = api.getCustomPoint(id).position;
+        else {
+          const point = api.getPoint(id);
+          const scale = 2 ** api.manifest.regions.find((r) => r.id === point.regionId).maxNativeZoom;
+          position = { ...point.position, x: point.position.x / scale, z: point.position.z / scale };
+        }
+        const point = api.project(position);
+        const rect = document.querySelector('.mapRoot').getBoundingClientRect();
+        return { x: rect.x + point.x, y: rect.y + point.y - 16 };
+      },
+      { source, id },
+    );
+  const publishedPosition = await targetPoint('published', '2100500004');
+  const [popup] = await Promise.all([
+    context.waitForEvent('page', { timeout: 5000 }),
+    page.mouse.click(publishedPosition.x, publishedPosition.y),
+  ]);
   await popup.waitForLoadState();
   assert.match(popup.url(), /^https:\/\/oem.re\//);
   await popup.close();
@@ -102,13 +125,14 @@ try {
     unwantedPopup = true;
     void popup.close();
   });
-  await published.click();
+  await page.mouse.click(publishedPosition.x, publishedPosition.y);
   await page.waitForTimeout(100);
   assert.equal(unwantedPopup, false);
   const custom = page.locator('[data-oem-point="custom:host"]');
-  await custom.hover();
-  await custom.click();
-  await custom.focus();
+  const customPosition = await targetPoint('custom', 'host');
+  await page.mouse.move(customPosition.x, customPosition.y);
+  await page.mouse.click(customPosition.x, customPosition.y);
+  await custom.evaluate((element) => element.focus({ preventScroll: true }));
   await page.keyboard.press('Enter');
   const interaction = await page.evaluate(() => ({
     clicks: window.clicks.length,
