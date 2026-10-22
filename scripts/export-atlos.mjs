@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveGameVersion } from './game-version.mjs';
+import { getControlMessages } from './atlos-controls.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const akeDataRoot = path.resolve(process.env.AKEDATA_ROOT ?? path.join(root, '../../Preview Repos/AKEData'));
@@ -603,32 +604,7 @@ for (const filename of (await fs.readdir(path.join(source, 'src/locale/data/regi
   const messages = { ...fallback, ...flatten(await read(`src/locale/data/region/${filename}`)) };
   const uiMessages = await read(`src/locale/data/ui/${locale}.json`);
   localeBundles[locale] = messages;
-  const layerLabel = uiMessages.mapControls?.layerSelect;
-  const zoomInLabel = uiMessages.settings?.shortcuts?.zoomIn;
-  const zoomOutLabel = uiMessages.settings?.shortcuts?.zoomOut;
-  const brandName = uiMessages.meta?.title;
-  const termsOfService =
-    locale === 'en-US'
-      ? 'Terms of Services'
-      : locale === 'zh-CN'
-        ? '服务条款'
-        : locale === 'zh-HK'
-          ? '服務條款'
-          : uiMessages.tos?.title;
-  if (
-    ![layerLabel, zoomInLabel, zoomOutLabel, brandName, termsOfService].every(
-      (value) => typeof value === 'string' && value.length > 0,
-    )
-  ) {
-    throw new Error(`Missing Atlos control messages for locale: ${locale}`);
-  }
-  controls[locale] = {
-    layerSelect: layerLabel,
-    zoomIn: zoomInLabel,
-    zoomOut: zoomOutLabel,
-    brandName,
-    termsOfService,
-  };
+  controls[locale] = getControlMessages(uiMessages, locale);
   locales[locale] = await versionedObject('marker', `locales/${locale}/places.json`, messages);
 }
 for (const region of regions) {
