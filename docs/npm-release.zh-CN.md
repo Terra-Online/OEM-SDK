@@ -42,7 +42,7 @@ npm 包使用 SemVer，并与以下版本独立：
 
 - manifest `schemaVersion`，当前为 `1`；
 - `gameVersion`，用于按游戏版本组织静态路径；
-- `gameBuild`，用于标识资源 build 哈希值；
+- `gameBuild`，用于标识数据来源的 build（旧资源 build；新版挖掘快照使用启动器客户端 build）；
 - `releaseId`，标识该游戏版本内一份 manifest 及其不可变数据对象。
 
 同一 npm 包版本可以通过相同 schema 支持多个游戏数据 release。瓦片使用稳定对象路径和单瓦片内容版本，使未变化的缓存键可跨数据 release 复用。
@@ -50,8 +50,8 @@ npm 包使用 SemVer，并与以下版本独立：
 使用发布助手可以一次性同步四个公开包的版本、执行 `pnpm check`、生成 tarball，并按依赖顺序发布：
 
 ```bash
-pnpm release:npm --version=0.3.0-beta
-pnpm release:npm --version=0.3.0-beta --publish --tag=beta
+pnpm release:npm --version=0.4.0-beta
+pnpm release:npm --version=0.4.0-beta --publish --tag=beta
 ```
 
 第一条命令只准备本地候选包；第二条命令需要 npm 登录，然后按 `core`、`map`、`sdk`、`react` 顺序统一发布。上传成功后，助手还会把 `latest` 移到本次版本，并从 registry 校验指定 tag 与 `latest` 均已生效。发布命令加上 `--dry-run` 可以验证发布操作，但不会上传或修改 dist-tag。

@@ -42,7 +42,7 @@ Package versions use SemVer. They are independent from:
 
 - manifest `schemaVersion`, currently `1`;
 - `gameVersion`, which groups static paths by game version;
-- `gameBuild`, which identifies the resource build hash value;
+- `gameBuild`, which identifies the source build (legacy resource build or launcher client build for mining snapshots);
 - `releaseId`, which identifies one manifest and its immutable data objects within that game version.
 
 A package release may support multiple game-data releases through the same schema. Tiles use stable object paths with per-tile content versions so unchanged cache keys survive a data release.
@@ -50,8 +50,8 @@ A package release may support multiple game-data releases through the same schem
 Use the release helper to update all four public packages, run `pnpm check`, create tarballs, and (when requested) publish them in dependency order:
 
 ```bash
-pnpm release:npm --version=0.3.0-beta
-pnpm release:npm --version=0.3.0-beta --publish --tag=beta
+pnpm release:npm --version=0.4.0-beta
+pnpm release:npm --version=0.4.0-beta --publish --tag=beta
 ```
 
 The first command only prepares the release locally. The second requires npm authentication and publishes `core`, `map`, `sdk`, then `react` with one command. After a successful upload, the helper also moves `latest` to the published version and verifies both the requested tag and `latest` against the registry. `--dry-run` can be added to validate the publish operation without uploading or changing dist-tags.
@@ -63,3 +63,5 @@ The first command only prepares the release locally. The second requires npm aut
 3. Publish `@opendfieldmap/sdk`.
 4. Publish `@opendfieldmap/react` when needed.
 5. Install the published SDK in a blank application and run a browser smoke test.
+
+The exporter defaults to `../../EF Repos/AKEDataMining/data`; `AKEDATA_ROOT` overrides the mining root, and `OEM_GAME_DATA_ROOT` can select a separate boundary snapshot. `pnpm version:game` dumps the current official launcher version, source build, and mining commit. New mining repositories have no numeric resource-build commits, so the launcher client build is used and recorded as `hypergryph-launcher-package` in the export report. Historical exports must supply matching `--game-version` and `--game-build` values.
