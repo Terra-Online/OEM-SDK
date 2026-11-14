@@ -263,6 +263,7 @@ export async function createOEMWidget(
         boundaries: state.boundaries,
         boundarySource: state.boundarySource,
       },
+      satellite: state.satellite,
       markerClustering: state.markerClustering,
       customPoints: options.customPoints,
       customPointsUrl: options.customPointsUrl,

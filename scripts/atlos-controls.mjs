@@ -11,6 +11,7 @@ export function getControlMessages(uiMessages, locale) {
           : uiMessages.locator?.binding?.docsLinks?.match(/<a href=["']\{tos\}["']>([^<]+)<\/a>/)?.[1];
   const messages = {
     layerSelect: uiMessages.mapControls?.layerSelect,
+    ...(uiMessages.mapControls?.satellite ? { satellite: uiMessages.mapControls.satellite } : {}),
     zoomIn: uiMessages.settings?.shortcuts?.zoomIn,
     zoomOut: uiMessages.settings?.shortcuts?.zoomOut,
     brandName: uiMessages.meta?.title,

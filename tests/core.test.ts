@@ -138,3 +138,14 @@ describe('core protocol', () => {
     );
   });
 });
+
+it('round-trips the rotated Dijiang transform without rotating map-space coordinates twice', () => {
+  const rotated = {
+    ...region,
+    gameTransform: { scaleX: 2, scaleZ: 3, offsetX: 10, offsetZ: -20, rotateClockwise90: true },
+  };
+  const raw = { x: 7, y: 9, z: 11 };
+  const mapped = gameXZToOEMPosition(raw, rotated);
+  expect(mapped).toMatchObject({ x: 32, z: -41 });
+  expect(oemToGamePosition(gameToOEMPosition(raw, rotated), rotated)).toEqual({ x: 7, z: 11 });
+});

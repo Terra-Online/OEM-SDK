@@ -1,18 +1,5 @@
-import { build } from 'esbuild';
-import { fileURLToPath } from 'node:url';
-
-// Export and diagnostics use the runtime codec so compact route validation
-// cannot drift from the SDK. No package build or data export is required.
-const bundle = await build({
-  entryPoints: [fileURLToPath(new URL('../packages/core/src/behavior.ts', import.meta.url))],
-  bundle: true,
-  write: false,
-  format: 'esm',
-  platform: 'node',
-});
-export const { decodeOEMBehaviors, findOEMBehaviors } = await import(
-  `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
-);
+import { decodeOEMBehaviors } from './core-codec.mjs';
+export { decodeOEMBehaviors, findOEMBehaviors } from './core-codec.mjs';
 
 /** Copy authored tuples into the same versioned namespace as published points. */
 export async function exportAtlosBehaviors({ read, versionedObject, icon, regions }) {

@@ -38,6 +38,7 @@ export interface OEMOptions {
   /** URL of a JSON array of runtime points, loaded before creation resolves. */
   customPointsUrl?: string;
   /** Groups nearby markers by point type. Defaults to true. */
+  satellite?: boolean;
   markerClustering?: boolean;
   /** Prevents user drag and trackpad-pan gestures without blocking programmatic view changes. */
   lockDrag?: boolean;
@@ -103,6 +104,7 @@ export interface OEMMapFlatConfig extends OEMInteractionLocks {
   labels?: boolean;
   boundaries?: boolean;
   boundarySource?: OEMBoundarySource;
+  satellite?: boolean;
   markerClustering?: boolean;
   customPoints?: readonly OEMCustomPoint[];
   customPointsUrl?: string;
@@ -113,7 +115,7 @@ export interface OEMMapFlatConfig extends OEMInteractionLocks {
 export type OEMViewConfig = Pick<OEMMapFlatConfig, 'region' | 'subregion' | 'floor' | 'zoom' | 'center'>;
 export type OEMLayerConfig = Pick<
   OEMMapFlatConfig,
-  'locale' | 'markerTypes' | 'labels' | 'boundaries' | 'boundarySource' | 'markerClustering'
+  'locale' | 'markerTypes' | 'labels' | 'boundaries' | 'boundarySource' | 'satellite' | 'markerClustering'
 >;
 /** Groups are optional. A defined flat field takes precedence over its grouped alias. */
 export interface OEMMapConfig extends OEMMapFlatConfig {
@@ -130,6 +132,7 @@ export interface OEMMapState {
   labels: boolean;
   boundaries: boolean;
   boundarySource: OEMBoundarySource;
+  satellite: boolean;
   markerClustering: boolean;
   zoom: number;
   center: { x: number; z: number };

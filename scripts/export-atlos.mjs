@@ -3,12 +3,14 @@ import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { resolveGameVersion } from './game-version.mjs';
+import { resolveGameVersion, DEFAULT_GAME_DATA_ROOT } from './game-version.mjs';
 import { getControlMessages } from './atlos-controls.mjs';
+import { gameToOEMPosition } from './core-codec.mjs';
 import { exportAtlosBehaviors } from './atlos-behaviors.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const akeDataRoot = path.resolve(process.env.AKEDATA_ROOT ?? path.join(root, '../../Preview Repos/AKEData'));
+const akeDataRoot = path.resolve(process.env.AKEDATA_ROOT ?? DEFAULT_GAME_DATA_ROOT);
+const gameDataRoot = path.resolve(process.env.OEM_GAME_DATA_ROOT ?? akeDataRoot);
 const SCHEMA_VERSION = 1;
 const GAME_GRID_SIZE = 128;
 const args = process.argv.slice(2);
@@ -33,8 +35,8 @@ const read = async (relative) => {
   return JSON.parse(bytes.toString());
 };
 const readAKEData = async (relative) => {
-  const bytes = await fs.readFile(path.join(akeDataRoot, relative));
-  sourceFiles[`AKEData/${relative}`] = sha256(bytes);
+  const bytes = await fs.readFile(path.join(gameDataRoot, relative));
+  sourceFiles[`${gameDataRoot === akeDataRoot ? 'AKEData' : 'GameData'}/${relative}`] = sha256(bytes);
   return JSON.parse(bytes.toString());
 };
 const write = async (relative, content) => {
@@ -49,10 +51,10 @@ const versionedObject = async (namespace, name, content) => {
   await write(objectPath.slice(1), bytes);
   return { path: objectPath, sha256: hash, bytes: Buffer.byteLength(bytes) };
 };
-const transformGamePoint = (region, x, z) => ({
-  x: (x * region.gameTransform.scaleX + region.gameTransform.offsetX) * 2 ** region.maxNativeZoom,
-  z: (z * region.gameTransform.scaleZ + region.gameTransform.offsetZ) * 2 ** region.maxNativeZoom,
-});
+const transformGamePoint = (region, x, z) => {
+  const position = gameToOEMPosition({ x, y: 0, z }, region);
+  return { x: position.x, z: position.z };
+};
 const pointKey = ([x, z]) => `${x},${z}`;
 const simplifyRing = (ring) =>
   ring.filter((point, index) => {
@@ -112,6 +114,8 @@ const mergeLevelGrids = (levelId, grids) => {
   return rings.sort((left, right) => Math.abs(ringArea(right)) - Math.abs(ringArea(left)));
 };
 const levelToGameBoundaries = (region, level) => {
+  const transform = level.id === 'map02_lv010' ? subregionGameTransforms.WL_10 : undefined;
+  const targetRegion = transform ? { ...region, gameTransform: transform } : region;
   const grids = (level.levelGrids ?? []).map((grid) => ({ x: grid.x ?? grid.X, z: grid.y ?? grid.Y }));
   if (grids.some((grid) => !Number.isInteger(grid.x) || !Number.isInteger(grid.z))) {
     throw new Error(`Invalid level grid coordinates: ${level.id}`);
@@ -138,7 +142,7 @@ const levelToGameBoundaries = (region, level) => {
   return {
     id: level.id,
     rings: mergeLevelGrids(level.id, grids).map((ring) =>
-      ring.map(([x, z]) => transformGamePoint(region, x * GAME_GRID_SIZE, z * GAME_GRID_SIZE)),
+      ring.map(([x, z]) => transformGamePoint(targetRegion, x * GAME_GRID_SIZE, z * GAME_GRID_SIZE)),
     ),
   };
 };
@@ -182,6 +186,7 @@ const gameTransforms = {
     scaleZ: 2.8369668977222067,
     offsetX: 481.07581876506237,
     offsetZ: -528.2046998395613,
+    rotateClockwise90: true,
   },
   Weekraid_1: {
     scaleX: 2.1236893194106514,
@@ -191,6 +196,18 @@ const gameTransforms = {
   },
 };
 const subregionGameTransforms = {
+  WL_10: {
+    scaleX: 0.4137096391371761,
+    scaleZ: 0.4128888476500381,
+    offsetX: 954.4756325560732,
+    offsetZ: -954.2980344081047,
+  },
+  WL_16: {
+    scaleX: 0.3993875174662318,
+    scaleZ: 0.39874115823831396,
+    offsetX: 1226.6932149510947,
+    offsetZ: -702.3025535059696,
+  },
   WL_2: {
     scaleX: 0.3821317314759548,
     scaleZ: 0.3886861967050555,
@@ -216,68 +233,128 @@ const subregions = [
   ...(await read('src/data/map/subregionData/WL.json')),
 ];
 const subregionsById = new Map(subregions.map((subregion) => [subregion.id, subregion]));
-const discoveredTileFiles = (await walk(path.join(source, 'public/clips'))).filter((filename) =>
-  filename.endsWith('.webp'),
+const { TILE_SIZE, getTileLayers } = await import(
+  pathToFileURL(path.join(source, 'src/data/map/tiles.js')).href
 );
-const activeRegionIds = new Set(Object.keys(regionSource));
-const tileFiles = discoveredTileFiles.filter((filename) =>
-  activeRegionIds.has(path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]),
-);
-const ignoredTileRegions = [
-  ...new Set(
-    discoveredTileFiles
-      .filter(
-        (filename) =>
-          !activeRegionIds.has(path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]),
-      )
-      .map((filename) => path.relative(path.join(source, 'public/clips'), filename).split(path.sep)[0]),
-  ),
-];
-const tileIndex = [];
-const coverage = {};
-const tileVersions = {};
-for (const filename of tileFiles) {
-  const relative = path.relative(path.join(source, 'public/clips'), filename);
-  if (!/^[^/]+\/\d+\/-?\d+_-?\d+(?:_[a-z]\d+)?\.webp$/.test(relative)) continue;
-  const content = await fs.readFile(filename);
-  const tileHash = sha256(content);
-  tileIndex.push({ relative, hash: tileHash });
-  const [regionId, zoom, tileName] = relative.split('/');
-  const match = tileName.match(/^(-?\d+)_(-?\d+)(?:_([a-z]\d+))?\.webp$/);
-  const [, tileX, tileY, suffix] = match;
-  const floorId = suffix?.toUpperCase() ?? 'M';
-  const rows = (((coverage[regionId] ??= {})[zoom] ??= {})[floorId] ??= {});
-  (rows[tileY] ??= []).push(Number(tileX));
-  const versionRows = (((tileVersions[regionId] ??= {})[zoom] ??= {})[floorId] ??= {});
-  (versionRows[tileY] ??= {})[tileX] = tileHash.slice(0, 7);
-  const floorSuffix = floorId === 'M' ? '' : `_${floorId.toLowerCase()}`;
-  const target = `tiles/${gameVersion}/${gameBuild}/${regionId}/${zoom}/${tileX}/${tileY}${floorSuffix}.webp`;
-  await write(target, content);
-}
-const tileContentHash = sha256(JSON.stringify(tileIndex));
-for (const [regionId, zooms] of Object.entries(coverage)) {
-  for (const [zoom, floors] of Object.entries(zooms)) {
-    for (const [floorId, rows] of Object.entries(floors)) {
-      for (const [row, values] of Object.entries(rows)) {
-        const sorted = [...new Set(values)].sort((left, right) => left - right);
-        const ranges = [];
-        for (const value of sorted) {
-          if (ranges.length && ranges.at(-1) + 1 === value) ranges[ranges.length - 1] = value;
-          else ranges.push(value, value);
+const exportTiles = async (tileSource) => {
+  const discoveredTileFiles = (await walk(path.join(source, `public/${tileSource}`))).filter((filename) =>
+    filename.endsWith('.webp'),
+  );
+  const activeRegionIds = new Set(Object.keys(regionSource));
+  const tileFiles = discoveredTileFiles.filter((filename) =>
+    activeRegionIds.has(
+      path.relative(path.join(source, `public/${tileSource}`), filename).split(path.sep)[0],
+    ),
+  );
+  const ignoredTileRegions = [
+    ...new Set(
+      discoveredTileFiles
+        .filter(
+          (filename) =>
+            !activeRegionIds.has(
+              path.relative(path.join(source, `public/${tileSource}`), filename).split(path.sep)[0],
+            ),
+        )
+        .map(
+          (filename) => path.relative(path.join(source, `public/${tileSource}`), filename).split(path.sep)[0],
+        ),
+    ),
+  ];
+  const tileIndex = [];
+  const coverage = {};
+  const tileVersions = {};
+  for (const filename of tileFiles) {
+    const relative = path.relative(path.join(source, `public/${tileSource}`), filename);
+    if (!/^[^/]+\/\d+\/-?\d+_-?\d+(?:_[a-z]\d+)?\.webp$/.test(relative)) continue;
+    const content = await fs.readFile(filename);
+    const tileHash = sha256(content);
+    tileIndex.push({ relative: `${tileSource === 'clips' ? '' : 'satellite/'}${relative}`, hash: tileHash });
+    const [regionId, zoom, tileName] = relative.split('/');
+    const match = tileName.match(/^(-?\d+)_(-?\d+)(?:_([a-z]\d+))?\.webp$/);
+    const [, tileX, tileY, suffix] = match;
+    const floorId = suffix?.toUpperCase() ?? 'M';
+    const rows = (((coverage[regionId] ??= {})[zoom] ??= {})[floorId] ??= {});
+    (rows[tileY] ??= []).push(Number(tileX));
+    const versionRows = (((tileVersions[regionId] ??= {})[zoom] ??= {})[floorId] ??= {});
+    (versionRows[tileY] ??= {})[tileX] = tileHash.slice(0, 7);
+    const floorSuffix = floorId === 'M' ? '' : `_${floorId.toLowerCase()}`;
+    const target = `tiles/${gameVersion}/${gameBuild}/${tileSource === 'clips' ? '' : 'satellite/'}${regionId}/${zoom}/${tileX}/${tileY}${floorSuffix}.webp`;
+    await write(target, content);
+  }
+
+  for (const [regionId, zooms] of Object.entries(coverage)) {
+    for (const [zoom, floors] of Object.entries(zooms)) {
+      for (const [floorId, rows] of Object.entries(floors)) {
+        for (const [row, values] of Object.entries(rows)) {
+          const sorted = [...new Set(values)].sort((left, right) => left - right);
+          const ranges = [];
+          for (const value of sorted) {
+            if (ranges.length && ranges.at(-1) + 1 === value) ranges[ranges.length - 1] = value;
+            else ranges.push(value, value);
+          }
+          rows[row] = ranges;
+          const versions = tileVersions[regionId][zoom][floorId][row];
+          tileVersions[regionId][zoom][floorId][row] = sorted.map((tileX) => versions[tileX]);
         }
-        rows[row] = ranges;
-        const versions = tileVersions[regionId][zoom][floorId][row];
-        tileVersions[regionId][zoom][floorId][row] = sorted.map((tileX) => versions[tileX]);
       }
     }
   }
-}
-const floorTileVersions = (regionId, floorId) =>
+  return {
+    coverage,
+    tileVersions,
+    tileIndex,
+    ignoredTileRegions,
+    ignoredTileCount: discoveredTileFiles.length - tileFiles.length,
+  };
+};
+const standardTiles = await exportTiles('clips');
+const satelliteTiles = await exportTiles('satellite');
+const { coverage, ignoredTileRegions, ignoredTileCount } = standardTiles;
+const tileIndex = [...standardTiles.tileIndex, ...satelliteTiles.tileIndex].sort((a, b) =>
+  a.relative.localeCompare(b.relative),
+);
+const tileContentHash = sha256(JSON.stringify(tileIndex));
+const floorTileVersions = (tiles, regionId, floorId) =>
   Object.fromEntries(
-    Object.entries(tileVersions[regionId] ?? {})
+    Object.entries(tiles.tileVersions[regionId] ?? {})
       .filter(([, floors]) => floors[floorId])
       .map(([zoom, floors]) => [zoom, floors[floorId]]),
   );
+const nativeZoom = (zooms, floorId) =>
+  Math.max(
+    0,
+    ...Object.entries(zooms ?? {})
+      .filter(([, floors]) => floors[floorId] && Object.keys(floors[floorId]).length)
+      .map(([zoom]) => Number(zoom)),
+  );
+// Bounds follow actual tile coverage. The coordinate basis remains coordZoom,
+// independent of the imagery's native levels (including satellite imagery).
+const coverageBounds = (zooms, coordZoom) => {
+  const corners = Object.entries(zooms).flatMap(([zoom, floors]) =>
+    Object.values(floors).flatMap((rows) =>
+      Object.entries(rows).flatMap(([y, ranges]) =>
+        ranges.flatMap((x, i) => [
+          x * TILE_SIZE * 2 ** (coordZoom - Number(zoom)) +
+            (i % 2 ? TILE_SIZE * 2 ** (coordZoom - Number(zoom)) : 0),
+          Number(y) * TILE_SIZE * 2 ** (coordZoom - Number(zoom)),
+          (Number(y) + 1) * TILE_SIZE * 2 ** (coordZoom - Number(zoom)),
+        ]),
+      ),
+    ),
+  );
+  if (!corners.length) throw new Error('Empty tile coverage');
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+  for (let i = 0; i < corners.length; i += 3) {
+    minX = Math.min(minX, corners[i]);
+    maxX = Math.max(maxX, corners[i]);
+    minY = Math.min(minY, corners[i + 1]);
+    maxY = Math.max(maxY, corners[i + 2]);
+  }
+  return { dimensions: [maxX - minX, maxY - minY], boundsOffset: { x: minX, z: -maxY } };
+};
 const fonts = [];
 const fontLicenses = [];
 let fontLicense;
@@ -429,32 +506,63 @@ const gameMapIds = {
   Weekraid_1: 'dung01_wrdg001',
 };
 for (const [id, config] of Object.entries(regionSource)) {
-  const boundsOffset = config.boundsOffset
-    ? { x: config.boundsOffset.x, z: -(config.boundsOffset.y + config.dimensions[1]) }
-    : { x: 0, z: -config.dimensions[1] };
+  const coordZoom = config.coordZoom;
+  const standardCoverage = coverage[id] ?? {};
+  const satelliteCoverage = satelliteTiles.coverage[id];
+  const allCoverage = {
+    ...Object.fromEntries(Object.entries(standardCoverage).map(([zoom, floors]) => [zoom, { ...floors }])),
+  };
+  for (const [zoom, floors] of Object.entries(satelliteCoverage ?? {})) {
+    (allCoverage[zoom] ??= {}).satellite = floors.M;
+  }
+  const { dimensions, boundsOffset } = coverageBounds(allCoverage, coordZoom);
+  const floorIds = getTileLayers({
+    zooms: Object.fromEntries(
+      Object.entries(standardCoverage).map(([zoom, floors]) => [
+        zoom,
+        Object.fromEntries(
+          Object.entries(floors).map(([floor, rows]) => [
+            floor === 'M' ? '' : `_${floor.toLowerCase()}`,
+            rows,
+          ]),
+        ),
+      ]),
+    ),
+  });
+  const maxTileZoom = Math.max(...Object.keys(allCoverage).map(Number));
   const region = {
     id,
     name: regionNames[id] ?? id,
     locales: {},
-    dimensions: config.dimensions,
+    dimensions,
     boundsOffset,
     gameTransform: gameTransforms[id],
-    tileSize: config.tileSize,
+    tileSize: TILE_SIZE,
     minZoom: 0,
-    maxNativeZoom: config.maxZoom,
-    maxZoom: config.maxZoom + (['Valley_4', 'Wuling'].includes(id) ? 1.5 : 1),
+    maxNativeZoom: coordZoom,
+    maxZoom: maxTileZoom + (['Valley_4', 'Wuling'].includes(id) ? 1.5 : 1),
     initialView: {
       regionId: id,
       floorId: 'M',
-      x: boundsOffset.x + config.dimensions[0] / 2 + config.initialOffset.x,
-      z: -(config.boundsOffset?.y ?? 0) - config.dimensions[1] / 2 - config.initialOffset.y,
+      x: config.initialCenter.lng * 2 ** coordZoom,
+      z: config.initialCenter.lat * 2 ** coordZoom,
       zoom: config.initialZoom,
     },
-    floors: ['M', ...(config.layers ?? [])].map((floorId) => ({
+    floors: floorIds.map((floorId) => ({
       id: floorId,
       tileTemplate: `/tiles/${gameVersion}/${gameBuild}/${id}/{z}/{x}/{y}${floorId === 'M' ? '' : `_${floorId.toLowerCase()}`}.webp`,
-      tileVersions: floorTileVersions(id, floorId),
+      tileVersions: floorTileVersions(standardTiles, id, floorId),
+      maxNativeZoom: nativeZoom(standardCoverage, floorId),
     })),
+    satellite: satelliteCoverage
+      ? {
+          id: 'M',
+          tileTemplate: `/tiles/${gameVersion}/${gameBuild}/satellite/${id}/{z}/{x}/{y}.webp`,
+          tileVersions: floorTileVersions(satelliteTiles, id, 'M'),
+          maxNativeZoom: nativeZoom(satelliteCoverage, 'M'),
+          coverage: satelliteCoverage,
+        }
+      : undefined,
     subregions: config.subregions.map((subregionId) => {
       const subregion = subregionsById.get(subregionId);
       const bounds =
@@ -570,9 +678,19 @@ for (const [id, config] of Object.entries(regionSource)) {
   const mapConfig = await readAKEData(`Json/MapConfig/${gameMapId}.json`);
   const levelIds = [...(mapConfig.levelStrIds ?? [])];
   if (!levelIds.length) throw new Error(`MapConfig levelStrIds is missing: ${gameMapId}`);
-  const levels = await Promise.all(
+  const rawLevels = await Promise.all(
     levelIds.map((levelId) => readAKEData(`Json/LevelConfig/${levelId}.json`)),
   );
+  // EndfieldData retains Unity field prefixes; AKEData strips them.
+  const levels = rawLevels.map((level) => ({
+    id: level.id ?? level.m_id,
+    levelGrids: (level.levelGrids ?? level.m_levelGrids ?? []).map((grid) => ({
+      x: grid.x ?? grid.X ?? grid.m_X,
+      y: grid.y ?? grid.Y ?? grid.m_Y,
+    })),
+    rectLeftBottom: level.rectLeftBottom ?? level.m_rectLeftBottom,
+    rectRightTop: level.rectRightTop ?? level.m_rectRightTop,
+  }));
   const gameBoundaries = levels.map((level) => levelToGameBoundaries(region, level));
   region.gameBoundaries = await versionedObject('map', `boundaries/${id}.game.json`, {
     count: gameBoundaries.length,
@@ -683,7 +801,10 @@ const manifest = {
   source: {
     repository: 'Atlos',
     commit: execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    akeDataCommit: execFileSync('git', ['-C', akeDataRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    gameDataRepository: 'AKEDataMining',
+    gameDataCommit: execFileSync('git', ['-C', gameDataRoot, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim(),
     usage:
       'Local development snapshot only. SDK AGPL-3.0; asset redistribution permission must be confirmed separately.',
   },
@@ -726,9 +847,11 @@ await fs.writeFile(
       aliasedIcons,
       excludedPoints,
       ignoredTileRegions,
-      ignoredTileCount: discoveredTileFiles.length - tileFiles.length,
+      ignoredTileCount,
+      satelliteTileCount: satelliteTiles.tileIndex.length,
       novecentoFontsIncluded: includeLicensedNovecento,
       akeDataRoot,
+      gameDataRoot,
       gameBoundaryStats,
       sourceFiles,
       sourceReadOnly: true,

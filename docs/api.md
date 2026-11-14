@@ -50,6 +50,7 @@ These options can be passed at creation and later to `widget.setOptions()`.
 | `labels` | `boolean` | `true` |
 | `boundaries` | `boolean` | `false` |
 | `boundarySource` | `'oem' | 'game'` | `'oem'` |
+| `satellite` | `boolean` | `false` |
 | `markerClustering` | `boolean` | `true` |
 | `zoom` | Finite number within the region range | Region or subregion preset |
 | `center` | `{ x: number; z: number }` | Region or subregion preset |
@@ -134,9 +135,11 @@ interface OEMWidget {
 
 Methods other than `destroy()` throw after the Widget has been destroyed.
 
-The state contains `regionId`, `subregionId`, `floorId`, `locale`, `markerTypes`, `labels`, `boundaries`, `boundarySource`, `markerClustering`, `zoom`, and `center`. The `center` object uses horizontal `{ x, z }` coordinates; the Demo configuration labels these axes `X` and `Z`.
+The state contains `regionId`, `subregionId`, `floorId`, `locale`, `markerTypes`, `labels`, `boundaries`, `boundarySource`, `satellite`, `markerClustering`, `zoom`, and `center`. The `center` object uses horizontal `{ x, z }` coordinates; the Demo configuration labels these axes `X` and `Z`.
 
-`boundarySource: 'oem'` loads Atlos-drawn subregion boundaries. `boundarySource: 'game'` loads official game level-grid boundaries generated from `AKEData` and rendered with the same boundary layer. Game boundary data is available only for regions included in the current static release.
+`satellite: true` selects satellite imagery on the main floor when the release provides it. Other floors and uncovered regions use standard imagery while retaining the preference. Current coverage includes Valley 4 and Dijiang. Imagery native levels are independent of the region's published coordinate basis.
+
+`boundarySource: 'oem'` loads Atlos-drawn subregion boundaries. `boundarySource: 'game'` loads official game level-grid boundaries generated from `AKEDataMining/data/Json` and rendered with the same boundary layer. Game boundary data is available only for regions included in the current static release.
 
 ## Resources
 
@@ -169,7 +172,7 @@ const options = parseOEMUrlState('?r=VL&f=crate_i&s=VL_7&layer=M&z=2&cx=400&cz=-
 const widget = await createOEMWidget('#map', options);
 ```
 
-Supported keys are `r`, `s`, `f`, `l`, `layer`, `labels`, `names`, `boundaries`, `boundary`, `boundarySource`, `cluster`, `z`, `cx`, and `cz`. `z` is zoom; `cx` and `cz` are the horizontal map center coordinates.
+Supported keys are `r`, `s`, `f`, `l`, `layer`, `labels`, `names`, `boundaries`, `boundary`, `boundarySource`, `satellite`, `cluster`, `z`, `cx`, and `cz`. `z` is zoom; `cx` and `cz` are the horizontal map center coordinates.
 
 ## Lower-Level Renderer
 

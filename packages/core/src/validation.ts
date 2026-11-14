@@ -14,7 +14,8 @@ const isTransform = (value: unknown): boolean =>
   (isObject(value) &&
     ['scaleX', 'scaleZ', 'offsetX', 'offsetZ'].every((key) => Number.isFinite(value[key])) &&
     value.scaleX !== 0 &&
-    value.scaleZ !== 0);
+    value.scaleZ !== 0 &&
+    (value.rotateClockwise90 === undefined || typeof value.rotateClockwise90 === 'boolean'));
 
 /** Constant-time compatibility check used by trusted resource loading. */
 export function checkOEMManifestVersion(value: unknown): OEMManifest {
@@ -84,7 +85,24 @@ export function validateOEMManifest(value: unknown): OEMManifest {
       if (!isObject(floor) || !isText(floor.id) || !isText(floor.tileTemplate))
         invalid(`${path}.floors[${i}]`, 'Expected floor ID and tile template');
       if (floors.has(floor.id)) invalid(`${path}.floors[${i}].id`, 'Duplicate floor');
+      if (
+        floor.maxNativeZoom !== undefined &&
+        (!Number.isInteger(floor.maxNativeZoom) || (floor.maxNativeZoom as number) < 0)
+      )
+        invalid(`${path}.floors[${i}].maxNativeZoom`, 'Expected a native tile zoom');
       floors.add(floor.id);
+    }
+    if (region.satellite !== undefined) {
+      const satellite = region.satellite;
+      if (
+        !isObject(satellite) ||
+        satellite.id !== 'M' ||
+        !isText(satellite.tileTemplate) ||
+        !isObject(satellite.coverage) ||
+        (satellite.maxNativeZoom !== undefined &&
+          (!Number.isInteger(satellite.maxNativeZoom) || (satellite.maxNativeZoom as number) < 0))
+      )
+        invalid(`${path}.satellite`, 'Expected main-floor satellite imagery');
     }
     if (!Array.isArray(region.subregions)) invalid(`${path}.subregions`, 'Expected subregions');
     const subregions = new Set<string>();

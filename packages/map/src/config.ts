@@ -163,6 +163,7 @@ export const normalizeState = (input: OEMMapConfig, manifest: OEMManifest): OEMM
     labels: input.labels ?? OEM_MAP_DEFAULTS.labels,
     boundaries: input.boundaries ?? OEM_MAP_DEFAULTS.boundaries,
     boundarySource: normalizeBoundarySource(input.boundarySource),
+    satellite: input.satellite ?? OEM_MAP_DEFAULTS.satellite,
     markerClustering: input.markerClustering ?? OEM_MAP_DEFAULTS.markerClustering,
     theme: input.theme ?? OEM_MAP_DEFAULTS.theme,
     lockDrag: input.lockDrag ?? OEM_MAP_DEFAULTS.lockDrag,

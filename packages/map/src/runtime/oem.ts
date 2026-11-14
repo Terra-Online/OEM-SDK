@@ -140,6 +140,8 @@ export class OEM implements OEMContract {
   private root: HTMLDivElement;
   private region: OEMRegion;
   private floorId = 'M';
+  private satellite = false;
+  private baseIsSatellite = false;
   private features: OEMFeatures = {};
   private boundarySource: OEMBoundarySource = OEM_MAP_DEFAULTS.boundarySource;
   private listeners = new Map<keyof OEMEvents, Set<(payload: never) => void>>();
@@ -207,6 +209,7 @@ export class OEM implements OEMContract {
       this.normalizeCustomPoints(options.customPoints ?? []).map((point) => [point.id, point]),
     );
     if (options.subregionId) this.filter.subregions = [options.subregionId];
+    this.satellite = options.satellite ?? OEM_MAP_DEFAULTS.satellite;
     this.markerClustering = options.markerClustering ?? OEM_MAP_DEFAULTS.markerClustering;
     const initialFloor = options.view?.floorId ?? options.floorId ?? getOEMDefaultFloor(this.region);
     this.validateFloor(initialFloor);
@@ -607,6 +610,7 @@ export class OEM implements OEMContract {
     });
     this.map.setMaxBounds(this.regionBounds());
     this.baseTiles = this.makeTiles(this.floorId).addTo(this.map);
+    this.baseIsSatellite = this.satelliteActive();
     this.updatingView = false;
   }
   /** Converts the region's published pixel extent to Simple CRS bounds. */
@@ -622,18 +626,20 @@ export class OEM implements OEMContract {
   }
   /** Creates a coverage-aware layer for one region floor. */
   private makeTiles(floorId: string): L.TileLayer {
-    const floor = this.region.floors.find((entry) => entry.id === floorId)!;
+    const useSatellite = this.satelliteActive() && floorId === 'M' && this.region.satellite;
+    const floor = useSatellite || this.region.floors.find((entry) => entry.id === floorId)!;
     const regionId = this.region.id;
     const layer = new CoveredTileLayer(
       resolveOEMAsset(this.options.resources.baseUrl, floor.tileTemplate),
       {
         tileSize: this.region.tileSize,
+        zIndex: floorId === getOEMDefaultFloor(this.region) ? 1 : 2,
         noWrap: true,
         bounds: this.regionBounds(),
-        maxNativeZoom: this.region.maxNativeZoom,
+        maxNativeZoom: floor.maxNativeZoom ?? this.region.maxNativeZoom,
         maxZoom: Math.ceil(this.region.maxZoom),
       },
-      this.region.coverage,
+      useSatellite ? useSatellite.coverage : this.region.coverage,
       floor,
     );
     layer.on('load', () => {
@@ -708,6 +714,7 @@ export class OEM implements OEMContract {
     this.floorTiles?.remove();
     this.floorTiles = undefined;
     this.floorId = floorId;
+    if (this.satellite && this.region.satellite) this.refreshBaseTiles();
     const base = this.baseTiles?.getContainer();
     const baseFloor = getOEMDefaultFloor(this.region);
     if (base) base.style.filter = floorId === baseFloor ? 'brightness(1)' : 'brightness(0.5)';
@@ -716,6 +723,20 @@ export class OEM implements OEMContract {
     this.renderCustomPoints();
     this.emit('floorchange', { floorId });
     this.emitView();
+  }
+  private satelliteActive(): boolean {
+    return this.satellite && this.floorId === 'M' && !!this.region.satellite;
+  }
+  private refreshBaseTiles(): void {
+    const satellite = this.satelliteActive();
+    if (satellite === this.baseIsSatellite) return;
+    this.baseTiles?.remove();
+    this.baseTiles = this.makeTiles(getOEMDefaultFloor(this.region)).addTo(this.map);
+    this.baseIsSatellite = satellite;
+    const base = this.baseTiles.getContainer();
+    if (base)
+      base.style.filter =
+        this.floorId === getOEMDefaultFloor(this.region) ? 'brightness(1)' : 'brightness(0.5)';
   }
   /** Changes label language and applies the manifest fallback chain. */
   private applyLocale(locale: string): void {
@@ -1510,6 +1531,7 @@ export class OEM implements OEMContract {
       labels: !!this.features.labels,
       boundaries: !!this.features.boundaries,
       boundarySource: this.boundarySource,
+      satellite: this.satellite,
       markerClustering: this.markerClustering,
       zoom: view.zoom,
       center: { x: view.x, z: view.z },
@@ -1558,7 +1580,9 @@ export class OEM implements OEMContract {
                 ? [next.subregionId]
                 : undefined,
         });
+      this.satellite = next.satellite;
       this.applyFloor(next.floorId);
+      this.refreshBaseTiles();
       this.applyMarkerClustering(next.markerClustering);
       if (next.theme !== previous.theme) this.applyTheme(next.theme);
       this.applyLocks(next);

@@ -131,6 +131,7 @@ const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
   labels: state.labels,
   boundaries: state.boundaries,
   boundarySource: state.boundarySource,
+  satellite: state.satellite,
   markerClustering: state.markerClustering,
   zoom: state.zoom,
   center: { ...state.center },

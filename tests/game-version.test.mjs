@@ -6,6 +6,7 @@ import {
   GAME_VERSION_REQUEST_BASELINE,
   normalizeGameBuild,
   normalizeGameVersion,
+  parseLauncherBuild,
   parseLatestGameVersion,
 } from '../scripts/game-version.mjs';
 
@@ -59,4 +60,25 @@ describe('Endfield game version resolution', () => {
       },
     ]);
   });
+});
+
+it('reads the official client build for mining repositories without build commits', () => {
+  const payload = {
+    proxy_rsps: [
+      {
+        kind: 'get_latest_game',
+        get_latest_game_rsp: {
+          pkg: {
+            packs: [
+              {
+                url: 'https://cdn.example/Beyond_Release_v1d6-Rel-cn-10781849-3_prod_obt_official.zip.001?auth_key=example',
+              },
+            ],
+          },
+        },
+      },
+    ],
+  };
+  expect(parseLauncherBuild(payload)).toBe('10781849-3');
+  expect(() => parseLauncherBuild({})).toThrow('no client build');
 });
