@@ -1,3 +1,5 @@
+import type { OEMBehaviorCatalog } from './behavior';
+
 /** Current static manifest schema accepted by OEM clients. */
 export const OEM_SCHEMA_VERSION = 1 as const;
 
@@ -67,6 +69,8 @@ export interface OEMGameTransform {
   scaleZ: number;
   offsetX: number;
   offsetZ: number;
+  /** Rotate game X/Z clockwise before applying scale and offset (Dijiang). */
+  rotateClockwise90?: boolean;
 }
 
 /** A versioned static asset reference with integrity metadata. */
@@ -81,6 +85,8 @@ export interface OEMFloor {
   id: string;
   tileTemplate: string;
   tileVersions?: Record<string, Record<string, string[]>>;
+  /** Native imagery level; independent of the region coordinate basis. */
+  maxNativeZoom?: number;
 }
 /** A selectable subregion and its localized display names. */
 export interface OEMSubregion {
@@ -119,10 +125,13 @@ export interface OEMRegion {
   /** Official game-space level-grid boundaries converted to OEM map coordinates. */
   gameBoundaries?: OEMAsset;
   coverage: Record<string, Record<string, Record<string, number[]>>>;
+  /** Optional main-floor imagery, using the same coordinates as standard tiles. */
+  satellite?: OEMFloor & { coverage: OEMRegion['coverage'] };
 }
 /** Localized strings used by the Atlos-aligned controls. */
 export interface OEMControlMessages {
   layerSelect: string;
+  satellite?: string;
   zoomIn: string;
   zoomOut: string;
   /** Localized product name used by the built-in attribution. */
@@ -136,7 +145,7 @@ export interface OEMManifest {
   schemaVersion: typeof OEM_SCHEMA_VERSION;
   /** Path-safe Endfield game version, for example 1_5_3. */
   gameVersion: string;
-  /** AKEData main resource build, for example 10506507-7. */
+  /** Source build: legacy resource build or official client build for mining snapshots. */
   gameBuild?: string;
   /** Human-readable combined game and data version. */
   gameVersionLabel?: string;
@@ -146,6 +155,8 @@ export interface OEMManifest {
   regions: OEMRegion[];
   types: OEMAsset;
   pointIndex?: OEMAsset;
+  /** Optional behavior sidecars; older releases omit this field. */
+  behaviors?: OEMBehaviorCatalog;
   fonts?: OEMFontAsset[];
   fontLicense?: OEMAsset;
   fontLicenses?: OEMAsset[];

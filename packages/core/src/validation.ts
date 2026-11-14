@@ -1,5 +1,6 @@
 import { invalid } from './errors';
 import { OEM_SCHEMA_VERSION } from './types';
+import { decodeOEMBehaviors } from './behavior';
 import type { OEMManifest } from './types';
 
 type RecordValue = Record<string, unknown>;
@@ -13,7 +14,8 @@ const isTransform = (value: unknown): boolean =>
   (isObject(value) &&
     ['scaleX', 'scaleZ', 'offsetX', 'offsetZ'].every((key) => Number.isFinite(value[key])) &&
     value.scaleX !== 0 &&
-    value.scaleZ !== 0);
+    value.scaleZ !== 0 &&
+    (value.rotateClockwise90 === undefined || typeof value.rotateClockwise90 === 'boolean'));
 
 /** Constant-time compatibility check used by trusted resource loading. */
 export function checkOEMManifestVersion(value: unknown): OEMManifest {
@@ -45,6 +47,7 @@ export function validateOEMManifest(value: unknown): OEMManifest {
   }
   if (!Array.isArray(value.regions) || !value.regions.length) invalid('manifest.regions', 'Expected regions');
   const ids = new Set<string>();
+  const allSubregions = new Set<string>();
   for (const [index, region] of value.regions.entries()) {
     const path = `manifest.regions[${index}]`;
     if (!isObject(region) || !isText(region.id)) invalid(path, 'Expected a region with an ID');
@@ -82,7 +85,24 @@ export function validateOEMManifest(value: unknown): OEMManifest {
       if (!isObject(floor) || !isText(floor.id) || !isText(floor.tileTemplate))
         invalid(`${path}.floors[${i}]`, 'Expected floor ID and tile template');
       if (floors.has(floor.id)) invalid(`${path}.floors[${i}].id`, 'Duplicate floor');
+      if (
+        floor.maxNativeZoom !== undefined &&
+        (!Number.isInteger(floor.maxNativeZoom) || (floor.maxNativeZoom as number) < 0)
+      )
+        invalid(`${path}.floors[${i}].maxNativeZoom`, 'Expected a native tile zoom');
       floors.add(floor.id);
+    }
+    if (region.satellite !== undefined) {
+      const satellite = region.satellite;
+      if (
+        !isObject(satellite) ||
+        satellite.id !== 'M' ||
+        !isText(satellite.tileTemplate) ||
+        !isObject(satellite.coverage) ||
+        (satellite.maxNativeZoom !== undefined &&
+          (!Number.isInteger(satellite.maxNativeZoom) || (satellite.maxNativeZoom as number) < 0))
+      )
+        invalid(`${path}.satellite`, 'Expected main-floor satellite imagery');
     }
     if (!Array.isArray(region.subregions)) invalid(`${path}.subregions`, 'Expected subregions');
     const subregions = new Set<string>();
@@ -92,6 +112,7 @@ export function validateOEMManifest(value: unknown): OEMManifest {
         invalid(subpath, 'Expected subregion ID and key');
       if (subregions.has(subregion.id)) invalid(`${subpath}.id`, 'Duplicate subregion');
       subregions.add(subregion.id);
+      allSubregions.add(subregion.id);
       if (
         subregion.bounds !== undefined &&
         (!Array.isArray(subregion.bounds) || subregion.bounds.length !== 2 || !subregion.bounds.every(isPair))
@@ -106,6 +127,18 @@ export function validateOEMManifest(value: unknown): OEMManifest {
     if (!isObject(region.locales)) invalid(`${path}.locales`, 'Expected region names');
   }
   if (!ids.has(String(value.defaultRegionId))) invalid('manifest.defaultRegionId', 'Unknown OEM region');
+  if (value.behaviors !== undefined) {
+    decodeOEMBehaviors([], value.behaviors);
+    const catalog = value.behaviors;
+    if (!isObject(catalog) || !isObject(catalog.files))
+      invalid('manifest.behaviors.files', 'Expected behavior sidecar references');
+    for (const [id, ref] of Object.entries(catalog.files)) {
+      if (!allSubregions.has(id) || !isObject(ref) || !isText(ref.path))
+        invalid(`manifest.behaviors.files.${id}`, 'Unknown subregion or invalid behavior resource');
+    }
+    if (catalog.unlockIcon !== undefined && !isText(catalog.unlockIcon))
+      invalid('manifest.behaviors.unlockIcon', 'Expected an unlock icon resource path');
+  }
   if (!isObject(value.types) || !isText(value.types.path))
     invalid('manifest.types', 'Missing point type resource');
   if (!isObject(value.locales)) invalid('manifest.locales', 'Expected locale resources');

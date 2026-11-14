@@ -35,6 +35,10 @@ console.log(position, restored);
 
 ESM with TypeScript declarations; safe to import during SSR. Coordinate functions require no DOM or renderer. Manifest loading requires an environment with `fetch`.
 
+## Behavior data
+
+`OEMManifest.behaviors` optionally advertises release-scoped tuple-v1 sidecars. `decodeOEMBehaviors(rows, catalog)` validates and decodes all four behavior families, preserving normalized `[z, x]` coordinates. `findOEMBehaviors(records, pointId)` resolves direct records and the butterfly route behind a selected related chest. These functions and `OEMBehavior` types require no renderer or DOM.
+
 ## Documentation
 
 - [API and coordinates](https://github.com/Terra-Online/OEM-SDK/blob/main/docs/api.md)

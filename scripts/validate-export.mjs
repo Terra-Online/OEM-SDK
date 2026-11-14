@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { decodeOEMBehaviors, gameToOEMPosition, mapToGameXZPosition } from './core-codec.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const SCHEMA_VERSION = 1;
@@ -74,8 +75,7 @@ const decodePoint = (raw, region, shardPath) => {
   const y = value.y ?? value.pos?.[2] ?? 0;
   const tier = value.tier ?? 0;
   const subregionId = value.subregId ?? path.basename(shardPath, '.json');
-  const transform =
-    region.subregions.find((entry) => entry.id === subregionId)?.gameTransform ?? region.gameTransform;
+
   const scale = 2 ** region.maxNativeZoom;
   return {
     id: String(value.id),
@@ -83,7 +83,7 @@ const decodePoint = (raw, region, shardPath) => {
     subregionId,
     type: value.type ?? '',
     tier,
-    raw: { x: (x - transform.offsetX) / transform.scaleX, y, z: (z - transform.offsetZ) / transform.scaleZ },
+    raw: { ...mapToGameXZPosition({ regionId: region.id, subregionId, x, z }, region), y },
     position: {
       regionId: region.id,
       subregionId,
@@ -132,6 +132,26 @@ const requirePath = (value, expected) => {
 const requirePrefix = (value, expected) => {
   if (!value.startsWith(`${expected}/`)) fail(`Unexpected versioned resource path: ${value}`);
 };
+const behaviorRecords = [];
+if (manifest.behaviors !== undefined) {
+  const catalog = manifest.behaviors;
+  decodeOEMBehaviors([], catalog);
+  if (!catalog.files || typeof catalog.files !== 'object' || Array.isArray(catalog.files))
+    fail('Invalid behavior sidecar references');
+  const subregions = new Set(
+    manifest.regions.flatMap((region) => region.subregions.map((subregion) => subregion.id)),
+  );
+  for (const [subregionId, ref] of Object.entries(catalog.files)) {
+    if (!subregions.has(subregionId)) fail(`Unknown behavior subregion: ${subregionId}`);
+    requirePath(ref.path, `${markerRoot}/behavior/${subregionId}.json`);
+    behaviorRecords.push(...decodeOEMBehaviors(await readRef(ref), catalog));
+  }
+  if (catalog.unlockIcon !== undefined) {
+    validatePath(catalog.unlockIcon);
+    requirePrefix(catalog.unlockIcon, '/marker/assets');
+    await fs.access(path.join(publicRoot, catalog.unlockIcon));
+  }
+}
 if (Object.prototype.hasOwnProperty.call(manifest, 'attribution'))
   fail('Legacy attribution text must not be published');
 if (
@@ -285,54 +305,60 @@ for (const region of manifest.regions) {
         fail(`Point floor missing: ${point.id}/${point.position.floorId}`);
       if (![point.raw.x, point.raw.y, point.raw.z, point.position.x, point.position.z].every(Number.isFinite))
         fail(`Point coordinates invalid: ${point.id}`);
-      const transform =
-        region.subregions.find((subregion) => subregion.id === point.subregionId)?.gameTransform ??
-        region.gameTransform;
-      const scale = 2 ** region.maxNativeZoom;
-      if (
-        Math.abs(point.position.x / scale - (point.raw.x * transform.scaleX + transform.offsetX)) > 1e-5 ||
-        Math.abs(point.position.z / scale - (point.raw.z * transform.scaleZ + transform.offsetZ)) > 1e-5
-      ) {
+      const mapped = gameToOEMPosition(point.raw, region, point.position.floorId, point.subregionId);
+      if (Math.abs(point.position.x - mapped.x) > 1e-5 || Math.abs(point.position.z - mapped.z) > 1e-5) {
         fail(`Point coordinate transform mismatch: ${point.id}`);
       }
       if (pointIndex[point.id] !== ref.path) fail(`Point index mismatch: ${point.id}`);
     }
   }
-  for (const [zoom, floors] of Object.entries(region.coverage)) {
-    for (const [floorId, rows] of Object.entries(floors)) {
-      if (!floorIds.has(floorId)) fail(`Coverage floor missing: ${region.id}/${floorId}`);
-      const floor = region.floors.find((entry) => entry.id === floorId);
-      const template = floor.tileTemplate;
-      const versionRows = floor.tileVersions?.[zoom] ?? {};
-      if (Object.keys(versionRows).length !== Object.keys(rows).length)
-        fail(`Tile version rows mismatch: ${region.id}/${floorId}/${zoom}`);
-      for (const [tileY, ranges] of Object.entries(rows)) {
-        if (ranges.length % 2 !== 0)
-          fail(`Invalid coverage ranges: ${region.id}/${floorId}/${zoom}/${tileY}`);
-        const versions = versionRows[tileY] ?? [];
-        let versionIndex = 0;
-        for (let index = 0; index < ranges.length; index += 2) {
-          for (let tileX = ranges[index]; tileX <= ranges[index + 1]; tileX += 1) {
-            const tilePath = template
-              .replace('{z}', zoom)
-              .replace('{x}', String(tileX))
-              .replace('{y}', tileY);
-            validatePath(tilePath);
-            const tileBytes = await fs.readFile(path.join(publicRoot, tilePath));
-            if (versions[versionIndex] !== hash(tileBytes).slice(0, 7)) {
-              fail(`Tile version mismatch: ${region.id}/${floorId}/${zoom}/${tileX}/${tileY}`);
+  const sources = [{ coverage: region.coverage, floors: region.floors }];
+  if (region.satellite) {
+    requirePrefix(region.satellite.tileTemplate, `${tileRootPath}/satellite/${region.id}`);
+    sources.push({ coverage: region.satellite.coverage, floors: [region.satellite] });
+  }
+  for (const source of sources) {
+    for (const [zoom, floors] of Object.entries(source.coverage)) {
+      for (const [floorId, rows] of Object.entries(floors)) {
+        if (!floorIds.has(floorId)) fail(`Coverage floor missing: ${region.id}/${floorId}`);
+        const floor = source.floors.find((entry) => entry.id === floorId);
+        const template = floor.tileTemplate;
+        const versionRows = floor.tileVersions?.[zoom] ?? {};
+        if (Object.keys(versionRows).length !== Object.keys(rows).length)
+          fail(`Tile version rows mismatch: ${region.id}/${floorId}/${zoom}`);
+        for (const [tileY, ranges] of Object.entries(rows)) {
+          if (ranges.length % 2 !== 0)
+            fail(`Invalid coverage ranges: ${region.id}/${floorId}/${zoom}/${tileY}`);
+          const versions = versionRows[tileY] ?? [];
+          let versionIndex = 0;
+          for (let index = 0; index < ranges.length; index += 2) {
+            for (let tileX = ranges[index]; tileX <= ranges[index + 1]; tileX += 1) {
+              const tilePath = template
+                .replace('{z}', zoom)
+                .replace('{x}', String(tileX))
+                .replace('{y}', tileY);
+              validatePath(tilePath);
+              const tileBytes = await fs.readFile(path.join(publicRoot, tilePath));
+              if (versions[versionIndex] !== hash(tileBytes).slice(0, 7)) {
+                fail(`Tile version mismatch: ${region.id}/${floorId}/${zoom}/${tileX}/${tileY}`);
+              }
+              versionIndex += 1;
+              coveredTiles += 1;
             }
-            versionIndex += 1;
-            coveredTiles += 1;
           }
+          if (versions.length !== versionIndex)
+            fail(`Tile version count mismatch: ${region.id}/${floorId}/${zoom}/${tileY}`);
         }
-        if (versions.length !== versionIndex)
-          fail(`Tile version count mismatch: ${region.id}/${floorId}/${zoom}/${tileY}`);
       }
     }
   }
 }
 if (Object.keys(pointIndex).length !== pointCount) fail('Point index cardinality mismatch');
+for (const record of behaviorRecords) {
+  if (!ids.has(record.anchorId)) fail(`Unknown behavior anchor: ${record.anchorId}`);
+  if (record.kind === 'relation' && !ids.has(record.targetId))
+    fail(`Unknown behavior relation target: ${record.targetId}`);
+}
 
 const tileRoot = path.join(publicRoot, tileRootPath);
 const tileFiles = (await walk(tileRoot)).filter((filename) => filename.endsWith('.webp'));
@@ -340,8 +366,9 @@ if (tileFiles.length !== coveredTiles)
   fail(`Tile coverage mismatch: ${tileFiles.length} files, ${coveredTiles} indexed`);
 const tileIndex = await Promise.all(
   tileFiles.map(async (filename) => {
-    const [regionId, zoom, tileX, tileName] = path.relative(tileRoot, filename).split(path.sep);
-    return { relative: `${regionId}/${zoom}/${tileX}_${tileName}`, hash: hash(await fs.readFile(filename)) };
+    const parts = path.relative(tileRoot, filename).split(path.sep);
+    const [tileX, tileName] = parts.splice(-2);
+    return { relative: `${parts.join('/')}/${tileX}_${tileName}`, hash: hash(await fs.readFile(filename)) };
   }),
 );
 tileIndex.sort((left, right) => left.relative.localeCompare(right.relative));

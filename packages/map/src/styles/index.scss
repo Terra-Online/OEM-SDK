@@ -3,6 +3,7 @@
 @use './markers.scss';
 @use './labels.scss';
 @use './boundaries.scss';
+@use './behavior.scss';
 
 .mapRoot,
 .mapRoot[data-theme='light'] {

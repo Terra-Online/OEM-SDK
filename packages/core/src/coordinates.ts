@@ -88,8 +88,8 @@ export function gameXZToOEMPosition(
   return {
     regionId: region.id,
     ...(subregionId ? { subregionId } : {}),
-    x: raw.x * transform.scaleX + transform.offsetX,
-    z: raw.z * transform.scaleZ + transform.offsetZ,
+    x: (transform.rotateClockwise90 ? raw.z : raw.x) * transform.scaleX + transform.offsetX,
+    z: (transform.rotateClockwise90 ? -raw.x : raw.z) * transform.scaleZ + transform.offsetZ,
     floorId,
   };
 }
@@ -116,10 +116,9 @@ export function mapToGameXZPosition(
     throw new Error('Invalid OEM map position');
   }
   const transform = getOEMGameTransform(region, position.subregionId ?? subregionId);
-  return {
-    x: (position.x - transform.offsetX) / transform.scaleX,
-    z: (position.z - transform.offsetZ) / transform.scaleZ,
-  };
+  const x = (position.x - transform.offsetX) / transform.scaleX;
+  const z = (position.z - transform.offsetZ) / transform.scaleZ;
+  return transform.rotateClockwise90 ? { x: -z, z: x } : { x, z };
 }
 
 /** Returns the transform selected by a region and optional subregion. */

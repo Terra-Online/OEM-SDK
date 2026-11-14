@@ -325,6 +325,7 @@ const createWidgetCode = (
     lines.push('  boundaries: true,');
     if (state.boundarySource !== 'oem') lines.push(`  boundarySource: ${quote(state.boundarySource)},`);
   }
+  if (state.satellite) lines.push('  satellite: true,');
   if (!state.markerClustering) lines.push('  markerClustering: false,');
   const regionCustomPoints = customPoints.filter((point) => point.position.regionId === state.regionId);
   if (customPointsUrl && regionCustomPoints.length) {
@@ -534,6 +535,7 @@ export function createDemoConfigPanel(
   markerPicker.append(markerTrigger, markerMenu);
   const markerField = createField('Marker types', markerPicker, true);
 
+  const satellite = createToggle('Satellite imagery');
   const labels = createToggle('Place names');
   labels.field.classList.add('demoPlaceNamesField');
   const boundaries = createToggle('Boundaries');
@@ -569,6 +571,7 @@ export function createDemoConfigPanel(
   content.content.append(
     createField('Marker data', markerMode, true),
     markerField,
+    satellite.field,
     labels.field,
     clustering.field,
     boundaryControls,
@@ -732,6 +735,8 @@ export function createDemoConfigPanel(
     if (selectedTypes.length) syncMarkerPicker(selectedTypes);
     else markerSelection.textContent = state.markerTypes === '*' ? 'All types' : 'No types selected';
 
+    satellite.input.checked = state.satellite;
+    satellite.input.disabled = !manifest.regions.find((region) => region.id === state.regionId)?.satellite;
     labels.input.checked = state.labels;
     boundaries.input.checked = state.boundaries;
     boundarySources.get(state.boundarySource)!.checked = true;
@@ -808,6 +813,9 @@ export function createDemoConfigPanel(
       selected.length === 1 ? '1 type selected' : `${selected.length} types selected`;
     callbacks.update({ markerTypes: selected.length ? selected : false });
   });
+  satellite.input.addEventListener('change', () =>
+    callbacks.update({ satellite: satellite.input.checked, floor: 'M' }),
+  );
   labels.input.addEventListener('change', () => callbacks.update({ labels: labels.input.checked }));
   boundaries.input.addEventListener('change', () => {
     const enabled = boundaries.input.checked;
@@ -869,6 +877,8 @@ export function createDemoConfigPanel(
         control.disabled =
           busy ||
           (boundarySource.contains(control) && !boundaries.input.checked) ||
+          (control === satellite.input &&
+            !manifest.regions.find((region) => region.id === regionSelect.value)?.satellite) ||
           ((control === markerTrigger || markerInputs.has(control.value)) && !markerPickerEnabled);
       }
     },

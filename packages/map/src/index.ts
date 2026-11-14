@@ -8,6 +8,12 @@ import {
 import { createMapAPI } from './api';
 import type { OEM, OEMOptions } from './types';
 export type * from './types';
+export type {
+  OEMBehavior,
+  OEMBehaviorPoint,
+  OEMBehaviorCatalog,
+  OEMBehaviorLayout,
+} from '@opendfieldmap/core';
 export {
   gameToOEMPosition,
   gameXZToOEMPosition,

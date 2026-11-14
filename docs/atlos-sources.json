@@ -4,6 +4,15 @@
     "commit": "f25b5e8f55748cd08ff4a87298c0b33f0574bc5f",
     "access": "read-only"
   },
+  "behaviorOverlaySource": {
+    "repository": "Atlos",
+    "commit": "082c43889698f71e9e54cc4f179ee28be76ad785",
+    "paths": [
+      "src/component/map/behaviorOverlay",
+      "src/data/marker/behavior",
+      "src/styles/global.scss"
+    ]
+  },
   "adoptedAreas": [
     "map interaction",
     "tile transitions",
@@ -11,7 +20,8 @@
     "region and floor controls",
     "scale controls",
     "palette and motion curves",
-    "control artwork"
+    "control artwork",
+    "behavior overlays and spline interpolation"
   ],
   "policy": {
     "modifySourceRepository": false,

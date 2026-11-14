@@ -2,6 +2,8 @@
 import L from 'leaflet';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ViewportMarker } from '../packages/map/src/atlos/canvas/markerViewport';
+import { canvasSurface } from '../packages/map/src/atlos/canvas/canvasMarkerSurface';
+import { canvasPadding } from '../packages/map/src/atlos/canvas/canvasViewport';
 
 let map: L.Map;
 let host: HTMLDivElement;
@@ -16,6 +18,7 @@ beforeEach(() => {
 afterEach(() => {
   if (!removed) map.remove();
   host.remove();
+  vi.restoreAllMocks();
 });
 const marker = (position: L.LatLngExpression) =>
   new ViewportMarker(position, {
@@ -73,8 +76,14 @@ describe('Canvas marker lifecycle', () => {
         marker([0, 0]).addTo(map);
         map.fire('move');
         const canvas = host.querySelector<HTMLCanvasElement>('.oem-canvas-markers')!;
-        expect([canvas.width, canvas.height]).toEqual([1600, 1200]);
-        expect([canvas.style.width, canvas.style.height]).toEqual(['800px', '600px']);
+        // Camera padding may enlarge the surface, while output density and its memory budget stay fixed.
+        expect(canvas.width).toBeGreaterThanOrEqual(1600);
+        expect(canvas.height).toBeGreaterThanOrEqual(1200);
+        expect(canvas.width * canvas.height).toBeLessThanOrEqual(800 * 600 * 4 * 1.5);
+        expect([parseFloat(canvas.style.width), parseFloat(canvas.style.height)]).toEqual([
+          canvas.width / 2,
+          canvas.height / 2,
+        ]);
         expect(map.latLngToContainerPoint([0, 0])).toEqual(L.point(400, 300));
       } finally {
         vi.unstubAllGlobals();
@@ -99,16 +108,16 @@ describe('Canvas marker lifecycle', () => {
         node = point.getElement();
       map.fire('move');
       const canvas = host.querySelector<HTMLCanvasElement>('.oem-canvas-markers')!;
-      expect(canvas.width).toBe(1600);
-      expect(canvas.style.width).toBe('800px');
+      const cssWidth = parseFloat(canvas.style.width);
+      expect(canvas.width).toBe(cssWidth * 2);
       vi.stubGlobal('devicePixelRatio', 3);
       changed!();
       map.fire('move');
-      expect(canvas.width).toBe(2400);
+      expect(canvas.width).toBe(cssWidth * 3);
       expect(point.getElement()).toBe(node);
       vi.stubGlobal('devicePixelRatio', 1.5);
       map.fire('move');
-      expect(canvas.width).toBe(1600);
+      expect(canvas.width).toBe(cssWidth * 2);
       map.remove();
       removed = true;
       expect(remove).toHaveBeenCalledTimes(3);
@@ -130,6 +139,78 @@ describe('Canvas marker lifecycle', () => {
     expect(far.getElement()).toBe(node);
     node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(clicked).toHaveBeenCalledOnce();
+  });
+  it('reuses small pans, repaints uncovered views, and keeps hit coordinates attached to the point', () => {
+    const point = marker([0, 0]).addTo(map),
+      node = point.getElement(),
+      clicked = vi.fn();
+    point.on('click', clicked);
+    map.fire('move');
+    const canvas = host.querySelector<HTMLCanvasElement>('.oem-canvas-markers')!;
+    const clear = vi.fn();
+    canvas.getContext('2d')!.clearRect = clear;
+    map.panBy([12, 7], { animate: false });
+    expect(clear).not.toHaveBeenCalled();
+    expect(canvasSurface(map).visualPosition(point)?.equals(point.getLatLng())).toBe(true);
+    const p = map.latLngToContainerPoint(point.getLatLng());
+    host.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: p.x, clientY: p.y - 16 }));
+    expect(clicked).toHaveBeenCalledOnce();
+    expect(point.getElement()).toBe(node);
+    map.panBy([180, 0], { animate: false });
+    expect(clear).toHaveBeenCalled();
+    clear.mockClear();
+    map.setZoom(3);
+    expect(clear).toHaveBeenCalled();
+  });
+  it('updates stationary-pointer hover and reports actual viewport exit once while the canvas is retained', () => {
+    vi.stubGlobal('PointerEvent', MouseEvent);
+    try {
+      const point = marker([0, 0]).addTo(map),
+        leave = vi.fn(),
+        hidden = vi.fn();
+      point.on('mouseout', leave);
+      point.on('viewporthide', hidden);
+      map.fire('move');
+      const p = map.latLngToContainerPoint(point.getLatLng());
+      host.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: p.x, clientY: p.y - 16 }));
+      map.panBy([24, 0], { animate: false });
+      expect(leave).toHaveBeenCalledOnce();
+      map.panBy([600, 0], { animate: false });
+      map.fire('move');
+      expect(hidden).toHaveBeenCalledOnce();
+      map.setZoom(3);
+      expect(hidden).toHaveBeenCalledOnce();
+      map.setView([0, 0], 2, { animate: false });
+      map.setView([0, 1000], 2, { animate: false });
+      expect(hidden).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it.each([
+    [1440, 900],
+    [800, 600],
+    [320, 200],
+    [0, 0],
+  ])('bounds retained backing area for %s × %s without lowering density', (width, height) => {
+    const padding = canvasPadding(width, height);
+    expect(padding).toBeGreaterThanOrEqual(0);
+    expect(padding).toBeLessThanOrEqual(128);
+    expect((width + 2 * padding) * (height + 2 * padding)).toBeLessThanOrEqual(width * height * 1.5);
+  });
+  it('tracks exit, re-entry and diagonal exit at cached viewport edges without repainting', () => {
+    const point = marker([0, 96]).addTo(map),
+      hidden = vi.fn();
+    point.on('viewporthide', hidden);
+    map.fire('move');
+    const clear = vi.fn();
+    host.querySelector('canvas')!.getContext('2d')!.clearRect = clear;
+    map.panBy([-64, 0], { animate: false });
+    expect(hidden).toHaveBeenCalledOnce();
+    map.panBy([64, 0], { animate: false });
+    map.panBy([-64, -40], { animate: false });
+    expect(hidden).toHaveBeenCalledTimes(2);
+    expect(clear).not.toHaveBeenCalled();
   });
   it('keeps semantic events outside the moving pane while retaining the visual pane', () => {
     const point = marker([0, 0]).addTo(map),

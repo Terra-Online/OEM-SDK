@@ -1,4 +1,5 @@
 import type {
+  OEMBehavior,
   OEMCoordinateSnapshot,
   OEMScreenPosition,
   OEMBoundarySource,
@@ -37,6 +38,7 @@ export interface OEMOptions {
   /** URL of a JSON array of runtime points, loaded before creation resolves. */
   customPointsUrl?: string;
   /** Groups nearby markers by point type. Defaults to true. */
+  satellite?: boolean;
   markerClustering?: boolean;
   /** Prevents user drag and trackpad-pan gestures without blocking programmatic view changes. */
   lockDrag?: boolean;
@@ -83,6 +85,11 @@ export type OEMPointActivation = OEMPointInteraction & {
 export interface OEMCommandOptions {
   signal?: AbortSignal;
 }
+/** Playback for the selected point's authored behavior, independent of the camera. */
+export interface OEMBehaviorOptions extends OEMCommandOptions {
+  animate?: boolean;
+  flow?: boolean;
+}
 export interface OEMInteractionLocks {
   lockDrag?: boolean;
   lockZoom?: boolean;
@@ -97,6 +104,7 @@ export interface OEMMapFlatConfig extends OEMInteractionLocks {
   labels?: boolean;
   boundaries?: boolean;
   boundarySource?: OEMBoundarySource;
+  satellite?: boolean;
   markerClustering?: boolean;
   customPoints?: readonly OEMCustomPoint[];
   customPointsUrl?: string;
@@ -107,7 +115,7 @@ export interface OEMMapFlatConfig extends OEMInteractionLocks {
 export type OEMViewConfig = Pick<OEMMapFlatConfig, 'region' | 'subregion' | 'floor' | 'zoom' | 'center'>;
 export type OEMLayerConfig = Pick<
   OEMMapFlatConfig,
-  'locale' | 'markerTypes' | 'labels' | 'boundaries' | 'boundarySource' | 'markerClustering'
+  'locale' | 'markerTypes' | 'labels' | 'boundaries' | 'boundarySource' | 'satellite' | 'markerClustering'
 >;
 /** Groups are optional. A defined flat field takes precedence over its grouped alias. */
 export interface OEMMapConfig extends OEMMapFlatConfig {
@@ -124,6 +132,7 @@ export interface OEMMapState {
   labels: boolean;
   boundaries: boolean;
   boundarySource: OEMBoundarySource;
+  satellite: boolean;
   markerClustering: boolean;
   zoom: number;
   center: { x: number; z: number };
@@ -200,6 +209,10 @@ export interface OEMMapAPI {
   clearCustomPoints(): Promise<void>;
   getPoint(pointId: string): OEMPoint | undefined;
   loadPoint(pointId: string): Promise<OEMPoint | undefined>;
+  /** Load behavior for a published point in any region without changing the map. */
+  loadBehavior(pointId: string, options?: OEMCommandOptions): Promise<OEMBehavior[]>;
+  /** Display behavior in the current region. Null clears it; the latest selection wins. */
+  setBehaviorPoint(pointId: string | null, options?: OEMBehaviorOptions): Promise<void>;
   setMarkerClustering(enabled: boolean): Promise<void>;
   resize(): void;
   on<Event extends keyof OEMEvents>(event: Event, handler: (payload: OEMEvents[Event]) => void): () => void;

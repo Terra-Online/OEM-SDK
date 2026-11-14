@@ -221,13 +221,13 @@ unsubscribe();
 
 可选图层加载失败会通知 `onError`，但不会销毁底图或拒绝整个配置更新。再次明确设置同一已失败图层为开启也会重试。`retry()` 完成表示本轮请求已结束；是否成功应读取 `getResourceState()`。首次创建后同样应读取该状态，创建期间的事件不会重放。
 
-非法配置和必需的自定义点数据加载失败会拒绝更新，不提交该次配置。`widget.setOptions()` 与所有地图写入命令共用顺序队列，均应 `await`。自定义点写入不再隐式取消先前请求；可用 `loadCustomPoints(url, { signal })` 明确取消。销毁或取消创建会终止 SDK 等待的请求，迟到响应不会更新实例。正常取消使用 `AbortError`，显式传入的取消原因予以保留。
+非法配置和必需的自定义点数据加载失败会拒绝更新，不提交该次配置。`widget.setOptions()` 与地图配置、自定义点写入命令共用顺序队列，均应 `await`。自定义点写入不再隐式取消先前请求；可用 `loadCustomPoints(url, { signal })` 明确取消。销毁或取消创建会终止 SDK 等待的请求，迟到响应不会更新实例。正常取消使用 `AbortError`，显式传入的取消原因予以保留。
 
 静态资源按可信的导出数据读取，初始化只做常数时间的 schema 版本检查，不扫描 Manifest 内容或逐条校验点位、标签、字典和边界。完整数据格式、哈希、字节数和瓦片索引的一致性由导出校验负责；排查外部 Manifest 时可主动调用 core 包的 `validateOEMManifest()`。宿主配置和自定义点继续进行必要的输入检查。用于点击子地区推断的边界预加载在后台进行，不阻塞创建；完成前使用现有的包围盒回退。`OEMError` 提供 `code`、`operation` 及可用时的字段 `path`，可从 SDK、map 或 core 包导入。
 
 ## 共享行为 API（第二批）
 
-`createOEM()` 返回 `OEMMapAPI`，Widget 通过 `widget.map` 暴露同一接口。该对象不提供 Leaflet 实例、DOM 节点或自定义渲染器。所有写入命令与 `widget.setOptions()` 共用顺序队列；通过 `widget.map` 修改后，Widget 状态与官方控件同步更新。读取、订阅、`resize()`、`destroy()` 为同步操作。
+`createOEM()` 返回 `OEMMapAPI`，Widget 通过 `widget.map` 暴露同一接口。该对象不提供 Leaflet 实例、DOM 节点或自定义渲染器。地图配置、自定义点写入命令与 `widget.setOptions()` 共用顺序队列；通过 `widget.map` 修改后，Widget 状态与官方控件同步更新。读取、订阅、`resize()`、`destroy()` 为同步操作。
 
 | 能力 | API |
 | --- | --- |
@@ -302,3 +302,19 @@ tool.destroy();    // 停止订阅与未完成的加点；已有点保留
 | 直接取 `click.game.x` | 先检查 `gamePosition !== null` 或 `gameResolution` |
 
 颜色、字体、图标尺寸／锚点等仍为官方固定样式。没有主题变量、字体替换、样式插槽或任意渲染器入口。
+
+## 点位行为图层
+
+`widget.loadBehavior(id)` 和 `widget.map.loadBehavior(id)` 返回独立副本 `OEMBehavior[]`。数据通过发布版本的点位索引定位，按子区域懒加载并缓存，支持关联连线、蝴蝶路线、三气泡解锁组、开放或闭合轨迹；从关联宝箱也能读取完整蝴蝶路线。
+
+```ts
+const records = await widget.loadBehavior(pointId);
+await widget.setBehaviorPoint(pointId, { animate: true, flow: true });
+await widget.setBehaviorPoint(null); // 清空图层并停止播放。
+```
+
+展示要求点位属于当前地区，跨区需要先显式切换地区。行为选择独立于配置队列，新选择、传入 `null` 或切区会立即取消旧选择；销毁同时停止播放和等待。`animate`、`flow` 默认均为 `true`，两项均设为 `false` 可静态展示。切层会保留当前行为图层。命令在场景安装后完成，不等待动画结束。加载或格式错误会拒绝并触发 `error`，再次调用可重试。两个方法均支持 `signal`，取消本次等待不会破坏其他调用共用的资源请求。
+
+SDK 不自动选择或拦截点位点击，宿主可将详情面板或 `pointclick` 与这两个方法连接；替换原有点位链接时调用 `event.preventDefault()`。自定义点没有发布的行为数据。旧 manifest 没有 `behaviors`、点位不存在或子区域没有侧车文件时返回空数组并清空展示。安装新代码不会自动补充已有数据版本。
+
+几何坐标沿用侧车的归一化地图 `[z, x]`，不是发布像素或游戏坐标。投影时使用 `map.project({ regionId, z, x })`，无需乘原生缩放系数。Core 提供 `OEMBehavior`、`OEMBehaviorCatalog`、`decodeOEMBehaviors(rows, catalog)` 和 `findOEMBehaviors(records, pointId)`，可独立于地图读取数据。解码要求 schema 6 / `tuple-v1`，无效记录会明确报错。

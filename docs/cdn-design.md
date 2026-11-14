@@ -24,6 +24,7 @@ The channel is a small updateable pointer. The schema v1 release manifest select
 /marker/{gameVersion}/{releaseId}/locales/{locale}/places.json
 /marker/{gameVersion}/{releaseId}/type.json
 /marker/{gameVersion}/{releaseId}/point-index.json
+/marker/{gameVersion}/{releaseId}/behavior/{subregionId}.json
 /marker/assets/{sha256}/{assetPath}.webp
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
@@ -79,3 +80,9 @@ resources: {
 ```
 
 The SDK rejects absolute, protocol-relative, and parent-traversal asset paths inside manifests.
+
+## Optional behavior sidecars
+
+Schema v1 manifests may include `behaviors: { schemaVersion: 6, encoding: 'tuple-v1', layout, files, unlockIcon? }`. `files` maps subregion IDs to the usual `{ path, sha256, bytes }` references under `/marker/{gameVersion}/{releaseId}/behavior/`. The export preserves Atlos tuples and their provenance; the complete catalog and sidecar hashes contribute to the release identity. `unlockIcon` uses the existing content-addressed shared marker assets. Older manifests may omit the catalog.
+
+Each authored point is normalized map `[z, x]`, with no native-zoom scaling. Records are `r` (relation), `b` (butterfly path), `u` (three helper bubbles) and `t` (trajectory), with their codes and stage modes declared by `layout`. Export and runtime use the same strict decoder. A missing sidecar is an empty optional capability; an advertised but corrupt or unsupported sidecar is an error and can be retried. Adding this protocol support does not regenerate, modify or publish an existing data release.

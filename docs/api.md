@@ -50,6 +50,7 @@ These options can be passed at creation and later to `widget.setOptions()`.
 | `labels` | `boolean` | `true` |
 | `boundaries` | `boolean` | `false` |
 | `boundarySource` | `'oem' | 'game'` | `'oem'` |
+| `satellite` | `boolean` | `false` |
 | `markerClustering` | `boolean` | `true` |
 | `zoom` | Finite number within the region range | Region or subregion preset |
 | `center` | `{ x: number; z: number }` | Region or subregion preset |
@@ -134,9 +135,11 @@ interface OEMWidget {
 
 Methods other than `destroy()` throw after the Widget has been destroyed.
 
-The state contains `regionId`, `subregionId`, `floorId`, `locale`, `markerTypes`, `labels`, `boundaries`, `boundarySource`, `markerClustering`, `zoom`, and `center`. The `center` object uses horizontal `{ x, z }` coordinates; the Demo configuration labels these axes `X` and `Z`.
+The state contains `regionId`, `subregionId`, `floorId`, `locale`, `markerTypes`, `labels`, `boundaries`, `boundarySource`, `satellite`, `markerClustering`, `zoom`, and `center`. The `center` object uses horizontal `{ x, z }` coordinates; the Demo configuration labels these axes `X` and `Z`.
 
-`boundarySource: 'oem'` loads Atlos-drawn subregion boundaries. `boundarySource: 'game'` loads official game level-grid boundaries generated from `AKEData` and rendered with the same boundary layer. Game boundary data is available only for regions included in the current static release.
+`satellite: true` selects satellite imagery on the main floor when the release provides it. Other floors and uncovered regions use standard imagery while retaining the preference. Current coverage includes Valley 4 and Dijiang. Imagery native levels are independent of the region's published coordinate basis.
+
+`boundarySource: 'oem'` loads Atlos-drawn subregion boundaries. `boundarySource: 'game'` loads official game level-grid boundaries generated from `AKEDataMining/data/Json` and rendered with the same boundary layer. Game boundary data is available only for regions included in the current static release.
 
 ## Resources
 
@@ -169,7 +172,7 @@ const options = parseOEMUrlState('?r=VL&f=crate_i&s=VL_7&layer=M&z=2&cx=400&cz=-
 const widget = await createOEMWidget('#map', options);
 ```
 
-Supported keys are `r`, `s`, `f`, `l`, `layer`, `labels`, `names`, `boundaries`, `boundary`, `boundarySource`, `cluster`, `z`, `cx`, and `cz`. `z` is zoom; `cx` and `cz` are the horizontal map center coordinates.
+Supported keys are `r`, `s`, `f`, `l`, `layer`, `labels`, `names`, `boundaries`, `boundary`, `boundarySource`, `satellite`, `cluster`, `z`, `cx`, and `cz`. `z` is zoom; `cx` and `cz` are the horizontal map center coordinates.
 
 ## Lower-Level Renderer
 
@@ -218,13 +221,13 @@ unsubscribe();
 
 Optional layer failures notify `onError` but keep the map alive and do not reject the entire configuration update. Explicitly enabling the same failed layer also retries it. A resolved `retry()` means the attempt has finished; inspect resource state to determine success. Read state after creation too: events emitted during creation are not replayed.
 
-Invalid configuration and required custom-point loading failures reject the update without committing that configuration. Widget updates and all map writes share one ordered queue and should be awaited. Point writes no longer implicitly cancel earlier requests; use `map.loadCustomPoints(url, { signal })` for explicit cancellation. Destroying or cancelling creation stops pending SDK waits and prevents late responses from updating the instance. Cancellation uses `AbortError` unless the caller supplies a different reason.
+Invalid configuration and required custom-point loading failures reject the update without committing that configuration. Widget updates, configuration and custom-point writes share one ordered queue and should be awaited. Point writes no longer implicitly cancel earlier requests; use `map.loadCustomPoints(url, { signal })` for explicit cancellation. Destroying or cancelling creation stops pending SDK waits and prevents late responses from updating the instance. Cancellation uses `AbortError` unless the caller supplies a different reason.
 
 Static resources are consumed as trusted exports. Initialization performs only a constant-time schema-version check, without scanning manifest contents or validating individual points, labels, dictionaries, or polygon vertices. Full schema, hashes, byte counts, and tile-index consistency remain the export validator's responsibility. Call the core package's `validateOEMManifest()` explicitly when diagnosing an external manifest; host configuration and custom points still receive necessary input checks. Subregion geometry preloads in the background without delaying creation; clicks use the existing bounds fallback until it is available. `OEMError`, exported by the SDK, map, and core packages, includes `code`, `operation`, and a field `path` when available.
 
 ## Shared behavior API (batch two)
 
-`createOEM()` returns `OEMMapAPI`; `widget.map` exposes the same interface without Leaflet or DOM objects. All map writes and Widget updates share one ordered queue. Direct map commands synchronize the official Widget controls and state. Reads, subscriptions, `resize()`, and `destroy()` are synchronous.
+`createOEM()` returns `OEMMapAPI`; `widget.map` exposes the same interface without Leaflet or DOM objects. Configuration, custom-point writes and Widget updates share one ordered queue. Direct map commands synchronize the official Widget controls and state. Reads, subscriptions, `resize()`, and `destroy()` are synchronous.
 
 | Capability | API |
 | --- | --- |
@@ -239,6 +242,22 @@ Static resources are consumed as trusted exports. Initialization performs only a
 Writes resolve once the command has applied and its resource attempts have settled, not when all tiles or animations finish. Optional failures remain in resource state. Point command options accept `signal` to cancel waits or uncommitted operations. Destroy cancels the entire instance immediately. Enabling the points layer retains its type filter; use `update({ markerTypes: '*' })` to select all types.
 
 Custom-point reads return copies. Upsert adds or updates IDs while retaining untouched markers; removing absent IDs is a no-op. Whole batches are checked before application. `getPoint()` reads loaded published data in the current region independently of its display filter; `loadPoint()` may query other regions and caches the index/shards without changing the view or visible collection.
+
+## Authored behavior overlays
+
+`widget.loadBehavior(id)` (also `widget.map.loadBehavior`) returns copied `OEMBehavior[]` records for a published point. It uses the release point index and lazily caches the point's subregion sidecar. It does not enable markers or change the view. Relations, butterfly paths, three-bubble unlock groups and open/closed trajectories are supported; selecting a related chest also resolves its butterfly route.
+
+```ts
+const records = await widget.loadBehavior(pointId);
+await widget.setBehaviorPoint(pointId, { animate: true, flow: true });
+await widget.setBehaviorPoint(null); // Clear and stop playback.
+```
+
+`setBehaviorPoint` draws only in the current region; switch regions explicitly first. Selection playback is independent of the configuration queue: a newer selection, `null`, or a region change immediately cancels the previous selection. Destroy also stops playback and pending waits. `animate` and `flow` default to `true`; set both to `false` for a static overlay. Floor changes keep the selected behavior visible. The command resolves when the scene is installed, before playback completes. Fetch/format failures reject and emit `error`; calling again retries a failed load. Both methods accept `signal` to cancel the caller's wait without poisoning a shared resource request.
+
+No selection or click interception is installed automatically. A host can connect its detail panel or `pointclick` handler to these methods and use `event.preventDefault()` when replacing the normal published-point link. Custom points have no authored behavior. Releases without `manifest.behaviors`, unknown point IDs and subregions without a sidecar return `[]` and display nothing. Existing data releases are not populated automatically by installing new SDK code.
+
+Geometry uses normalized map `[z, x]` tuples, matching the authored sidecars; it is not native-zoom pixel or game space. For a point `[z, x]`, use `map.project({ regionId, z, x })`. Core exports `OEMBehavior`, `OEMBehaviorCatalog`, `decodeOEMBehaviors(rows, catalog)` and `findOEMBehaviors(records, pointId)` for hosts that consume data without a map. The decoder requires schema 6 / `tuple-v1` and rejects malformed records.
 
 ## Events and reusable coordinates
 

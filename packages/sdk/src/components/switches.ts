@@ -200,11 +200,17 @@ export const createLayerControl = (context: ControlContext): Control & { element
   const indicator = document.createElement('div');
   indicator.className = 'switchIndicator';
   const floorButtons = new Map<string, HTMLButtonElement>();
+  const satelliteButton = createButton('selectionItem floorItem');
+  satelliteButton.textContent = 'SAT';
+  satelliteButton.addEventListener('click', () =>
+    apply({ floor: 'M', satellite: !satelliteButton.classList.contains('selected') }),
+  );
+  element.append(satelliteButton);
   let currentRegion = '';
   let currentLocale = '';
   let currentFloor = 'M';
   mainButton.addEventListener('click', () => {
-    if (currentFloor !== 'M') apply({ floor: 'M' });
+    apply({ floor: 'M', satellite: false });
   });
 
   return {
@@ -218,13 +224,14 @@ export const createLayerControl = (context: ControlContext): Control & { element
         const floors = [...region.floors].sort(
           (left, right) => FLOOR_ORDER.indexOf(left.id) - FLOOR_ORDER.indexOf(right.id),
         );
-        element.hidden = floors.length <= 1;
+        element.hidden = floors.length <= 1 && !region.satellite;
+        satelliteButton.hidden = !region.satellite;
         for (const floor of floors) {
           const button = createButton('selectionItem floorItem');
           button.textContent = floor.id;
           button.addEventListener('click', () => {
             context.panels.collapse(mainButton);
-            apply({ floor: floor.id as OEMFloorId });
+            apply({ floor: floor.id as OEMFloorId, ...(floor.id === 'M' ? { satellite: false } : {}) });
           });
           floorButtons.set(floor.id, button);
           list.append(button);
@@ -235,10 +242,19 @@ export const createLayerControl = (context: ControlContext): Control & { element
         currentLocale = state.locale;
         const messages = getMessages(manifest, state.locale);
         setLabel(mainButton, messages.layerSelect);
+        setLabel(satelliteButton, messages.satellite ?? 'Satellite imagery');
         for (const [floorId, button] of floorButtons) setLabel(button, `${messages.layerSelect}: ${floorId}`);
       }
       if (currentFloor !== state.floorId) floorButtons.get(currentFloor)?.classList.remove('selected');
       currentFloor = state.floorId;
+      satelliteButton.classList.toggle(
+        'selected',
+        state.satellite && state.floorId === 'M' && !!region.satellite,
+      );
+      satelliteButton.setAttribute(
+        'aria-pressed',
+        String(state.satellite && state.floorId === 'M' && !!region.satellite),
+      );
       mainButton.classList.toggle('selected', currentFloor !== 'M');
       const selectedButton = floorButtons.get(currentFloor);
       selectedButton?.classList.add('selected');

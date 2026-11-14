@@ -40,11 +40,20 @@ const usesLocalResources = document.querySelector('script[src="/@vite/client"]')
 const stableResources: OEMResources = usesLocalResources
   ? { baseUrl: window.location.origin, manifestPath: '/channels/stable.json' }
   : { baseUrl: 'https://data.opendfieldmap.org', manifestPath: '/channels/stable.json' };
-const historicalResources: OEMResources = {
-  baseUrl: 'https://data.opendfieldmap.org',
-  manifestPath: '/releases/atlos-43b8a25/manifest.json',
-};
-const historicalBuild = '9885010-4';
+const historicalVersions: readonly DemoVersionOption[] = [
+  {
+    id: 'atlos-9c14835',
+    label: '1.5.3 (10506507-7)',
+    baseUrl: 'https://data.opendfieldmap.org',
+    manifestPath: '/releases/atlos-9c14835/manifest.json',
+  },
+  {
+    id: 'atlos-43b8a25',
+    label: '1.5.3 (9885010-4)',
+    baseUrl: 'https://data.opendfieldmap.org',
+    manifestPath: '/releases/atlos-43b8a25/manifest.json',
+  },
+];
 const defaultMarkerTypes = ['aurylene', 'crate_i', 'crate_ii', 'crate_iii', 'cratesurprise', 'cratelocked'];
 const defaultConfig: OEMWidgetConfig = {
   region: 'VL',
@@ -131,6 +140,7 @@ const toConfig = (state: OEMWidgetState): OEMWidgetConfig => ({
   labels: state.labels,
   boundaries: state.boundaries,
   boundarySource: state.boundarySource,
+  satellite: state.satellite,
   markerClustering: state.markerClustering,
   zoom: state.zoom,
   center: { ...state.center },
@@ -276,12 +286,7 @@ const initialize = async () => {
       baseUrl: stableResources.baseUrl,
       manifestPath: stableResources.manifestPath,
     },
-    {
-      id: 'atlos-43b8a25',
-      label: `1.5.3 (${historicalBuild})`,
-      baseUrl: historicalResources.baseUrl,
-      manifestPath: historicalResources.manifestPath,
-    },
+    ...historicalVersions.filter((version) => version.id !== stableManifest.releaseId),
   ];
   selectedVersion = versions[0];
   await loadVersion(selectedVersion, { ...defaultConfig, ...urlOptions }, stableManifest);

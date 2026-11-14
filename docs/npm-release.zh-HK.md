@@ -42,7 +42,7 @@ npm 套件使用 SemVer，並與以下版本獨立：
 
 - manifest `schemaVersion`，目前為 `1`；
 - `gameVersion`，用於按遊戲版本組織靜態路徑；
-- `gameBuild`，用於識別資源 build Hash 值；
+- `gameBuild`，用於識別資料來源的 build（舊資源 build；新版挖掘快照使用啟動器客戶端 build）；
 - `releaseId`，識別該遊戲版本內一份 manifest 及其不可變資料物件。
 
 同一 npm 套件版本可以透過相同 schema 支援多個遊戲資料 release。瓦片使用穩定物件路徑和單一瓦片內容版本，令未變更的快取鍵可跨資料 release 重用。
@@ -50,8 +50,8 @@ npm 套件使用 SemVer，並與以下版本獨立：
 使用發佈助手可以同步四個公開套件的版本、執行檢查並按依賴順序發佈：
 
 ```bash
-pnpm release:npm --version=0.3.0-beta
-pnpm release:npm --version=0.3.0-beta --publish --tag=beta
+pnpm release:npm --version=0.4.0-beta
+pnpm release:npm --version=0.4.0-beta --publish --tag=beta
 ```
 
 上傳成功後，助手會把 `latest` 移到本次版本，並從 registry 校驗指定 tag 與 `latest` 均已生效。加入 `--dry-run` 可以驗證發佈操作，但不會上傳或修改 dist-tag。

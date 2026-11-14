@@ -3,6 +3,7 @@ import { MarkerMotion, MarkerMotionPool, Motion, ease } from './canvasMarkerMoti
 import { MarkerPainter, type MarkerArt, type Sprite, type AnimatedSprite, type PulseLayers } from './canvasMarkerPaint';
 import { markerClasses as classes } from './canvasMarkerStyle';
 import { CanvasSpriteBatch } from './canvasSpriteBatch';
+import { canvasPadding } from './canvasViewport';
 
 type CanvasMarker = L.Marker;
 interface Entry {
@@ -16,6 +17,7 @@ interface Entry {
   pulseKeys?: [object, object, object];
   usingPulseLayers?: boolean;
   visible?: boolean;
+  inView: boolean;
   stack: number;
   reveal?: Motion;
   clusterUntil?: number;
@@ -63,6 +65,9 @@ export class CanvasMarkerSurface {
   private sequence = 0;
   private frame = 0;
   private disposed = false;
+  private viewportOffset = L.point(0, 0);
+  private cachedZoom = NaN;
+  private zooming = false;
   private width = 0;
   private height = 0;
   private deviceRatio = window.devicePixelRatio || 1;
@@ -136,6 +141,7 @@ export class CanvasMarkerSurface {
     this.watchResolution();
     window.addEventListener('resize', this.displayChanged);
     map.on('move resize viewreset', this.move);
+    map.on('zoomstart', this.zoomStart);
     map.on('zoomanim', this.zoom);
     map.on('zoomend', this.zoomEnd);
     map.on('unload', this.dispose);
@@ -150,7 +156,7 @@ export class CanvasMarkerSurface {
       if (!inner) return;
       entry = { marker, root, inner, art: { image: '', subImage: '', noFrame: has(inner, 'noFrameInner'), tier: '' },
         motion: this.motionPool.initial, x: NaN, y: NaN, base: this.map.project(marker.getLatLng(), 0), latlng: marker.getLatLng(), artDirty: true,
-        order: this.sequence++, completed: false, stack: 1, opacity: 1 };
+        order: this.sequence++, completed: false, stack: 1, opacity: 1, inView: false };
       this.entries.set(marker, entry); this.roots.set(root, entry);
       this.reorder = true; this.indexDirty = true;
       this.changed.add(entry);
@@ -246,7 +252,7 @@ export class CanvasMarkerSurface {
   }
   visualPosition(marker: L.Marker): L.LatLng | undefined {
     const entry = this.entries.get(marker);
-    return entry && (Number.isFinite(entry.x) ? this.map.containerPointToLatLng([entry.x, entry.y]) : entry.latlng);
+    return entry && (Number.isFinite(entry.x) ? this.map.containerPointToLatLng(L.point(entry.x, entry.y).subtract(this.viewportOffset)) : entry.latlng);
   }
   beginClusterTransition(): void { this.clusterTransition = true; }
   endClusterTransition(): void { this.clusterTransition = false; this.full = true; this.request(); }
@@ -397,17 +403,28 @@ export class CanvasMarkerSurface {
       this.reorder = false; this.full = true;
     }
     if (this.indexDirty) this.rebuildIndex();
-    const size = this.map.getSize();
+    const viewportSize = this.map.getSize();
+    const padding = this.zooming || this.animation ? 0 : canvasPadding(viewportSize.x, viewportSize.y);
+    const size = viewportSize.add([padding * 2, padding * 2]);
     const pixelWidth = Math.ceil(size.x * this.renderRatio), pixelHeight = Math.ceil(size.y * this.renderRatio);
-    if (size.x !== this.width || size.y !== this.height || this.canvas.width !== pixelWidth || this.canvas.height !== pixelHeight) {
+    const resized = size.x !== this.width || size.y !== this.height || this.canvas.width !== pixelWidth || this.canvas.height !== pixelHeight;
+    if (resized) {
       this.width = size.x; this.height = size.y;
       this.canvas.width = pixelWidth; this.canvas.height = pixelHeight;
-      // Preserve the CSS coordinate space; the browser downsamples the complete scene
-      // when physical DPR is lower than our internal rendering density.
       this.canvas.style.width = `${pixelWidth / this.renderRatio}px`; this.canvas.style.height = `${pixelHeight / this.renderRatio}px`; this.full = true;
     }
-    const offset = this.map.containerPointToLayerPoint(L.point(0, 0));
+    const viewportLayer = this.map.containerPointToLayerPoint(L.point(0, 0));
+    const viewportOrigin = this.map.getPixelOrigin().add(viewportLayer);
+    const shift = viewportOrigin.subtract(this.renderOrigin);
+    const retained = padding > 0 && !resized && !this.animation && this.cachedZoom === this.map.getZoom()
+      && shift.x >= 0 && shift.y >= 0 && shift.x + viewportSize.x <= this.width && shift.y + viewportSize.y <= this.height;
+    const offset = retained ? this.renderOrigin.subtract(this.map.getPixelOrigin()) : viewportLayer.subtract([padding, padding]);
+    if (!retained && (!this.viewportOffset.equals(shift) || this.cachedZoom !== this.map.getZoom())) this.full = true;
+    const previousOffset = this.viewportOffset;
+    this.viewportOffset = retained ? shift : L.point(padding, padding);
+    this.cachedZoom = this.map.getZoom();
     if (!this.canvasOffset?.equals(offset)) { L.DomUtil.setPosition(this.canvas, offset); this.canvasOffset = offset; }
+    const view = { x: this.viewportOffset.x, y: this.viewportOffset.y, width: viewportSize.x, height: viewportSize.y };
     if (this.full || this.animation || this.moving.size) {
       const origin = this.map.getPixelOrigin().add(offset);
       const scale = this.map.getZoomScale(this.map.getZoom(), 0);
@@ -433,13 +450,38 @@ export class CanvasMarkerSurface {
       for (const entry of this.ordered) {
         const visible = entry.x + (entry.art.subImage ? 66 : 38) > 0 && entry.x - 38 < this.width
           && entry.y + 40 > 0 && entry.y - 54 < this.height;
-        if (entry.visible && !visible) { this.releaseEntry(entry); entry.marker.fire('viewporthide'); }
+        if (entry.visible && !visible) this.releaseEntry(entry);
         entry.visible = visible;
+        // A full redraw already visits every point. Maintain viewport membership
+        // here instead of querying and allocating another visible set during zoom.
+        const onscreen = visible && (!padding || entry.x + (entry.art.subImage ? 66 : 38) > view.x
+          && entry.x - 38 < view.x + view.width && entry.y + 40 > view.y && entry.y - 54 < view.y + view.height);
+        if (onscreen !== entry.inView) {
+          entry.inView = onscreen;
+          if (!onscreen) entry.marker.fire('viewporthide');
+        }
       }
-      if (this.pointer && !this.pointer.buttons) this.setHovered(this.hit(this.pointer), this.pointer);
       // Include the terminal frame before retiring motion; otherwise the previous subpixel pose sticks.
       for (const entry of this.moving) if (!entry.offsetX?.active(now) && !entry.offsetY?.active(now)) this.moving.delete(entry);
+    } else {
+      // Only points crossing a viewport edge can change membership during a
+      // retained pan. Query its swept edges instead of allocating a full view set.
+      const dx = Math.abs(view.x - previousOffset.x), dy = Math.abs(view.y - previousOffset.y);
+      const x = Math.min(view.x, previousOffset.x), y = Math.min(view.y, previousOffset.y);
+      const edges: Rect[] = [];
+      if (dx) edges.push({ x, y, width: dx, height: view.height + dy },
+        { x: x + view.width, y, width: dx, height: view.height + dy });
+      if (dy) edges.push({ x, y, width: view.width + dx, height: dy },
+        { x, y: y + view.height, width: view.width + dx, height: dy });
+      for (const edge of edges) for (const entry of this.query(edge)) {
+        const inView = intersects(bounds(entry), view);
+        if (inView === entry.inView) continue;
+        entry.inView = inView;
+        if (!inView) entry.marker.fire('viewporthide');
+      }
     }
+    // A stationary pointer can change its target when the cached image moves.
+    if (this.pointer && !this.pointer.buttons) this.setHovered(this.hit(this.pointer), this.pointer);
     for (const entry of this.active) this.dirty.push(bounds(entry));
     if (!this.batch && this.dirty.length > 32) this.full = true;
     const needsPaint = this.full || this.dirty.length > 0;
@@ -500,7 +542,7 @@ export class CanvasMarkerSurface {
       this.pendingSwap.canvas.replaceWith(this.canvas); this.pendingSwap.batch.dispose(); this.pendingSwap = undefined;
     }
     this.full = false; this.dirty = [];
-    const viewport = { x: 0, y: 0, width: this.width, height: this.height };
+    const viewport = { x: this.viewportOffset.x, y: this.viewportOffset.y, width: viewportSize.x, height: viewportSize.y };
     for (const entry of this.active) {
       if (entry.motion.state?.appearing && now >= entry.motion.fadeStart + 150) {
         // The scene owns appearance cleanup; semantic nodes do not run CSS animations.
@@ -511,7 +553,6 @@ export class CanvasMarkerSurface {
     if (this.animation || this.ghosts.length || [...this.active].some(entry => intersects(bounds(entry), viewport))) this.request();
   };
   private paintBatch(now: number): void {
-    const batch = this.batch!;
     let clip: Rect | undefined, candidates = this.ordered;
     if (!this.full && this.dirty.length) {
       let left = this.width, top = this.height, right = 0, bottom = 0;
@@ -534,6 +575,7 @@ export class CanvasMarkerSurface {
         }
       }
     }
+    const batch = this.batch!;
     batch.begin(this.canvas.width, this.canvas.height, this.renderRatio, candidates.length + 2 * this.active.size + this.ghosts.length, clip);
     for (const entry of candidates) {
       if (!entry.visible) continue;
@@ -554,7 +596,7 @@ export class CanvasMarkerSurface {
         batch.add(entry, sprite, entry.x, entry.y, alpha);
       }
     }
-    const origin = this.map.getPixelOrigin().add(this.map.containerPointToLayerPoint(L.point(0, 0))), scale = this.map.getZoomScale(this.map.getZoom(), 0);
+    const origin = this.map.getPixelOrigin().add(this.canvasOffset ?? L.point(0, 0)), scale = this.map.getZoomScale(this.map.getZoom(), 0);
     for (const ghost of this.ghosts) {
       const progress = ease((now - ghost.start) / 320, [0.6, 0, 0, 1]);
       batch.add(ghost, ghost.sprite, (ghost.base.x + (ghost.target.x - ghost.base.x) * progress) * scale - origin.x,
@@ -562,22 +604,23 @@ export class CanvasMarkerSurface {
     }
     batch.end();
   }
+
   private move = (): void => {
-    this.full = true;
     // Fractional wheel zoom already runs in rAF. Paint in that frame with the new tile origin.
     if (!this.animation) this.draw(performance.now());
   };
+  private zoomStart = (): void => { this.zooming = true; };
   private zoom = (event: L.ZoomAnimEvent): void => {
-    this.animation = { start: performance.now(), from: new Map(this.ordered.map(entry => [entry, Number.isFinite(entry.x) ? L.point(entry.x, entry.y) : this.map.latLngToContainerPoint(entry.latlng)])),
+    this.animation = { start: performance.now(), from: new Map(this.ordered.map(entry => [entry, Number.isFinite(entry.x) ? L.point(entry.x, entry.y).subtract(this.viewportOffset) : this.map.latLngToContainerPoint(entry.latlng)])),
       zoom: event.zoom, center: event.center };
     for (const entry of this.entries.values()) { entry.offsetX?.jump(0); entry.offsetY?.jump(0); }
     this.moving.clear();
     this.request();
   };
-  private zoomEnd = (): void => { this.animation = undefined; this.full = true; this.draw(performance.now()); };
+  private zoomEnd = (): void => { this.zooming = false; this.animation = undefined; this.full = true; this.draw(performance.now()); };
   private hit(event: MouseEvent): Entry | undefined {
     if (event.target instanceof Element && event.target.closest('.leaflet-control,button,input,select,textarea,a,[role="button"],.leaflet-marker-icon')) return undefined;
-    const point = this.map.mouseEventToContainerPoint(event);
+    const point = this.map.mouseEventToContainerPoint(event).add(this.viewportOffset);
     let hit: Entry | undefined;
     for (const entry of this.query({ x: point.x, y: point.y, width: 0, height: 0 })) {
       if (!(entry.marker.options.interactive || entry.root.classList.contains('leaflet-interactive')) || entry.opacity === 0) continue;
@@ -653,7 +696,7 @@ export class CanvasMarkerSurface {
     this.disposed = true; cancelAnimationFrame(this.frame); this.observer.disconnect(); this.painter.dispose();
     this.batch?.dispose(); this.pendingSwap?.batch.dispose();
     this.iconTemplates.clear();
-    this.map.off('move resize viewreset', this.move); this.map.off('zoomanim', this.zoom); this.map.off('zoomend', this.zoomEnd); this.map.off('unload', this.dispose);
+    this.map.off('move resize viewreset', this.move); this.map.off('zoomstart', this.zoomStart); this.map.off('zoomanim', this.zoom); this.map.off('zoomend', this.zoomEnd); this.map.off('unload', this.dispose);
     const container = this.map.getContainer();
     container.removeEventListener('pointermove', this.pointerMove, true); container.removeEventListener('pointerleave', this.pointerLeave);
     container.removeEventListener('pointerdown', this.pointerDown, true); container.removeEventListener('click', this.click, true); container.removeEventListener('dblclick', this.doubleClick, true);
