@@ -37,23 +37,34 @@ app.append(widgetHost, error);
 
 const urlOptions = window.location.search ? parseOEMUrlPatch(window.location.search) : {};
 const usesLocalResources = document.querySelector('script[src="/@vite/client"]') !== null;
+const dataOrigin = 'https://data.opendfieldmap.org';
 const stableResources: OEMResources = usesLocalResources
   ? { baseUrl: window.location.origin, manifestPath: '/channels/stable.json' }
-  : { baseUrl: 'https://data.opendfieldmap.org', manifestPath: '/channels/stable.json' };
-const historicalVersions: readonly DemoVersionOption[] = [
-  {
-    id: 'atlos-9c14835',
-    label: '1.5.3 (10506507-7)',
-    baseUrl: 'https://data.opendfieldmap.org',
-    manifestPath: '/releases/atlos-9c14835/manifest.json',
-  },
-  {
-    id: 'atlos-43b8a25',
-    label: '1.5.3 (9885010-4)',
-    baseUrl: 'https://data.opendfieldmap.org',
-    manifestPath: '/releases/atlos-43b8a25/manifest.json',
-  },
-];
+  : { baseUrl: dataOrigin, manifestPath: '/channels/stable.json' };
+type ReleaseHistory = {
+  schemaVersion: number;
+  versions: Array<{ id: string; gameVersion: string; gameBuild: string; manifestPath: string }>;
+};
+
+const loadHistory = async (): Promise<ReleaseHistory['versions']> => {
+  try {
+    const history = await fetchOEMJson<ReleaseHistory>(
+      resolveOEMAsset(dataOrigin, '/channels/history.json'),
+      AbortSignal.timeout(5000),
+    );
+    if (history.schemaVersion !== 1 || !Array.isArray(history.versions)) return [];
+    return history.versions.filter(
+      (entry) =>
+        entry &&
+        /^atlos-[a-f0-9]{7}$/.test(entry.id) &&
+        /^\d+_\d+_\d+$/.test(entry.gameVersion) &&
+        /^\d+-\d+$/.test(entry.gameBuild) &&
+        entry.manifestPath === `/releases/${entry.id}/manifest.json`,
+    );
+  } catch {
+    return [];
+  }
+};
 const defaultMarkerTypes = ['aurylene', 'crate_i', 'crate_ii', 'crate_iii', 'cratesurprise', 'cratelocked'];
 const defaultConfig: OEMWidgetConfig = {
   region: 'VL',
@@ -278,7 +289,7 @@ const panelCallbacks = {
 };
 
 const initialize = async () => {
-  const stableManifest = await loadOEMManifest(stableResources);
+  const [stableManifest, history] = await Promise.all([loadOEMManifest(stableResources), loadHistory()]);
   versions = [
     {
       id: stableManifest.releaseId,
@@ -286,7 +297,18 @@ const initialize = async () => {
       baseUrl: stableResources.baseUrl,
       manifestPath: stableResources.manifestPath,
     },
-    ...historicalVersions.filter((version) => version.id !== stableManifest.releaseId),
+    ...history
+      .filter(
+        (entry) =>
+          entry.id !== stableManifest.releaseId &&
+          !(entry.gameVersion === stableManifest.gameVersion && entry.gameBuild === stableManifest.gameBuild),
+      )
+      .map((entry) => ({
+        id: entry.id,
+        label: `${entry.gameVersion.replaceAll('_', '.')} (${entry.gameBuild})`,
+        baseUrl: dataOrigin,
+        manifestPath: entry.manifestPath,
+      })),
   ];
   selectedVersion = versions[0];
   await loadVersion(selectedVersion, { ...defaultConfig, ...urlOptions }, stableManifest);

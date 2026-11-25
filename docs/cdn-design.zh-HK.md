@@ -8,12 +8,15 @@ SDK 從一個可設定的資源源載入靜態內容。預設位址為 `https://
 
 ```text
 /channels/stable.json
+/channels/history.json
   → /releases/{releaseId}/manifest.json
       → 不可變點位和地圖物件
       → 帶單一瓦片快取版本的穩定瓦片物件
 ```
 
 channel 是可更新的小型指標。schema v1 release manifest 選擇一套完整資源，manifest 內的所有路徑都相對於設定的資源源。
+
+Demo 從 `/channels/history.json` 讀取各遊戲版本、各 hotfix 對應的最新資料批次。資料發佈通過預檢後會更新索引。`pnpm deploy:data -- --confirm-release <releaseId> --history-only` 可從已發佈的 manifest 重建索引。
 
 ## 公共路徑
 

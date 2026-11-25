@@ -15,10 +15,13 @@ The SDK loads static content from one configurable origin. The default is `https
 
 The channel is a small updateable pointer. The schema v1 release manifest selects a complete resource set. All paths inside the manifest are relative to the configured origin.
 
+The Demo reads `/channels/history.json` for the newest generated release of each game version and hotfix pair. Data publication refreshes this index after preflight. `pnpm deploy:data -- --confirm-release <releaseId> --history-only` rebuilds the index from the published manifests.
+
 ## Public Paths
 
 ```text
 /channels/stable.json
+/channels/history.json
 /releases/{releaseId}/manifest.json
 /marker/{gameVersion}/{releaseId}/points/{subregionId}.json
 /marker/{gameVersion}/{releaseId}/locales/{locale}/places.json

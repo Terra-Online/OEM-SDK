@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { historyEntry, latestReleaseHistory } from './release-history.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -11,6 +12,7 @@ const wrangler = require.resolve('wrangler');
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const refreshPlan = args.includes('--refresh-plan');
+const historyOnly = args.includes('--history-only');
 const confirmationIndex = args.indexOf('--confirm-release');
 const confirmedRelease = confirmationIndex >= 0 ? args[confirmationIndex + 1] : undefined;
 const localBuildConfig = JSON.parse(await fs.readFile(path.join(root, 'config/config.r2.json'), 'utf8'))?.web
@@ -100,6 +102,78 @@ const rcloneEnv = {
   [`RCLONE_CONFIG_${remoteName.toUpperCase()}_REGION`]: localR2Config.region || 'auto',
 };
 const runRclone = (rcloneArgs, capture = false) => runCommand('rclone', rcloneArgs, capture, rcloneEnv);
+const revalidateCacheControl = 'Cache-Control: public, no-cache, must-revalidate';
+const historyPath = 'channels/history.json';
+
+async function verifyPublishedChannel() {
+  const remoteChannel = await runRclone(
+    ['cat', `${remoteRoot}/channels/stable.json`, '--s3-no-check-bucket'],
+    true,
+  );
+  if (digest(remoteChannel.stdout) !== digest(channelBytes))
+    throw new Error('Published stable channel differs from the prepared release');
+}
+
+async function updateHistory(rebuild = false) {
+  const origin = `https://${plan.domain}`;
+  let entries;
+  if (!rebuild) {
+    const response = await fetch(`${origin}/${historyPath}`, { signal: AbortSignal.timeout(15000) });
+    if (response.ok) {
+      const previous = await response.json();
+      if (previous.schemaVersion !== 1 || !Array.isArray(previous.versions))
+        throw new Error('Invalid published release history');
+      entries = previous.versions;
+    } else if (response.status !== 404) {
+      throw new Error(`Could not read published release history (${response.status})`);
+    }
+  }
+  if (!entries) {
+    const listing = await runRclone(
+      ['lsf', `${remoteRoot}/releases`, '--dirs-only', '--s3-no-check-bucket'],
+      true,
+    );
+    const ids = listing.stdout
+      .split(/\r?\n/)
+      .filter((directory) => /^atlos-[a-f0-9]{7}\/$/.test(directory))
+      .map((directory) => directory.slice(0, -1));
+    const archived = await Promise.all(
+      ids.map(async (id) => {
+        const response = await fetch(`${origin}/releases/${id}/manifest.json`, {
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) throw new Error(`Could not read archived release ${id} (${response.status})`);
+        return historyEntry(await response.json(), id);
+      }),
+    );
+    entries = archived.filter(Boolean);
+  }
+  const active = historyEntry(JSON.parse(manifestBytes), plan.releaseId);
+  if (!active) throw new Error('The prepared release has no hotfix build');
+  const history = latestReleaseHistory([...entries, active]);
+  const bytes = `${JSON.stringify(history)}\n`;
+  const filename = 'artifacts/r2/history.json';
+  await fs.writeFile(path.join(root, filename), bytes);
+  await runRclone([
+    'copyto',
+    filename,
+    `${remoteRoot}/${historyPath}`,
+    '--s3-no-check-bucket',
+    '--header-upload',
+    revalidateCacheControl,
+  ]);
+  const verified = await runRclone(['cat', `${remoteRoot}/${historyPath}`, '--s3-no-check-bucket'], true);
+  if (verified.stdout !== bytes)
+    throw new Error('Published release history differs from the generated index');
+  console.log(`Published history for ${history.versions.length} hotfixes to ${origin}/${historyPath}`);
+}
+
+if (historyOnly) {
+  await verifyPublishedChannel();
+  await updateHistory(true);
+  process.exit(0);
+}
+
 const commonRcloneArgs = [
   '--s3-no-check-bucket',
   '--ignore-times',
@@ -151,22 +225,16 @@ if (!domains.stdout.includes(`domain:            ${plan.domain}`)) {
 }
 
 await runCommand(process.execPath, [path.join(root, 'scripts/validate-r2.mjs'), '--preflight']);
+await updateHistory();
 await runRclone([
   'copyto',
   'public/channels/stable.json',
   `${remoteRoot}/channels/stable.json`,
   '--s3-no-check-bucket',
   '--header-upload',
-  'Cache-Control: public, no-cache, must-revalidate',
+  revalidateCacheControl,
 ]);
 
-const localChannel = channel;
-const remoteChannel = await runRclone(
-  ['cat', `${remoteRoot}/channels/stable.json`, '--s3-no-check-bucket'],
-  true,
-);
-const published = JSON.parse(remoteChannel.stdout);
-if (published.manifest?.path !== localChannel.manifest?.path)
-  throw new Error('Published stable channel verification failed');
+await verifyPublishedChannel();
 await runCommand(process.execPath, [path.join(root, 'scripts/validate-r2.mjs')]);
 console.log(`Published ${plan.releaseId} to https://${plan.domain}/channels/stable.json`);

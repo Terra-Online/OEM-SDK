@@ -15,10 +15,13 @@ SDK 从一个可配置的资源源加载静态内容。默认地址为 `https://
 
 channel 是可更新的小型指针。schema v1 release manifest 选择一套完整资源，manifest 内的所有路径都相对于配置的资源源。
 
+Demo 从 `/channels/history.json` 读取各游戏版本、各 hotfix 对应的最新数据批次。数据发布通过预检后会刷新索引。`pnpm deploy:data -- --confirm-release <releaseId> --history-only` 可从已发布的 manifest 重建索引。
+
 ## 公共路径
 
 ```text
 /channels/stable.json
+/channels/history.json
 /releases/{releaseId}/manifest.json
 /marker/{gameVersion}/{releaseId}/points/{subregionId}.json
 /marker/{gameVersion}/{releaseId}/locales/{locale}/places.json
