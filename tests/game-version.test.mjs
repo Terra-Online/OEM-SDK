@@ -8,6 +8,7 @@ import {
   normalizeGameVersion,
   parseLauncherBuild,
   parseLatestGameVersion,
+  resolveGameVersion,
 } from '../scripts/game-version.mjs';
 
 describe('Endfield game version resolution', () => {
@@ -21,6 +22,17 @@ describe('Endfield game version resolution', () => {
     expect(normalizeGameBuild('10506507-7')).toBe('10506507-7');
     expect(formatGameVersionLabel('1_5_3', '10506507-7')).toBe('1.5.3 (10506507-7)');
     expect(() => normalizeGameBuild('../10506507-7')).toThrow('Invalid Endfield data build');
+  });
+
+  it('uses an explicit client build without consulting a mining checkout', async () => {
+    const version = await resolveGameVersion(
+      ['--game-version=1.7.2', '--game-build=12026241-3'],
+      {},
+      'unused-mining-checkout',
+    );
+    expect(version.gameVersionLabel).toBe('1.7.2 (12026241-3)');
+    expect(version.buildSource).toBe('argument');
+    expect(version.buildCommit).toBeUndefined();
   });
 
   it('reads the latest game response from a batch result', () => {

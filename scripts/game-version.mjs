@@ -104,7 +104,7 @@ export const resolveGameVersion = async (
     .find((entry) => entry.startsWith('--game-build='))
     ?.slice('--game-build='.length);
   const explicitBuild = buildArgument || env.OEM_GAME_BUILD;
-  const dataBuild = resolveAkeDataBuild(akeDataRoot);
+  const dataBuild = explicitBuild ? undefined : resolveAkeDataBuild(akeDataRoot);
   const buildPayload =
     !explicitBuild && !dataBuild ? (launcher ?? (await fetchLauncherVersion())) : undefined;
   if (buildPayload && parseLatestGameVersion(buildPayload).path !== version.path)
@@ -116,9 +116,10 @@ export const resolveGameVersion = async (
     ...version,
     gameBuild,
     gameVersionLabel: formatGameVersionLabel(version, gameBuild),
-    buildCommit:
-      dataBuild?.buildCommit ??
-      execFileSync('git', ['-C', akeDataRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    buildCommit: explicitBuild
+      ? undefined
+      : (dataBuild?.buildCommit ??
+        execFileSync('git', ['-C', akeDataRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()),
     source: explicit ? (argument ? 'argument' : 'environment') : 'hypergryph-launcher',
     buildSource: explicitBuild
       ? buildArgument

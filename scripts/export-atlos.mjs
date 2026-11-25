@@ -27,6 +27,7 @@ await fs.rm(output, { recursive: true, force: true });
 const sha256 = (content) => createHash('sha256').update(content).digest('hex');
 const pointIdLimit = 1n << 36n;
 const sourceFiles = {};
+const gameDataSourcePrefix = gameDataRoot === akeDataRoot ? 'AKEData/' : 'GameData/';
 const includeLicensedNovecento =
   process.env.OEM_INCLUDE_LICENSED_NOVECENTO === '1' || args.includes('--include-licensed-novecento');
 const read = async (relative) => {
@@ -36,7 +37,7 @@ const read = async (relative) => {
 };
 const readAKEData = async (relative) => {
   const bytes = await fs.readFile(path.join(gameDataRoot, relative));
-  sourceFiles[`${gameDataRoot === akeDataRoot ? 'AKEData' : 'GameData'}/${relative}`] = sha256(bytes);
+  sourceFiles[`${gameDataSourcePrefix}${relative}`] = sha256(bytes);
   return JSON.parse(bytes.toString());
 };
 const write = async (relative, content) => {
@@ -780,6 +781,25 @@ for (const namespace of ['marker', 'map']) {
     path.join(output, namespace, gameVersion, releaseId),
   );
 }
+const gameDataFiles = Object.keys(sourceFiles)
+  .filter((filename) => filename.startsWith(gameDataSourcePrefix))
+  .map((filename) => filename.slice(gameDataSourcePrefix.length));
+let gameDataCommit;
+try {
+  // A client extract can live inside another checkout. Its files must be tracked
+  // and match HEAD before that checkout's commit can describe the boundary data.
+  execFileSync('git', ['-C', gameDataRoot, 'ls-files', '--error-unmatch', '--', ...gameDataFiles], {
+    stdio: 'ignore',
+  });
+  execFileSync('git', ['-C', gameDataRoot, 'diff', '--quiet', 'HEAD', '--', ...gameDataFiles], {
+    stdio: 'ignore',
+  });
+  gameDataCommit = execFileSync('git', ['-C', gameDataRoot, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+} catch {
+  // The export report records the exact input hashes for a local snapshot.
+}
 const manifest = {
   schemaVersion: SCHEMA_VERSION,
   gameVersion,
@@ -801,10 +821,8 @@ const manifest = {
   source: {
     repository: 'Atlos',
     commit: execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    gameDataRepository: 'AKEDataMining',
-    gameDataCommit: execFileSync('git', ['-C', gameDataRoot, 'rev-parse', 'HEAD'], {
-      encoding: 'utf8',
-    }).trim(),
+    gameDataRepository: gameDataCommit ? 'AKEDataMining' : 'local snapshot',
+    gameDataCommit,
     usage:
       'Local development snapshot only. SDK AGPL-3.0; asset redistribution permission must be confirmed separately.',
   },
