@@ -29,6 +29,7 @@ The channel is a small updateable pointer. The schema v1 release manifest select
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.game.json
+/map/{gameVersion}/{releaseId}/supplements/{regionId}.json
 /tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
 /tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
 /fonts/harmony/{sha256}/HMSans.woff2
@@ -49,6 +50,8 @@ no floor suffix; additional floors use a lowercase suffix such as `_l1`.
 Consumers should provide only `baseUrl` and `manifestPath`. They should not construct individual content paths.
 
 OEM and game boundary files share the same readable collection shape: `{ count, boundaries }`. Each boundary has an `id` and polygon `rings` made of `{ x, z }` points. The owning `regionId` is supplied by the manifest reference and is not repeated at every point. Game level-grid cells are merged by level before publication; shared internal edges are removed while the exact grid coverage remains recoverable from the merged rings.
+
+The optional `regions[].walls` reference contains wall segments grouped by subregion ID. Each row is `[wallId, tier, [[z1, x1], [z2, x2]]]` in normalized map coordinates, with tier `0` denoting the main floor. The segments provide static geometry for overlays.
 
 ## Hosting Contract
 

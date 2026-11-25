@@ -27,11 +27,13 @@ const hasPreparedData = async () => {
       ...(manifest.fonts ?? []),
       ...(manifest.fontLicenses ?? []),
       ...Object.values(manifest.locales ?? {}),
+      ...Object.values(manifest.behaviors?.files ?? {}),
       ...(manifest.points ?? []),
       ...(manifest.regions ?? []).flatMap((region) => [
         ...(region.points ?? []),
         region.labels,
         region.boundaries,
+        region.walls,
         region.gameBoundaries,
       ]),
     ].filter((reference) => reference && typeof reference.path === 'string');

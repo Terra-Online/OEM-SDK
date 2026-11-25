@@ -28,6 +28,7 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.game.json
+/map/{gameVersion}/{releaseId}/supplements/{regionId}.json
 /tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
 /tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
 /fonts/harmony/{sha256}/HMSans.woff2
@@ -39,6 +40,8 @@ channel 是可更新的小型指针。schema v1 release manifest 选择一套完
 使用方只需配置 `baseUrl` 和 `manifestPath`，不应自行拼接单个内容路径。
 
 OEM 和 Game 边界文件统一使用可读的 `{ count, boundaries }` 集合结构。每条边界包含 `id`，polygon `rings` 中的点为 `{ x, z }`；所属 `regionId` 由 manifest 引用确定，不在每个点中重复。游戏关卡网格会按 level 合并后发布，删除共享内边，同时仍可从合并后的环精确还原网格覆盖范围。
+
+可选的 `regions[].walls` 引用按子区域 ID 存放墙体线段。每条记录为 `[wallId, tier, [[z1, x1], [z2, x2]]]`，端点采用归一化地图坐标，`tier` 为 `0` 表示主图层。线段供静态地图叠层使用。
 
 ## 托管契约
 

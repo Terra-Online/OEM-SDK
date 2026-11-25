@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodeOEMBehaviors, gameToOEMPosition, mapToGameXZPosition } from './core-codec.mjs';
+import { validateAtlosWalls } from './atlos-supplements.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const SCHEMA_VERSION = 1;
@@ -281,6 +282,10 @@ for (const region of manifest.regions) {
   if (region.boundaries) {
     requirePath(region.boundaries.path, `${mapRoot}/boundaries/${region.id}.json`);
     validateBoundaryCollection(await readRef(region.boundaries), region.id, true);
+  }
+  if (region.walls) {
+    requirePath(region.walls.path, `${mapRoot}/supplements/${region.id}.json`);
+    validateAtlosWalls(await readRef(region.walls), region);
   }
   if (!region.gameBoundaries) fail(`Region has no game boundary data: ${region.id}`);
   requirePath(region.gameBoundaries.path, `${mapRoot}/boundaries/${region.id}.game.json`);

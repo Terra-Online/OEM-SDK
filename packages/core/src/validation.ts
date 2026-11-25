@@ -123,6 +123,8 @@ export function validateOEMManifest(value: unknown): OEMManifest {
     }
     if (!isTransform(region.gameTransform)) invalid(`${path}.gameTransform`, 'Invalid coordinate transform');
     if (!Array.isArray(region.points)) invalid(`${path}.points`, 'Expected point resource references');
+    if (region.walls !== undefined && (!isObject(region.walls) || !isText(region.walls.path)))
+      invalid(`${path}.walls`, 'Expected a wall resource reference');
     if (!isObject(region.coverage)) invalid(`${path}.coverage`, 'Expected coverage lookup');
     if (!isObject(region.locales)) invalid(`${path}.locales`, 'Expected region names');
   }

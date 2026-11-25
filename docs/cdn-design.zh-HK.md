@@ -28,6 +28,7 @@ channel 是可更新的小型指標。schema v1 release manifest 選擇一套完
 /map/{gameVersion}/{releaseId}/labels/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.json
 /map/{gameVersion}/{releaseId}/boundaries/{regionId}.game.json
+/map/{gameVersion}/{releaseId}/supplements/{regionId}.json
 /tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}.webp?v={tileHash}
 /tiles/{gameVersion}/{gameBuild}/{regionId}/{z}/{x}/{y}_{floorId}.webp?v={tileHash}
 /fonts/harmony/{sha256}/HMSans.woff2
@@ -39,6 +40,8 @@ channel 是可更新的小型指標。schema v1 release manifest 選擇一套完
 使用方只需設定 `baseUrl` 和 `manifestPath`，不應自行拼接單一內容路徑。
 
 OEM 和 Game 邊界檔案統一使用可讀的 `{ count, boundaries }` 集合結構。每條邊界包含 `id`，polygon `rings` 中的點為 `{ x, z }`；所屬 `regionId` 由 manifest 引用確定，不在每個點中重複。遊戲關卡網格會按 level 合併後發佈，移除共享內邊，同時仍可從合併後的環精確還原網格覆蓋範圍。
+
+可選的 `regions[].walls` 引用按子區域 ID 儲存牆體線段。每筆記錄為 `[wallId, tier, [[z1, x1], [z2, x2]]]`，端點採用正規化地圖座標，`tier` 為 `0` 代表主圖層。線段供靜態地圖圖層使用。
 
 ## 託管契約
 

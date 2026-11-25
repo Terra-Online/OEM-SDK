@@ -124,6 +124,8 @@ export interface OEMRegion {
   boundaries?: OEMAsset;
   /** Official game-space level-grid boundaries converted to OEM map coordinates. */
   gameBoundaries?: OEMAsset;
+  /** Optional reference wall segments grouped by subregion in Atlos tuple format. */
+  walls?: OEMAsset;
   coverage: Record<string, Record<string, Record<string, number[]>>>;
   /** Optional main-floor imagery, using the same coordinates as standard tiles. */
   satellite?: OEMFloor & { coverage: OEMRegion['coverage'] };

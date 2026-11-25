@@ -7,6 +7,7 @@ import { resolveGameVersion, DEFAULT_GAME_DATA_ROOT } from './game-version.mjs';
 import { getControlMessages } from './atlos-controls.mjs';
 import { gameToOEMPosition } from './core-codec.mjs';
 import { exportAtlosBehaviors } from './atlos-behaviors.mjs';
+import { validateAtlosWalls } from './atlos-supplements.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const akeDataRoot = path.resolve(process.env.AKEDATA_ROOT ?? DEFAULT_GAME_DATA_ROOT);
@@ -674,6 +675,14 @@ for (const [id, config] of Object.entries(regionSource)) {
     count: boundaries.length,
     boundaries,
   });
+  const walls = await read(`src/data/marker/supplements/data/${id}.json`).catch((error) => {
+    if (error.code !== 'ENOENT') throw error;
+    return undefined;
+  });
+  if (walls !== undefined) {
+    validateAtlosWalls(walls, region);
+    region.walls = await versionedObject('map', `supplements/${id}.json`, walls);
+  }
   const gameMapId = gameMapIds[id];
   if (!gameMapId) throw new Error(`AKEData map ID is missing: ${id}`);
   const mapConfig = await readAKEData(`Json/MapConfig/${gameMapId}.json`);

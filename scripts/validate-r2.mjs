@@ -174,6 +174,7 @@ const addReference = (reference) => {
 addReference(manifestReference);
 addReference(localManifest.types);
 addReference(localManifest.pointIndex);
+for (const reference of Object.values(localManifest.behaviors?.files ?? {})) addReference(reference);
 for (const font of localManifest.fonts ?? []) addReference(font);
 if (localManifest.fontLicense) addReference(localManifest.fontLicense);
 for (const license of localManifest.fontLicenses ?? []) addReference(license);
@@ -182,6 +183,7 @@ for (const region of localManifest.regions ?? []) {
   for (const reference of region.points ?? []) addReference(reference);
   addReference(region.labels);
   addReference(region.boundaries);
+  addReference(region.walls);
   addReference(region.gameBoundaries);
 }
 
@@ -200,6 +202,7 @@ const typeData = JSON.parse(
   (await fs.readFile(path.join(publicRoot, localManifest.types.path.replace(/^\//, '')))).toString(),
 );
 const iconPaths = new Set();
+if (localManifest.behaviors?.unlockIcon) iconPaths.add(localManifest.behaviors.unlockIcon);
 for (const type of Object.values(typeData)) {
   if (type?.icon) iconPaths.add(type.icon);
   if (type?.subIcon) iconPaths.add(type.subIcon);
